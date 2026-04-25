@@ -1,0 +1,21 @@
+[
+  {
+    "id": "gameBackground",
+    "src": "/icon-editor-bg/game-bg-01.png",
+    "zIndex": 0,
+    "opacity": 1,
+    "mode": "cover",
+    "objectPosition": "50% 0%"
+  },
+  {
+    "id": "gameFloor",
+    "src": "/icon-editor-bg/ground-square-01.png",
+    "zIndex": 1,
+    "opacity": 1,
+    "mode": "tile",
+    "tileWidth": 245,
+    "tileHeight": 245,
+    "repeatY": 1,
+    "anchorBottom": true
+  }
+]
