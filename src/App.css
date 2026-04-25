@@ -1255,6 +1255,79 @@ select:focus-visible {
   cursor: pointer;
 }
 
+.tm-icon-editor-error-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.tm-icon-editor-error-link:hover {
+  color: #ffd3db;
+}
+
+.tm-icon-editor-error-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 10, 23, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.tm-icon-editor-error-dialog {
+  width: min(860px, 100%);
+  max-height: min(640px, calc(100vh - 48px));
+  overflow: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 125, 146, 0.56);
+  background: linear-gradient(165deg, rgba(34, 16, 28, 0.96), rgba(22, 17, 34, 0.96));
+  box-shadow: 0 26px 52px rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+
+.tm-icon-editor-error-dialog h3 {
+  margin: 0 0 10px;
+  color: #ffdbe3;
+}
+
+.tm-icon-editor-error-dialog pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 179, 191, 0.3);
+  background: rgba(20, 16, 30, 0.82);
+  color: #ffe9ee;
+  padding: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tm-icon-editor-error-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.tm-icon-editor-error-dialog-actions button {
+  border: 1px solid rgba(255, 178, 191, 0.45);
+  border-radius: 10px;
+  background: rgba(132, 51, 70, 0.62);
+  color: #fff2f5;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
 .tm-icon-editor-zoom-row {
   display: inline-flex;
   align-items: center;

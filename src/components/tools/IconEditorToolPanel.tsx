@@ -293,6 +293,45 @@ function computeAutoResolutionZoom(cssViewportHeight: number): number {
 /** Alpha trim insets from full image edges (matches `merger::trim_transparent_edges` semantics). */
 type TrimInsets = { left: number; top: number; right: number; bottom: number };
 
+type IconEditorErrorInfo = { message: string; detail: string };
+
+function toIconEditorErrorInfo(error: unknown, fallback: string): IconEditorErrorInfo {
+  if (error instanceof Error) {
+    const detailParts = [error.message];
+    if (error.stack && error.stack.trim() !== "") {
+      detailParts.push(error.stack);
+    }
+    const errorWithCause = error as Error & { cause?: unknown };
+    const causeText =
+      typeof errorWithCause.cause === "string"
+        ? errorWithCause.cause
+        : errorWithCause.cause !== undefined
+          ? JSON.stringify(errorWithCause.cause, null, 2)
+          : "";
+    if (causeText) {
+      detailParts.push(`Cause: ${causeText}`);
+    }
+    return {
+      message: error.message || fallback,
+      detail: detailParts.join("\n\n"),
+    };
+  }
+  if (typeof error === "string" && error.trim() !== "") {
+    return { message: error, detail: error };
+  }
+  if (error && typeof error === "object") {
+    try {
+      const serialized = JSON.stringify(error, null, 2);
+      if (serialized && serialized !== "{}") {
+        return { message: fallback, detail: serialized };
+      }
+    } catch {
+      // Keep fallback detail when serialization fails.
+    }
+  }
+  return { message: fallback, detail: fallback };
+}
+
 function trimTransparentEdgesFromCanvas(canvas: HTMLCanvasElement): TrimInsets {
   const width = canvas.width;
   const height = canvas.height;
@@ -770,6 +809,8 @@ export function IconEditorToolPanel() {
   const [selectedRobotPartId, setSelectedRobotPartId] = useState<RobotPartId>("01");
   const [selectedSpiderPartId, setSelectedSpiderPartId] = useState<RobotPartId>("01");
   const [toolbarError, setToolbarError] = useState<string | null>(null);
+  const [toolbarErrorDetail, setToolbarErrorDetail] = useState<string | null>(null);
+  const [isErrorDetailOpen, setIsErrorDetailOpen] = useState(false);
   const [isMiddlePanning, setIsMiddlePanning] = useState(false);
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
@@ -807,6 +848,33 @@ export function IconEditorToolPanel() {
     const floorTop = computeFloorTopY();
     if (!sheetInfo) {
       return FALLBACK_STAGE_ORIGIN_Y;
+    }
+    const isRobotSheet = sheetInfo.frames.some((entry) => Boolean(parseRobotPartFrame(entry.name)));
+    const isSpiderSheet = sheetInfo.frames.some((entry) => Boolean(parseSpiderPartFrame(entry.name)));
+    if (!isRobotSheet && !isSpiderSheet) {
+      const snapCandidates = [roleMap.primary, roleMap.secondary, roleMap.extra]
+        .map((frameName) => frameName.trim())
+        .filter((frameName) => frameName.length > 0)
+        .map((frameName) => {
+          const frame = frameMap.get(frameName);
+          if (!frame) {
+            return null;
+          }
+          const trim = trimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
+          const effectiveOffset = mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
+          const displayCanvas = splitFrameCanvases[frameName];
+          const displayHeight = displayCanvas
+            ? Math.max(1, displayCanvas.height)
+            : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
+          // Origin needed for this layer's visual bottom to sit on the floor line.
+          return floorTop + effectiveOffset.y * OFFSET_SCALE - displayHeight / 2;
+        })
+        .filter((value): value is number => value !== null);
+      if (snapCandidates.length === 0) {
+        return FALLBACK_STAGE_ORIGIN_Y;
+      }
+      // Use the lowest visual layer (secondary/extra can extend below primary) for floor snapping.
+      return Math.min(...snapCandidates);
     }
     const robotPrimaryFootName = (() => {
       const robotFrames = sheetInfo.frames
@@ -1011,6 +1079,8 @@ export function IconEditorToolPanel() {
         setIsBusy(true);
       }
       setToolbarError(null);
+      setToolbarErrorDetail(null);
+      setIsErrorDetailOpen(false);
       try {
         const info = await getIconEditorSheetInfo(plistPath);
         const extracted = await extractIconEditorFrames(plistPath);
@@ -1029,8 +1099,9 @@ export function IconEditorToolPanel() {
         setAtlasVersion((value) => value + 1);
         setViewportFocusGeneration((generation) => generation + 1);
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to load icon sheet.";
-        setToolbarError(message);
+        const parsed = toIconEditorErrorInfo(error, "Failed to load icon sheet.");
+        setToolbarError(parsed.message);
+        setToolbarErrorDetail(parsed.detail);
       } finally {
         if (!omitBusy) {
           setIsBusy(false);
@@ -1043,6 +1114,7 @@ export function IconEditorToolPanel() {
   const openSheet = useCallback(async () => {
     if (!isTauriRuntime()) {
       setToolbarError("Icon editor is available only in Tauri runtime.");
+      setToolbarErrorDetail("Icon editor is available only in Tauri runtime.");
       return;
     }
     const selected = await open({
@@ -1070,6 +1142,8 @@ export function IconEditorToolPanel() {
     }
     setIsBusy(true);
     setToolbarError(null);
+    setToolbarErrorDetail(null);
+    setIsErrorDetailOpen(false);
     try {
       const updates = Object.entries(offsetEdits).map(([name, spriteOffset]) => ({
         name,
@@ -1082,8 +1156,9 @@ export function IconEditorToolPanel() {
       await saveIconEditorPlist(sheetInfo.plistPath, updates, removedFrameNames);
       await loadSheet(sheetInfo.plistPath, { omitBusy: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to save plist changes.";
-      setToolbarError(message);
+      const parsed = toIconEditorErrorInfo(error, "Failed to save plist changes.");
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
     } finally {
       setIsBusy(false);
     }
@@ -1095,12 +1170,15 @@ export function IconEditorToolPanel() {
     }
     setIsBusy(true);
     setToolbarError(null);
+    setToolbarErrorDetail(null);
+    setIsErrorDetailOpen(false);
     try {
       const renamed = await renameIconEditorSheet(sheetInfo.plistPath, renameValue.trim());
       await loadSheet(renamed.plistPath, { omitBusy: true });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to rename sheet files.";
-      setToolbarError(message);
+      const parsed = toIconEditorErrorInfo(error, "Failed to rename sheet files.");
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
     } finally {
       setIsBusy(false);
     }
@@ -1113,6 +1191,7 @@ export function IconEditorToolPanel() {
       }
       if (!isTauriRuntime()) {
         setToolbarError("Texture import is available only in Tauri runtime.");
+        setToolbarErrorDetail("Texture import is available only in Tauri runtime.");
         return;
       }
       const selected = await open({
@@ -1130,9 +1209,10 @@ export function IconEditorToolPanel() {
         : null;
       const stem = stemFromPrimary ?? inferStemFromFrames(sheetInfo.frames);
       if (!stem) {
-        setToolbarError(
-          "Could not infer icon stem from plist. Expected frame names like {type}_{number}_001, {type}_{number}_2_001, {type}_{number}_3_001, {type}_{number}_glow_001, or {type}_{number}_extra_001.",
-        );
+        const message =
+          "Could not infer icon stem from plist. Expected frame names like {type}_{number}_001, {type}_{number}_2_001, {type}_{number}_3_001, {type}_{number}_glow_001, or {type}_{number}_extra_001.";
+        setToolbarError(message);
+        setToolbarErrorDetail(message);
         return;
       }
       const isRobotSheet = /^robot_\d+_0[1-4]$/i.test(stem) || sheetInfo.frames.some((frame) => Boolean(parseRobotPartFrame(frame.name)));
@@ -1181,6 +1261,8 @@ export function IconEditorToolPanel() {
       const frameExists = existingPlistName !== null;
       setIsBusy(true);
       setToolbarError(null);
+      setToolbarErrorDetail(null);
+      setIsErrorDetailOpen(false);
       try {
         const plistFrameKey = existingPlistName ?? targetFrameName;
         if (frameExists) {
@@ -1199,8 +1281,9 @@ export function IconEditorToolPanel() {
         await loadSheet(sheetInfo.plistPath, { omitBusy: true });
         setRoleMap((previous) => ({ ...previous, [role]: plistFrameKey }));
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Failed to import texture.";
-        setToolbarError(message);
+        const parsed = toIconEditorErrorInfo(error, "Failed to import texture.");
+        setToolbarError(parsed.message);
+        setToolbarErrorDetail(parsed.detail);
       } finally {
         setIsBusy(false);
       }
@@ -1767,8 +1850,38 @@ export function IconEditorToolPanel() {
       {toolbarError ? (
         <p className="error">
           <Search size={14} />
-          {toolbarError}
+          <button
+            type="button"
+            className="tm-icon-editor-error-link"
+            onClick={() => setIsErrorDetailOpen(true)}
+            title="Open detailed error information"
+          >
+            {toolbarError}
+          </button>
         </p>
+      ) : null}
+      {isErrorDetailOpen && toolbarErrorDetail ? (
+        <div
+          className="tm-icon-editor-error-dialog-backdrop"
+          onClick={() => setIsErrorDetailOpen(false)}
+          role="presentation"
+        >
+          <div
+            className="tm-icon-editor-error-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Icon editor error details"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Error Details</h3>
+            <pre>{toolbarErrorDetail}</pre>
+            <div className="tm-icon-editor-error-dialog-actions">
+              <button type="button" onClick={() => setIsErrorDetailOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
       <div className="tm-icon-editor-body">
         <div className="tm-icon-editor-viewport">
