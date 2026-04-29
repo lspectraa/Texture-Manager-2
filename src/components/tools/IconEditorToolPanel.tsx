@@ -7,11 +7,13 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import html2canvas from "html2canvas";
 import {
   FolderOpen,
   Save,
+  Download,
   Search,
   PencilLine,
   Upload,
@@ -394,6 +396,28 @@ function cropCanvasByTrimInsets(source: HTMLCanvasElement, trim: TrimInsets): HT
   }
   context.imageSmoothingEnabled = false;
   context.drawImage(source, trim.left, trim.top, w, h, 0, 0, w, h);
+  return out;
+}
+
+function cropCanvasByRect(
+  source: HTMLCanvasElement,
+  rect: { x: number; y: number; width: number; height: number },
+): HTMLCanvasElement {
+  const x = Math.max(0, Math.floor(rect.x));
+  const y = Math.max(0, Math.floor(rect.y));
+  const maxWidth = Math.max(1, source.width - x);
+  const maxHeight = Math.max(1, source.height - y);
+  const w = Math.max(1, Math.min(maxWidth, Math.ceil(rect.width)));
+  const h = Math.max(1, Math.min(maxHeight, Math.ceil(rect.height)));
+  const out = document.createElement("canvas");
+  out.width = w;
+  out.height = h;
+  const context = out.getContext("2d");
+  if (!context) {
+    return source;
+  }
+  context.imageSmoothingEnabled = false;
+  context.drawImage(source, x, y, w, h, 0, 0, w, h);
   return out;
 }
 
@@ -816,6 +840,7 @@ export function IconEditorToolPanel() {
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
   const stageScrollPortRef = useRef<HTMLDivElement | null>(null);
+  const stageElementRef = useRef<HTMLDivElement | null>(null);
   const scrollPanRef = useRef<{
     pointerId: number;
     startClientX: number;
@@ -1571,6 +1596,175 @@ export function IconEditorToolPanel() {
     tintByTarget,
   ]);
 
+  const downloadCurrentIconPng = useCallback(async () => {
+    if (!sheetInfo) {
+      return;
+    }
+    if (layers.length === 0) {
+      setToolbarError("No visible icon layers available to export.");
+      setToolbarErrorDetail("Assign at least one frame (for example, primary) before downloading.");
+      return;
+    }
+    const stageElement = stageElementRef.current;
+    if (!stageElement) {
+      setToolbarError("Failed to access icon stage for export.");
+      setToolbarErrorDetail("Stage element ref was null while preparing download.");
+      return;
+    }
+    const stageRect = stageElement.getBoundingClientRect();
+    const layerElements = Array.from(stageElement.querySelectorAll(".tm-icon-editor-layer")) as HTMLElement[];
+    const visibleLayerRects = layerElements
+      .filter((element) => element.offsetParent !== null)
+      .map((element) => element.getBoundingClientRect());
+    if (visibleLayerRects.length === 0) {
+      setToolbarError("No rendered icon layers available to export.");
+      setToolbarErrorDetail("Layer DOM bounds were empty while preparing icon PNG.");
+      return;
+    }
+    let minLeft = Number.POSITIVE_INFINITY;
+    let minTop = Number.POSITIVE_INFINITY;
+    let maxRight = Number.NEGATIVE_INFINITY;
+    let maxBottom = Number.NEGATIVE_INFINITY;
+    for (const rect of visibleLayerRects) {
+      minLeft = Math.min(minLeft, rect.left);
+      minTop = Math.min(minTop, rect.top);
+      maxRight = Math.max(maxRight, rect.right);
+      maxBottom = Math.max(maxBottom, rect.bottom);
+    }
+    const layerBoundsInStage = {
+      x: minLeft - stageRect.left,
+      y: minTop - stageRect.top,
+      width: maxRight - minLeft,
+      height: maxBottom - minTop,
+    };
+
+    try {
+      const stageCanvas = await html2canvas(stageElement, {
+        backgroundColor: null,
+        scale: 1,
+        logging: false,
+        useCORS: true,
+        onclone: (clonedDocument) => {
+          const darkenCanvasPixels = (canvas: HTMLCanvasElement, factor: number): void => {
+            const context = canvas.getContext("2d");
+            if (!context) {
+              return;
+            }
+            const width = Math.max(1, canvas.width);
+            const height = Math.max(1, canvas.height);
+            const imageData = context.getImageData(0, 0, width, height);
+            const { data } = imageData;
+            for (let i = 0; i < data.length; i += 4) {
+              data[i] = Math.round(data[i] * factor);
+              data[i + 1] = Math.round(data[i + 1] * factor);
+              data[i + 2] = Math.round(data[i + 2] * factor);
+            }
+            context.putImageData(imageData, 0, 0);
+          };
+
+          const clonedStage = clonedDocument.querySelector(
+            ".tm-icon-editor-stage.tm-icon-editor-stage--in-scrollport",
+          ) as HTMLElement | null;
+          if (clonedStage) {
+            // Export should never include edit borders/selection outlines.
+            clonedStage.classList.add("tm-icon-editor-stage--hide-layer-borders");
+            // Allow capture of parts/glow that can extend past stage edges.
+            clonedStage.style.overflow = "visible";
+            clonedStage.style.border = "none";
+            clonedStage.style.background = "transparent";
+            const selectedLayers = clonedStage.querySelectorAll(".tm-icon-editor-layer-selected");
+            selectedLayers.forEach((layer) => layer.classList.remove("tm-icon-editor-layer-selected"));
+
+            // html2canvas can miss CSS filter brightness on these echo wrappers.
+            // Bake dimming into opacity in the cloned export tree.
+            const robotEchoWraps = clonedStage.querySelectorAll(
+              ".tm-icon-editor-robot-part-wrap.tm-icon-editor-robot-part-wrap-echo:not(.tm-icon-editor-robot-part-wrap-echo--glow)",
+            );
+            robotEchoWraps.forEach((element) => {
+              if (element instanceof HTMLElement) {
+                // Keep back-copy visuals opaque; dim by mutating canvas pixels.
+                element.style.opacity = "1";
+                element.querySelectorAll("canvas").forEach((node) => {
+                  if (node instanceof HTMLCanvasElement) {
+                    darkenCanvasPixels(node, 0.67);
+                  }
+                });
+                const className = element.className;
+                if (className.includes("tm-icon-editor-robot-part-echo--04")) {
+                  element.style.zIndex = "120";
+                } else if (className.includes("tm-icon-editor-robot-part-echo--02")) {
+                  element.style.zIndex = "110";
+                } else if (className.includes("tm-icon-editor-robot-part-echo--03")) {
+                  // Leg duplicate should always render beneath duplicate body + foot.
+                  element.style.zIndex = "100";
+                }
+              }
+            });
+            const spiderEchoWraps = clonedStage.querySelectorAll(
+              ".tm-icon-editor-spider-part-wrap.tm-icon-editor-spider-part-wrap-echo:not(.tm-icon-editor-spider-part-wrap-echo--glow)",
+            );
+            spiderEchoWraps.forEach((element) => {
+              if (element instanceof HTMLElement) {
+                // Spider duplicate/back legs should be dimmed, not translucent.
+                element.style.opacity = "1";
+                element.querySelectorAll("canvas").forEach((node) => {
+                  if (node instanceof HTMLCanvasElement) {
+                    darkenCanvasPixels(node, 0.5);
+                  }
+                });
+              }
+            });
+          }
+        },
+        ignoreElements: (element) => {
+          if (!(element instanceof HTMLElement)) {
+            return false;
+          }
+          return (
+            element.classList.contains("tm-icon-editor-background-stack") ||
+            element.classList.contains("tm-icon-editor-floor-divider") ||
+            element.classList.contains("tm-icon-editor-bg-layer-wrap") ||
+            element.classList.contains("tm-icon-editor-bg-image") ||
+            element.classList.contains("tm-icon-editor-bg-tile-layer")
+          );
+        },
+      });
+      const layerCropped = cropCanvasByRect(stageCanvas, layerBoundsInStage);
+      const trim = trimTransparentEdgesFromCanvas(layerCropped);
+      const tightlyCropped = cropCanvasByTrimInsets(layerCropped, trim);
+      const pngDataUrl = tightlyCropped.toDataURL("image/png");
+
+      const stem = renameValue.trim() || sheetInfo.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
+      const defaultFileName = `${stem}-icon.png`;
+      if (isTauriRuntime()) {
+        const savePath = await save({
+          title: "Save icon PNG",
+          defaultPath: defaultFileName,
+          filters: [{ name: "PNG", extensions: ["png"] }],
+        });
+        if (typeof savePath === "string" && savePath.trim()) {
+          await invoke("icon_editor_save_png_data_url", {
+            outputPath: savePath,
+            pngDataUrl,
+          });
+        }
+      } else {
+        const link = document.createElement("a");
+        link.href = pngDataUrl;
+        link.download = defaultFileName;
+        link.click();
+      }
+    } catch (error) {
+      const parsed = toIconEditorErrorInfo(error, "Failed to export icon PNG.");
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
+    }
+  }, [
+    layers,
+    renameValue,
+    sheetInfo,
+  ]);
+
   const onLayerPointerDown = (role: IconLayerRole, event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) {
       return;
@@ -1819,6 +2013,7 @@ export function IconEditorToolPanel() {
       </h2>
       <div className="tm-icon-editor-toolbar">
         <button
+          className="tm-icon-editor-toolbar-btn"
           type="button"
           title="Reload the current gamesheet from disk"
           onClick={() => reloadSheet().catch(() => {})}
@@ -1827,7 +2022,12 @@ export function IconEditorToolPanel() {
           <RefreshCw size={15} />
           Reload
         </button>
-        <button type="button" onClick={() => openSheet().catch(() => {})} disabled={isBusy}>
+        <button
+          className="tm-icon-editor-toolbar-btn"
+          type="button"
+          onClick={() => openSheet().catch(() => {})}
+          disabled={isBusy}
+        >
           <FolderOpen size={15} />
           Open Sheet
         </button>
@@ -1846,6 +2046,15 @@ export function IconEditorToolPanel() {
             </div>
           </label>
         </div>
+        <button
+          className="tm-icon-editor-toolbar-btn"
+          type="button"
+          onClick={() => downloadCurrentIconPng().catch(() => {})}
+          disabled={!sheetInfo || isBusy}
+        >
+          <Download size={15} />
+          Download PNG
+        </button>
       </div>
       {toolbarError ? (
         <p className="error">
@@ -1913,6 +2122,7 @@ export function IconEditorToolPanel() {
                     }}
                   >
                     <div
+                      ref={stageElementRef}
                       className={`tm-icon-editor-stage tm-icon-editor-stage--in-scrollport${
                         hideLayerBorders ? " tm-icon-editor-stage--hide-layer-borders" : ""
                       }`}

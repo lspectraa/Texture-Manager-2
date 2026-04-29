@@ -3,6 +3,8 @@ mod core;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use base64::Engine as _;
 use tauri::{AppHandle, Emitter};
 
 use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
@@ -192,6 +194,18 @@ fn icon_editor_rename_sheet(
         .map_err(|err| err.to_string())
 }
 
+#[tauri::command]
+fn icon_editor_save_png_data_url(output_path: String, png_data_url: String) -> Result<(), String> {
+    let encoded = png_data_url
+        .split_once(',')
+        .map(|(_, data)| data)
+        .ok_or_else(|| "invalid png data url".to_string())?;
+    let bytes = BASE64_STANDARD
+        .decode(encoded)
+        .map_err(|err| format!("failed to decode png data: {err}"))?;
+    std::fs::write(&output_path, bytes).map_err(|err| format!("failed to write png: {err}"))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -209,7 +223,8 @@ pub fn run() {
             icon_editor_import_frame,
             icon_editor_add_frame,
             icon_editor_extract_frames,
-            icon_editor_rename_sheet
+            icon_editor_rename_sheet,
+            icon_editor_save_png_data_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

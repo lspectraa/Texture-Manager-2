@@ -1253,6 +1253,18 @@ select:focus-visible {
   align-items: center;
   gap: 7px;
   cursor: pointer;
+  transition: border-color var(--tm-fast) ease, transform var(--tm-fast) ease;
+}
+
+.tm-icon-editor-toolbar > button:hover:not(:disabled),
+.tm-icon-editor-toolbar-btn:hover:not(:disabled) {
+  border-color: rgba(177, 223, 255, 0.65);
+  transform: translateY(-1px);
+}
+
+.tm-icon-editor-toolbar > button:active:not(:disabled),
+.tm-icon-editor-toolbar-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.985);
 }
 
 .tm-icon-editor-error-link {
