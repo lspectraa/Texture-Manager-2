@@ -27,4 +27,5 @@ plist = "1"
 rayon = "1.10"
 tauri-plugin-dialog = "2.7.0"
 base64 = "0.22"
+regex = "1"
 

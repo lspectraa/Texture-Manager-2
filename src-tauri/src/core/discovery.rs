@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Component, Path, PathBuf};
 
 use crate::core::errors::AppError;
+use crate::core::porter::porter_stem_eligible;
 
 /// True when `path` is under `input_root` and either:
 /// - the first path segment after `input_root` is one of the tool output buckets
@@ -120,6 +121,37 @@ pub fn discover_standalone_pngs(
             .map(|e| e.eq_ignore_ascii_case("png"))
             .unwrap_or(false);
         if !is_png || paired_png_paths.contains(&file) {
+            continue;
+        }
+        let Some(stem) = file.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !porter_stem_eligible(stem) {
+            continue;
+        }
+        out.push(file);
+    }
+    out.sort();
+    Ok(out)
+}
+
+/// `.fnt` files under `input_dir` whose stem ends with `-hd` or `-uhd` (classic porter eligibility).
+pub fn discover_standalone_fnts(input_dir: &Path) -> Result<Vec<PathBuf>, AppError> {
+    let files = collect_files_recursive(input_dir)?;
+    let mut out: Vec<PathBuf> = Vec::new();
+    for file in files {
+        let is_fnt = file
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("fnt"))
+            .unwrap_or(false);
+        if !is_fnt {
+            continue;
+        }
+        let Some(stem) = file.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        if !porter_stem_eligible(stem) {
             continue;
         }
         out.push(file);

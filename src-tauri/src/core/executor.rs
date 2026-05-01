@@ -5,6 +5,7 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
+use image::imageops::{self, FilterType};
 use plist::{Dictionary, Value};
 use rayon::prelude::*;
 
@@ -13,7 +14,8 @@ use crate::core::contracts::{
     OperationOptions, OperationPlan, PorterOptions, SplitterOptions,
 };
 use crate::core::discovery::{
-    discover_merge_source_dirs, discover_sheet_pairs, discover_standalone_pngs, SheetCandidate,
+    discover_merge_source_dirs, discover_sheet_pairs, discover_standalone_fnts, discover_standalone_pngs,
+    SheetCandidate,
 };
 use crate::core::errors::AppError;
 use crate::core::glow::{glow_primary_name_for, render_icon_glow_from_primary};
@@ -21,9 +23,10 @@ use crate::core::merger::{direct_plist_files, merge_plist_from_memory, merge_she
 use crate::core::plist::count_frames_in_plist;
 use crate::core::porter::{
     downscale_sprites, flattened_bundle_output_dir, porter_medium_and_low_linear_scales,
-    porter_options_to_merger_options, port_rename_identifier, port_rename_identifier_force_low,
-    port_rename_plist_and_sprites, port_source_tier_from_stem, porter_sheet_scale_factor,
-    save_merged_sheet, scale_plist_geometry, PortPlistRenameMode, PortSourceGraphicsTier,
+    porter_options_to_merger_options, port_bitmap_fnt, port_rename_identifier,
+    port_rename_identifier_force_low, port_rename_plist_and_sprites, porter_sheet_scale_factor,
+    porter_stem_eligible, port_source_tier_from_stem, save_merged_sheet, scale_plist_geometry,
+    standalone_asset_port_scale, PortPlistRenameMode, PortSourceGraphicsTier,
 };
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
 use crate::core::splitter::{split_sheet_candidate, split_sheet_candidate_memory};
@@ -230,12 +233,13 @@ fn standalone_png_output_stem(source_stem: &str, porter_opts: &PorterOptions) ->
     }
 }
 
-/// Copy-only port for standalone sprites (no plist): same layout as merged sheets under `Ported/`.
-fn copy_standalone_png_to_ported(
+/// Resize + rename standalone `.png` (no plist) like classic Porter, under `Ported/`.
+fn save_standalone_png_to_ported(
     png_path: &Path,
     input_dir: &Path,
     porter_dir: &Path,
     destination_stem: &str,
+    scale: f32,
 ) -> Result<(), AppError> {
     let relative_file = png_path
         .strip_prefix(input_dir)
@@ -253,7 +257,23 @@ fn copy_standalone_png_to_ported(
     let dest_dir = flattened_bundle_output_dir(porter_dir, &relative_sheet);
     fs::create_dir_all(&dest_dir)?;
     let dest_png = dest_dir.join(format!("{destination_stem}.png"));
-    fs::copy(png_path, dest_png)?;
+
+    let img = image::open(png_path)
+        .map_err(|e| AppError::IoError(e.to_string()))?
+        .into_rgba8();
+    let (w, h) = img.dimensions();
+    let out = if (scale - 1.0).abs() < 1e-6 {
+        img
+    } else {
+        let nw = ((w as f32) * scale).round().max(1.0) as u32;
+        let nh = ((h as f32) * scale).round().max(1.0) as u32;
+        if nw == w && nh == h {
+            img
+        } else {
+            imageops::resize(&img, nw, nh, FilterType::Triangle)
+        }
+    };
+    crate::core::image_io::save_rgba_png_fast(&dest_png, &out)?;
     Ok(())
 }
 
@@ -555,12 +575,21 @@ where
         });
         return Ok((0, issues));
     };
+    let (w, h) = image::image_dimensions(png_path).map_err(|e| AppError::IoError(e.to_string()))?;
+    let Some(scale) = standalone_asset_port_scale(w, h, source_stem, porter_opts) else {
+        issues.push(ReportIssue {
+            level: ReportLevel::Warning,
+            message: "Could not compute port scale for standalone png; skipping.".to_string(),
+            file: Some(png_path.to_string_lossy().to_string()),
+        });
+        return Ok((0, issues));
+    };
     let label = png_path
         .file_name()
         .and_then(|n| n.to_str())
         .map(str::to_string)
         .unwrap_or_else(|| png_path.to_string_lossy().to_string());
-    copy_standalone_png_to_ported(png_path, input_dir, porter_dir, &out_stem)?;
+    save_standalone_png_to_ported(png_path, input_dir, porter_dir, &out_stem, scale)?;
     let n = completed.fetch_add(1, Ordering::Relaxed) + 1;
     on_progress.lock().unwrap()(operation_progress(
         label,
@@ -591,9 +620,13 @@ where
     let merger_opts = porter_options_to_merger_options(porter_opts);
 
     check_cancel(cancel.as_ref())?;
-    let sheet_pairs = discover_sheet_pairs(input_dir)?;
+    let sheet_pairs: Vec<SheetCandidate> = discover_sheet_pairs(input_dir)?
+        .into_iter()
+        .filter(|p| porter_stem_eligible(&p.stem))
+        .collect();
     let paired_pngs: HashSet<PathBuf> = sheet_pairs.iter().map(|p| p.png_path.clone()).collect();
     let standalone_pngs = discover_standalone_pngs(input_dir, &paired_pngs)?;
+    let standalone_fnts = discover_standalone_fnts(input_dir)?;
     let plists_total = sheet_pairs.len() as u32;
     let mut total_units = 0usize;
     for pair in &sheet_pairs {
@@ -611,6 +644,7 @@ where
         total_units = total_units.saturating_add(n.saturating_mul(1 + merge_passes));
     }
     total_units = total_units.saturating_add(standalone_pngs.len());
+    total_units = total_units.saturating_add(standalone_fnts.len());
     let completed = Arc::new(AtomicUsize::new(0));
 
     on_progress.lock().unwrap()(operation_progress(
@@ -624,6 +658,7 @@ where
     let mut issues: Vec<ReportIssue> = Vec::new();
     let mut sheets_written = 0_usize;
     let mut standalone_written = 0_usize;
+    let mut fnts_written = 0_usize;
     let plists_done_atomic = Arc::new(AtomicU32::new(0));
 
     let pool = build_sheet_pool(porter_opts.sheet_concurrency)?;
@@ -696,10 +731,75 @@ where
         issues.append(&mut local_issues);
     }
 
-    if sheet_pairs.is_empty() && standalone_pngs.is_empty() {
+    check_cancel(cancel.as_ref())?;
+    let cancel_for_fnt = Arc::clone(&cancel);
+    let completed_for_fnt = Arc::clone(&completed);
+    let on_progress_for_fnt = Arc::clone(on_progress);
+    let porter_dir_for_fnt = porter_dir.clone();
+    let input_dir_for_fnt = input_dir.to_path_buf();
+    let porter_opts_for_fnt = porter_opts.clone();
+    let fnt_results: Vec<Result<(usize, Vec<ReportIssue>), AppError>> = pool.install(|| {
+        standalone_fnts
+            .par_iter()
+            .map(|fnt_path| -> Result<(usize, Vec<ReportIssue>), AppError> {
+                check_cancel(cancel_for_fnt.as_ref())?;
+                let mut local_issues: Vec<ReportIssue> = Vec::new();
+                let label = fnt_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| fnt_path.to_string_lossy().to_string());
+                match port_bitmap_fnt(
+                    fnt_path.as_path(),
+                    input_dir_for_fnt.as_path(),
+                    porter_dir_for_fnt.as_path(),
+                    &porter_opts_for_fnt,
+                ) {
+                    Ok(()) => {
+                        let n = completed_for_fnt.fetch_add(1, Ordering::Relaxed) + 1;
+                        on_progress_for_fnt.lock().unwrap()(operation_progress(
+                            label,
+                            n,
+                            total_units,
+                            gamesheets_done,
+                            plists_total,
+                        ));
+                        Ok((1, local_issues))
+                    }
+                    Err(e) => {
+                        local_issues.push(ReportIssue {
+                            level: ReportLevel::Warning,
+                            message: format!("Failed to port .fnt: {e}"),
+                            file: Some(fnt_path.to_string_lossy().to_string()),
+                        });
+                        let n = completed_for_fnt.fetch_add(1, Ordering::Relaxed) + 1;
+                        on_progress_for_fnt.lock().unwrap()(operation_progress(
+                            label,
+                            n,
+                            total_units,
+                            gamesheets_done,
+                            plists_total,
+                        ));
+                        Ok((0, local_issues))
+                    }
+                }
+            })
+            .collect()
+    });
+
+    for entry in fnt_results {
+        let (written, mut local_issues) = match entry {
+            Ok(v) => v,
+            Err(e) => return Err(e),
+        };
+        fnts_written = fnts_written.saturating_add(written);
+        issues.append(&mut local_issues);
+    }
+
+    if sheet_pairs.is_empty() && standalone_pngs.is_empty() && standalone_fnts.is_empty() {
         issues.push(ReportIssue {
             level: ReportLevel::Warning,
-            message: "No plist/png sheet pairs or standalone .png files discovered for porter."
+            message: "No eligible plist/png pairs, standalone .png, or .fnt files (-hd / -uhd) for porter."
                 .to_string(),
             file: None,
         });
@@ -707,8 +807,8 @@ where
 
     Ok(OperationReport {
         operation: format!("{:?}", plan.kind),
-        files_seen: sheet_pairs.len() + standalone_pngs.len(),
-        files_processed: sheets_written + standalone_written,
+        files_seen: sheet_pairs.len() + standalone_pngs.len() + standalone_fnts.len(),
+        files_processed: sheets_written + standalone_written + fnts_written,
         output_dir: porter_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
@@ -723,8 +823,13 @@ fn resolve_latest_placeholder_split_dir() -> Option<PathBuf> {
         }
     }
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // Prefer sibling `Default` next to the app repo (e.g. `Texture Manager 2/Default`).
+    candidates.push(manifest_dir.join("..").join("..").join("Default"));
     candidates.push(manifest_dir.join("..").join("..").join("Default").join("Split"));
     if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd.join("Default"));
+        candidates.push(cwd.join("..").join("Default"));
+        candidates.push(cwd.join("..").join("..").join("Default"));
         candidates.push(cwd.join("Default").join("Split"));
         candidates.push(cwd.join("..").join("Default").join("Split"));
         candidates.push(cwd.join("..").join("..").join("Default").join("Split"));

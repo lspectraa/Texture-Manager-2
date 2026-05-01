@@ -1,9 +1,11 @@
 use std::collections::BTreeMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use image::imageops::{self, FilterType};
 use image::RgbaImage;
 use plist::{Dictionary, Value};
+use regex::Regex;
 
 use crate::core::contracts::{MergerOptions, PorterOptions};
 use crate::core::errors::AppError;
@@ -39,6 +41,36 @@ pub enum PortSourceGraphicsTier {
     Hd,
     /// No `-uhd` / `-hd` tier markers in the stem — filenames and plist strings unchanged.
     Low,
+}
+
+/// Stems that the porter processes (matches classic Porter.py `fileName[-3:]` rules: `-hd` or `…-uhd`).
+pub fn porter_stem_eligible(stem: &str) -> bool {
+    stem.ends_with("-hd") || stem.ends_with("-uhd")
+}
+
+/// Linear scale for standalone bitmaps (`.png` without plist) and bitmap font textures, aligned with
+/// classic Porter `divideBy` when `dimensions` is unset.
+pub fn standalone_asset_port_scale(width: u32, height: u32, stem: &str, opts: &PorterOptions) -> Option<f32> {
+    if !porter_stem_eligible(stem) {
+        return None;
+    }
+    if opts.dimensions.is_some() {
+        Some(porter_sheet_fit_scale(width, height, opts))
+    } else if stem.ends_with("-uhd") {
+        Some(if opts.low_port { 0.25 } else { 0.5 })
+    } else if stem.ends_with("-hd") {
+        Some(0.5)
+    } else {
+        None
+    }
+}
+
+/// When the texture file is missing, use the same discrete factors as Python when `dimensions` is unset.
+pub fn standalone_asset_port_scale_fallback(stem: &str, opts: &PorterOptions) -> Option<f32> {
+    if opts.dimensions.is_some() {
+        return None;
+    }
+    standalone_asset_port_scale(1, 1, stem, opts)
 }
 
 /// `-uhd` in the stem takes precedence over `-hd` when both appear (non-standard names).
@@ -350,6 +382,347 @@ pub fn save_merged_sheet(
     plist_root
         .to_file_xml(output_plist)
         .map_err(|e| AppError::IoError(e.to_string()))?;
+    Ok(())
+}
+
+fn porter_fnt_page_graphics_replacement(stem: &str, opts: &PorterOptions) -> Option<(&'static str, &'static str)> {
+    if stem.ends_with("-uhd") {
+        if opts.low_port {
+            Some(("-uhd", ""))
+        } else {
+            Some(("-uhd", "-hd"))
+        }
+    } else if stem.ends_with("-hd") {
+        Some(("-hd", ""))
+    } else {
+        None
+    }
+}
+
+fn scale_i64_div_ceil(n: i64, divide_by: i32) -> i64 {
+    let d = f64::from(divide_by);
+    (n as f64 / d).ceil() as i64
+}
+
+fn scale_i64_div_floor(n: i64, divide_by: i32) -> i64 {
+    let d = f64::from(divide_by);
+    (n as f64 / d).floor() as i64
+}
+
+fn fnt_port_linear_scale(stem: &str, texture_wh: Option<(u32, u32)>, opts: &PorterOptions) -> Result<f32, AppError> {
+    if let Some((w, h)) = texture_wh {
+        if opts.dimensions.is_some() {
+            return Ok(porter_sheet_fit_scale(w, h, opts));
+        }
+    }
+    standalone_asset_port_scale_fallback(stem, opts).ok_or_else(|| {
+        AppError::ParseError("bitmap font .fnt stem must end with -hd or -uhd".to_string())
+    })
+}
+
+/// Port one BMFont `.fnt` (ASCII) like classic `Porter.py`: scale glyph metrics and rewrite the
+/// `page` texture name; output basename follows `page file=` with `.png`→`.fnt`, not the input name.
+pub fn port_bitmap_fnt(
+    fnt_path: &Path,
+    input_root: &Path,
+    porter_output_root: &Path,
+    opts: &PorterOptions,
+) -> Result<(), AppError> {
+    let source_stem = fnt_path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| AppError::InvalidPath("invalid .fnt path"))?;
+    if !porter_stem_eligible(source_stem) {
+        return Err(AppError::ParseError(format!(
+            "porter skipped ineligible .fnt `{source_stem}`"
+        )));
+    }
+    let Some((graphics_from, graphics_to)) = porter_fnt_page_graphics_replacement(source_stem, opts) else {
+        return Err(AppError::ParseError(format!(
+            "could not derive graphics replacement for `{source_stem}.fnt`"
+        )));
+    };
+
+    let raw = fs::read_to_string(fnt_path).map_err(|e| AppError::IoError(e.to_string()))?;
+
+    let info_re = Regex::new(
+        r#"info face=(?P<face>[\s\w."-]+) size=(?P<size>\w+) bold=(?P<bold>\w+) italic=(?P<italic>\w+) charset=(?P<charset>[\w"]+) unicode=(?P<unicode>\w+) stretchH=(?P<stretchH>\w+) smooth=(?P<smooth>\w+) aa=(?P<aa>\w+) padding=(?P<padding>[\w,-]+) spacing=(?P<spacing>[\w,-]+)"#,
+    )
+    .map_err(|e| AppError::ParseError(e.to_string()))?;
+    let common_re = Regex::new(
+        r"common lineHeight=(?P<lineHeight>\w+) base=(?P<base>\w+) scaleW=(?P<scaleW>\w+) scaleH=(?P<scaleH>\w+) pages=(?P<pages>\w+) packed=(?P<packed>\w+)",
+    )
+    .map_err(|e| AppError::ParseError(e.to_string()))?;
+    let page_re = Regex::new(r#"page id=(?P<id>\w+) file=(?P<file>[\w".-]+)"#)
+        .map_err(|e| AppError::ParseError(e.to_string()))?;
+    let char_re = Regex::new(
+        r"char[ ]+id=(?P<id>\w+)[ ]+x=(?P<x>\w+)[ ]+y=(?P<y>\w+)[ ]+width=(?P<width>\w+)[ ]+height=(?P<height>\w+)[ ]+xoffset=(?P<xoffset>[\w-]+)[ ]+yoffset=(?P<yoffset>[\w-]+)[ ]+xadvance=(?P<xadvance>[\w-]+)[ ]+page=(?P<page>\w+)[ ]+chnl=(?P<chnl>\w+)",
+    )
+    .map_err(|e| AppError::ParseError(e.to_string()))?;
+    let kerning_re = Regex::new(r"[ ]*kerning first=(?P<first>\w+) second=(?P<second>\w+) amount=(?P<amount>[\w-]+)")
+        .map_err(|e| AppError::ParseError(e.to_string()))?;
+
+    let info_caps = info_re
+        .captures(&raw)
+        .ok_or_else(|| AppError::ParseError("fnt: missing or invalid `info` line".to_string()))?;
+    let common_caps = common_re
+        .captures(&raw)
+        .ok_or_else(|| AppError::ParseError("fnt: missing or invalid `common` line".to_string()))?;
+    let page_caps = page_re
+        .captures(&raw)
+        .ok_or_else(|| AppError::ParseError("fnt: missing or invalid `page` line".to_string()))?;
+
+    let size: i64 = info_caps["size"]
+        .parse()
+        .map_err(|_| AppError::ParseError("fnt: info size".to_string()))?;
+    let line_height: i64 = common_caps["lineHeight"]
+        .parse()
+        .map_err(|_| AppError::ParseError("fnt: lineHeight".to_string()))?;
+    let base: i64 = common_caps["base"]
+        .parse()
+        .map_err(|_| AppError::ParseError("fnt: base".to_string()))?;
+    let scale_w: i64 = common_caps["scaleW"]
+        .parse()
+        .map_err(|_| AppError::ParseError("fnt: scaleW".to_string()))?;
+    let scale_h: i64 = common_caps["scaleH"]
+        .parse()
+        .map_err(|_| AppError::ParseError("fnt: scaleH".to_string()))?;
+
+    let page_id = page_caps["id"].to_string();
+    let page_file_raw = page_caps["file"].to_string();
+    let page_file_quoted = page_file_raw.starts_with('"') && page_file_raw.ends_with('"');
+    let mut page_file_plain = page_file_raw.trim_matches('"').to_string();
+    page_file_plain = page_file_plain.replace(graphics_from, graphics_to);
+    let page_file_output = if page_file_quoted {
+        format!("\"{page_file_plain}\"")
+    } else {
+        page_file_plain.clone()
+    };
+
+    let fnt_parent = fnt_path
+        .parent()
+        .ok_or_else(|| AppError::InvalidPath("fnt has no parent directory"))?;
+    let texture_path = fnt_parent.join(&page_file_plain);
+    let texture_wh = if texture_path.is_file() {
+        Some(
+            image::image_dimensions(&texture_path).map_err(|e| AppError::IoError(e.to_string()))?,
+        )
+    } else {
+        None
+    };
+
+    let scale = fnt_port_linear_scale(source_stem, texture_wh, opts)?;
+    let divide_by = (1.0 / scale).round() as i32;
+    let use_integer_div = opts.dimensions.is_none();
+
+    let new_size = if use_integer_div {
+        scale_i64_div_ceil(size, divide_by.max(1))
+    } else {
+        ((size as f64) * f64::from(scale)).ceil() as i64
+    };
+    let new_line_height = if use_integer_div {
+        scale_i64_div_ceil(line_height, divide_by.max(1)) + 2
+    } else {
+        ((line_height as f64) * f64::from(scale)).ceil() as i64 + 2
+    };
+    let new_base = if use_integer_div {
+        scale_i64_div_ceil(base, divide_by.max(1))
+    } else {
+        ((base as f64) * f64::from(scale)).ceil() as i64
+    };
+    let new_scale_w = if use_integer_div {
+        scale_i64_div_ceil(scale_w, divide_by.max(1))
+    } else {
+        ((scale_w as f64) * f64::from(scale)).ceil() as i64
+    };
+    let new_scale_h = if use_integer_div {
+        scale_i64_div_ceil(scale_h, divide_by.max(1))
+    } else {
+        ((scale_h as f64) * f64::from(scale)).ceil() as i64
+    };
+
+    let lines: Vec<&str> = raw.lines().collect();
+    let mut char_entries: Vec<String> = Vec::new();
+    let mut had_chars_section = false;
+    if let Some(ci) = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with("chars count="))
+    {
+        had_chars_section = true;
+        let header = lines[ci].trim_start();
+        let n_str = header
+            .strip_prefix("chars count=")
+            .ok_or_else(|| AppError::ParseError("fnt: chars count line".to_string()))?
+            .trim();
+        let n: usize = n_str
+            .parse()
+            .map_err(|_| AppError::ParseError("fnt: chars count value".to_string()))?;
+        let mut j = ci + 1;
+        while j < lines.len() && char_entries.len() < n {
+            let t = lines[j].trim_start();
+            j += 1;
+            if !t.starts_with("char ") {
+                continue;
+            }
+            let Some(caps) = char_re.captures(t) else {
+                continue;
+            };
+            let id = caps["id"].to_string();
+            let x: i64 = caps["x"].parse().map_err(|_| AppError::ParseError("char x".to_string()))?;
+            let y: i64 = caps["y"].parse().map_err(|_| AppError::ParseError("char y".to_string()))?;
+            let width: i64 = caps["width"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char width".to_string()))?;
+            let height: i64 = caps["height"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char height".to_string()))?;
+            let xoffset: i64 = caps["xoffset"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char xoffset".to_string()))?;
+            let yoffset: i64 = caps["yoffset"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char yoffset".to_string()))?;
+            let xadvance: i64 = caps["xadvance"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char xadvance".to_string()))?;
+            let page = caps["page"].to_string();
+            let chnl = caps["chnl"].to_string();
+
+            let (nx, ny, nw, nh, nxo, nyo, nxa) = if use_integer_div {
+                let d = divide_by.max(1);
+                (
+                    scale_i64_div_ceil(x, d),
+                    scale_i64_div_ceil(y, d),
+                    scale_i64_div_floor(width, d),
+                    scale_i64_div_floor(height, d),
+                    scale_i64_div_ceil(xoffset, d),
+                    scale_i64_div_ceil(yoffset, d),
+                    scale_i64_div_ceil(xadvance, d),
+                )
+            } else {
+                let s = f64::from(scale);
+                (
+                    (x as f64 * s).ceil() as i64,
+                    (y as f64 * s).ceil() as i64,
+                    (width as f64 * s).floor() as i64,
+                    (height as f64 * s).floor() as i64,
+                    (xoffset as f64 * s).ceil() as i64,
+                    (yoffset as f64 * s).ceil() as i64,
+                    (xadvance as f64 * s).ceil() as i64,
+                )
+            };
+
+            char_entries.push(format!(
+                "char id={id}     x={nx}   y={ny}   width={nw}   height={nh}   xoffset={nxo}   yoffset={nyo}   xadvance={nxa}   page={page}   chnl={chnl}"
+            ));
+        }
+        if char_entries.len() != n {
+            return Err(AppError::ParseError(format!(
+                "fnt: expected {n} char lines, found {}",
+                char_entries.len()
+            )));
+        }
+    }
+
+    let mut kerning_lines: Vec<String> = Vec::new();
+    let mut had_kernings_section = false;
+    if let Some(ki) = lines
+        .iter()
+        .position(|line| line.trim_start().starts_with("kernings count="))
+    {
+        had_kernings_section = true;
+        let header = lines[ki].trim_start();
+        let kn_str = header
+            .strip_prefix("kernings count=")
+            .ok_or_else(|| AppError::ParseError("fnt: kernings count line".to_string()))?
+            .trim();
+        let kn: usize = kn_str
+            .parse()
+            .map_err(|_| AppError::ParseError("kernings count value".to_string()))?;
+        let mut j = ki + 1;
+        while j < lines.len() && kerning_lines.len() < kn {
+            let t = lines[j].trim_start();
+            j += 1;
+            if !t.starts_with("kerning ") {
+                continue;
+            }
+            let Some(caps) = kerning_re.captures(t) else {
+                continue;
+            };
+            let first = caps["first"].to_string();
+            let second = caps["second"].to_string();
+            let amount: i64 = caps["amount"]
+                .parse()
+                .map_err(|_| AppError::ParseError("kerning amount".to_string()))?;
+            let na = if use_integer_div {
+                scale_i64_div_ceil(amount, divide_by.max(1))
+            } else {
+                (amount as f64 * f64::from(scale)).ceil() as i64
+            };
+            kerning_lines.push(format!("kerning first={first} second={second} amount={na}"));
+        }
+        if kerning_lines.len() != kn {
+            return Err(AppError::ParseError(format!(
+                "fnt: expected {kn} kerning lines, found {}",
+                kerning_lines.len()
+            )));
+        }
+    }
+
+    let relative_file = fnt_path
+        .strip_prefix(input_root)
+        .map_err(|_| AppError::InvalidOperation("failed to compute relative .fnt path"))?;
+    let relative_dir = relative_file.parent().map(Path::to_path_buf).unwrap_or_default();
+    let bundle_stem = PathBuf::from(source_stem);
+    let relative_sheet: PathBuf = if relative_dir.as_os_str().is_empty() {
+        bundle_stem
+    } else {
+        relative_dir.join(source_stem)
+    };
+    let dest_dir = flattened_bundle_output_dir(porter_output_root, &relative_sheet);
+    fs::create_dir_all(&dest_dir).map_err(|e| AppError::IoError(e.to_string()))?;
+
+    let out_fnt_name = page_file_plain
+        .rsplit_once('.')
+        .map(|(s, _)| format!("{s}.fnt"))
+        .unwrap_or_else(|| format!("{page_file_plain}.fnt"));
+    let out_path = dest_dir.join(out_fnt_name);
+
+    let mut out = String::new();
+    out.push_str(&format!(
+        "info face={} size={new_size} bold={} italic={} charset={} unicode={} stretchH={} smooth={} aa={} padding={} spacing={}",
+        &info_caps["face"],
+        &info_caps["bold"],
+        &info_caps["italic"],
+        &info_caps["charset"],
+        &info_caps["unicode"],
+        &info_caps["stretchH"],
+        &info_caps["smooth"],
+        &info_caps["aa"],
+        &info_caps["padding"],
+        &info_caps["spacing"],
+    ));
+    out.push_str(&format!(
+        "\ncommon lineHeight={new_line_height} base={new_base} scaleW={new_scale_w} scaleH={new_scale_h} pages={} packed={}",
+        &common_caps["pages"], &common_caps["packed"]
+    ));
+    out.push_str(&format!("\npage id={page_id} file={page_file_output}"));
+    if had_chars_section {
+        out.push_str(&format!("\nchars count={}", char_entries.len()));
+        for line in &char_entries {
+            out.push('\n');
+            out.push_str(line);
+        }
+    }
+    if had_kernings_section {
+        out.push_str(&format!("\nkernings count={}", kerning_lines.len()));
+        for line in &kerning_lines {
+            out.push('\n');
+            out.push_str(line);
+        }
+    }
+
+    fs::write(&out_path, out).map_err(|e| AppError::IoError(e.to_string()))?;
     Ok(())
 }
 

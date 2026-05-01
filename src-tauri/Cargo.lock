@@ -4562,6 +4562,7 @@ dependencies = [
  "image",
  "plist",
  "rayon",
+ "regex",
  "serde",
  "serde_json",
  "tauri",
