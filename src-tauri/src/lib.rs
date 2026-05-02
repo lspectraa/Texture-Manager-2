@@ -70,7 +70,7 @@ async fn run_operation(
     tauri::async_runtime::spawn_blocking(move || {
         execute_operation_plan(
             &plan,
-            |progress| {
+            move |progress| {
                 let _ = app_handle.emit("operation-progress", &progress);
             },
             cancel_flag,

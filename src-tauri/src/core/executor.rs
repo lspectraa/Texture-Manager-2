@@ -1,8 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::thread;
 use std::time::Instant;
 
 use image::imageops::{self, FilterType};
@@ -20,7 +21,7 @@ use crate::core::discovery::{
 };
 use crate::core::errors::AppError;
 use crate::core::glow::{glow_primary_name_for, render_icon_glow_from_primary};
-use crate::core::merger::{direct_plist_files, merge_plist_from_memory, merge_sheet_directory};
+use crate::core::merger::{direct_plist_files, merge_one_plist_file, merge_plist_from_memory};
 use crate::core::plist::count_frames_in_plist;
 use crate::core::porter::{
     downscale_sprites, flattened_bundle_output_dir, porter_medium_and_low_linear_scales,
@@ -71,13 +72,107 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), AppError> {
     Ok(())
 }
 
+/// Heuristic input size for a gamesheet (plist + png on disk). Used to order parallel merge-related work.
+fn sheet_input_weight_bytes(pair: &SheetCandidate) -> u64 {
+    let plist_bytes = fs::metadata(&pair.plist_path).map(|m| m.len()).unwrap_or(0);
+    let png_bytes = fs::metadata(&pair.png_path).map(|m| m.len()).unwrap_or(0);
+    plist_bytes.saturating_add(png_bytes)
+}
+
+/// Run `jobs` on `concurrency` OS threads: jobs sorted ascending by weight; half the workers drain
+/// largest-first (`pop_back`), half smallest-first (`pop_front`), so heavy sheets start early while
+/// light work fills the tail (same strategy as merger plist scheduling).
+fn scope_run_weighted_job_queue<J, R>(
+    jobs: Vec<(u64, J)>,
+    concurrency: u32,
+    cancel: Arc<AtomicBool>,
+    work: Arc<dyn Fn(J) -> R + Send + Sync>,
+) -> Result<Vec<R>, AppError>
+where
+    J: Send + 'static,
+    R: Send + 'static,
+{
+    let mut sorted = jobs;
+    sorted.sort_by_key(|(w, _)| *w);
+    let worker_count = concurrency.max(1).min(64) as usize;
+    let large_worker_count = (worker_count + 1) / 2;
+    let small_worker_count = worker_count.saturating_sub(large_worker_count);
+    let queue: Arc<Mutex<VecDeque<(u64, J)>>> = Arc::new(Mutex::new(VecDeque::from(sorted)));
+    let results: Arc<Mutex<Vec<R>>> = Arc::new(Mutex::new(Vec::new()));
+    let results_for_workers = Arc::clone(&results);
+
+    thread::scope(|scope| -> Result<(), AppError> {
+        let mut handles = Vec::with_capacity(worker_count);
+        for _ in 0..large_worker_count {
+            let cancel = Arc::clone(&cancel);
+            let queue = Arc::clone(&queue);
+            let results = Arc::clone(&results_for_workers);
+            let work = Arc::clone(&work);
+            handles.push(scope.spawn(move || -> Result<(), AppError> {
+                loop {
+                    check_cancel(cancel.as_ref())?;
+                    let job = {
+                        let mut q = queue.lock().unwrap();
+                        q.pop_back().or_else(|| q.pop_front()).map(|(_, j)| j)
+                    };
+                    let Some(job) = job else {
+                        break;
+                    };
+                    check_cancel(cancel.as_ref())?;
+                    let out = work(job);
+                    results.lock().unwrap().push(out);
+                }
+                Ok(())
+            }));
+        }
+        for _ in 0..small_worker_count {
+            let cancel = Arc::clone(&cancel);
+            let queue = Arc::clone(&queue);
+            let results = Arc::clone(&results_for_workers);
+            let work = Arc::clone(&work);
+            handles.push(scope.spawn(move || -> Result<(), AppError> {
+                loop {
+                    check_cancel(cancel.as_ref())?;
+                    let job = {
+                        let mut q = queue.lock().unwrap();
+                        q.pop_front().or_else(|| q.pop_back()).map(|(_, j)| j)
+                    };
+                    let Some(job) = job else {
+                        break;
+                    };
+                    check_cancel(cancel.as_ref())?;
+                    let out = work(job);
+                    results.lock().unwrap().push(out);
+                }
+                Ok(())
+            }));
+        }
+
+        for handle in handles {
+            match handle.join() {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => return Err(e),
+                Err(_) => {
+                    return Err(AppError::IoError(
+                        "weighted job queue worker thread panicked".to_string(),
+                    ))
+                }
+            }
+        }
+        Ok(())
+    })?;
+
+    let taken = std::mem::take(&mut *results.lock().unwrap());
+    Ok(taken)
+}
+
 pub fn execute_operation_plan<F>(
     plan: &OperationPlan,
     on_progress: F,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let on_progress = Arc::new(Mutex::new(on_progress));
     let input_dir = Path::new(&plan.input_dir);
@@ -141,7 +236,7 @@ fn execute_splitter<F>(
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let split_dir = output_dir.join("Split");
     fs::create_dir_all(&split_dir)?;
@@ -298,7 +393,7 @@ fn porter_process_one_sheet_candidate<F>(
     on_progress: &Arc<Mutex<F>>,
 ) -> Result<PorterSheetWorkOutcome, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let mut issues: Vec<ReportIssue> = Vec::new();
     let stem = pair.stem.clone();
@@ -560,7 +655,7 @@ fn porter_process_one_standalone_png<F>(
     on_progress: &Arc<Mutex<F>>,
 ) -> Result<(usize, Vec<ReportIssue>), AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let mut issues: Vec<ReportIssue> = Vec::new();
     let source_stem = png_path
@@ -612,7 +707,7 @@ fn execute_porter_splitter<F>(
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let porter_dir = output_dir.join("Ported");
     fs::create_dir_all(&porter_dir)?;
@@ -630,6 +725,7 @@ where
     let standalone_fnts = discover_standalone_fnts(input_dir)?;
     let plists_total = sheet_pairs.len() as u32;
     let mut total_units = 0usize;
+    let mut porter_sheet_jobs: Vec<(u64, SheetCandidate)> = Vec::with_capacity(sheet_pairs.len());
     for pair in &sheet_pairs {
         check_cancel(cancel.as_ref())?;
         let n = count_frames_in_plist(&pair.plist_path)?;
@@ -643,6 +739,8 @@ where
                 1
             };
         total_units = total_units.saturating_add(n.saturating_mul(1 + merge_passes));
+        let weight = sheet_input_weight_bytes(pair).saturating_mul(merge_passes as u64);
+        porter_sheet_jobs.push((weight, pair.clone()));
     }
     total_units = total_units.saturating_add(standalone_pngs.len());
     total_units = total_units.saturating_add(standalone_fnts.len());
@@ -664,35 +762,50 @@ where
 
     let pool = build_sheet_pool(porter_opts.sheet_concurrency)?;
     check_cancel(cancel.as_ref())?;
-    let cancel_for_pool = Arc::clone(&cancel);
+    let cancel_for_sheets = Arc::clone(&cancel);
     let completed_for_sheets = Arc::clone(&completed);
     let on_progress_for_sheets = Arc::clone(on_progress);
     let plists_atomic_for_sheets = Arc::clone(&plists_done_atomic);
-    let sheet_results: Vec<Result<PorterSheetWorkOutcome, AppError>> = pool.install(|| {
-        sheet_pairs
-            .par_iter()
-            .map(|pair| -> Result<PorterSheetWorkOutcome, AppError> {
-                check_cancel(cancel_for_pool.as_ref())?;
-                porter_process_one_sheet_candidate(
-                    pair,
-                    porter_dir.as_path(),
-                    &splitter_opts,
-                    &merger_opts,
-                    porter_opts,
-                    total_units,
-                    &completed_for_sheets,
-                    &plists_atomic_for_sheets,
-                    plists_total,
-                    &on_progress_for_sheets,
-                )
-            })
-            .collect()
-    });
+    let porter_dir_for_sheets = porter_dir.clone();
+    let splitter_opts_for_sheets = splitter_opts.clone();
+    let merger_opts_for_sheets = merger_opts.clone();
+    let porter_opts_for_sheets = porter_opts.clone();
+    let sheet_results: Vec<(String, Result<PorterSheetWorkOutcome, AppError>)> = scope_run_weighted_job_queue(
+        porter_sheet_jobs,
+        porter_opts.sheet_concurrency,
+        Arc::clone(&cancel),
+        Arc::new(move |pair: SheetCandidate| {
+            let sheet_label = format!("{}.plist", pair.stem);
+            if let Err(e) = check_cancel(cancel_for_sheets.as_ref()) {
+                return (sheet_label, Err(e));
+            }
+            let result = porter_process_one_sheet_candidate(
+                &pair,
+                porter_dir_for_sheets.as_path(),
+                &splitter_opts_for_sheets,
+                &merger_opts_for_sheets,
+                &porter_opts_for_sheets,
+                total_units,
+                &completed_for_sheets,
+                &plists_atomic_for_sheets,
+                plists_total,
+                &on_progress_for_sheets,
+            );
+            (sheet_label, result)
+        }),
+    )?;
 
-    for entry in sheet_results {
+    for (sheet_label, entry) in sheet_results {
         let outcome = match entry {
             Ok(v) => v,
-            Err(e) => return Err(e),
+            Err(e) => {
+                issues.push(ReportIssue {
+                    level: ReportLevel::Warning,
+                    message: format!("porter sheet failed; continuing with remaining files: {e}"),
+                    file: Some(sheet_label),
+                });
+                continue;
+            }
         };
         sheets_written = sheets_written.saturating_add(outcome.sheets_written);
         issues.extend(outcome.issues);
@@ -703,12 +816,19 @@ where
     let cancel_for_standalone = Arc::clone(&cancel);
     let completed_for_standalone = Arc::clone(&completed);
     let on_progress_for_standalone = Arc::clone(on_progress);
-    let standalone_results: Vec<Result<(usize, Vec<ReportIssue>), AppError>> = pool.install(|| {
+    let standalone_results: Vec<(String, Result<(usize, Vec<ReportIssue>), AppError>)> = pool.install(|| {
         standalone_pngs
             .par_iter()
-            .map(|png_path| -> Result<(usize, Vec<ReportIssue>), AppError> {
-                check_cancel(cancel_for_standalone.as_ref())?;
-                porter_process_one_standalone_png(
+            .map(|png_path| -> (String, Result<(usize, Vec<ReportIssue>), AppError>) {
+                let label = png_path
+                    .file_name()
+                    .and_then(|v| v.to_str())
+                    .map(str::to_string)
+                    .unwrap_or_else(|| png_path.to_string_lossy().to_string());
+                if let Err(e) = check_cancel(cancel_for_standalone.as_ref()) {
+                    return (label, Err(e));
+                }
+                let result = porter_process_one_standalone_png(
                     png_path.as_path(),
                     input_dir,
                     porter_dir.as_path(),
@@ -718,15 +838,23 @@ where
                     gamesheets_done,
                     plists_total,
                     &on_progress_for_standalone,
-                )
+                );
+                (label, result)
             })
             .collect()
     });
 
-    for entry in standalone_results {
+    for (label, entry) in standalone_results {
         let (written, mut local_issues) = match entry {
             Ok(v) => v,
-            Err(e) => return Err(e),
+            Err(e) => {
+                issues.push(ReportIssue {
+                    level: ReportLevel::Warning,
+                    message: format!("porter standalone png failed; continuing: {e}"),
+                    file: Some(label),
+                });
+                continue;
+            }
         };
         standalone_written = standalone_written.saturating_add(written);
         issues.append(&mut local_issues);
@@ -739,17 +867,19 @@ where
     let porter_dir_for_fnt = porter_dir.clone();
     let input_dir_for_fnt = input_dir.to_path_buf();
     let porter_opts_for_fnt = porter_opts.clone();
-    let fnt_results: Vec<Result<(usize, Vec<ReportIssue>), AppError>> = pool.install(|| {
+    let fnt_results: Vec<(String, Result<(usize, Vec<ReportIssue>), AppError>)> = pool.install(|| {
         standalone_fnts
             .par_iter()
-            .map(|fnt_path| -> Result<(usize, Vec<ReportIssue>), AppError> {
-                check_cancel(cancel_for_fnt.as_ref())?;
+            .map(|fnt_path| -> (String, Result<(usize, Vec<ReportIssue>), AppError>) {
                 let mut local_issues: Vec<ReportIssue> = Vec::new();
                 let label = fnt_path
                     .file_name()
                     .and_then(|n| n.to_str())
                     .map(str::to_string)
                     .unwrap_or_else(|| fnt_path.to_string_lossy().to_string());
+                if let Err(e) = check_cancel(cancel_for_fnt.as_ref()) {
+                    return (label, Err(e));
+                }
                 match port_bitmap_fnt(
                     fnt_path.as_path(),
                     input_dir_for_fnt.as_path(),
@@ -759,13 +889,13 @@ where
                     Ok(()) => {
                         let n = completed_for_fnt.fetch_add(1, Ordering::Relaxed) + 1;
                         on_progress_for_fnt.lock().unwrap()(operation_progress(
-                            label,
+                            label.clone(),
                             n,
                             total_units,
                             gamesheets_done,
                             plists_total,
                         ));
-                        Ok((1, local_issues))
+                        (label, Ok((1, local_issues)))
                     }
                     Err(e) => {
                         local_issues.push(ReportIssue {
@@ -775,23 +905,30 @@ where
                         });
                         let n = completed_for_fnt.fetch_add(1, Ordering::Relaxed) + 1;
                         on_progress_for_fnt.lock().unwrap()(operation_progress(
-                            label,
+                            label.clone(),
                             n,
                             total_units,
                             gamesheets_done,
                             plists_total,
                         ));
-                        Ok((0, local_issues))
+                        (label, Ok((0, local_issues)))
                     }
                 }
             })
             .collect()
     });
 
-    for entry in fnt_results {
+    for (label, entry) in fnt_results {
         let (written, mut local_issues) = match entry {
             Ok(v) => v,
-            Err(e) => return Err(e),
+            Err(e) => {
+                issues.push(ReportIssue {
+                    level: ReportLevel::Warning,
+                    message: format!("porter bitmap font failed; continuing: {e}"),
+                    file: Some(label),
+                });
+                continue;
+            }
         };
         fnts_written = fnts_written.saturating_add(written);
         issues.append(&mut local_issues);
@@ -1098,7 +1235,7 @@ fn convert_process_one_sheet_candidate<F>(
     on_progress: &Arc<Mutex<F>>,
 ) -> Result<ConvertSheetWorkOutcome, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let mut issues: Vec<ReportIssue> = Vec::new();
     let stem = pair.stem.clone();
@@ -1296,6 +1433,123 @@ where
     })
 }
 
+struct GlowSheetWorkOutcome {
+    sheets_written: usize,
+    issues: Vec<ReportIssue>,
+}
+
+fn glow_maker_process_one_sheet_candidate<F>(
+    pair: &SheetCandidate,
+    splitter_opts: &SplitterOptions,
+    merger_opts: &MergerOptions,
+    options: &GlowMakerOptions,
+    generated_glow_dir: &Path,
+    total_units: usize,
+    completed: &Arc<AtomicUsize>,
+    plists_done_atomic: &Arc<AtomicU32>,
+    plists_total: u32,
+    on_progress: &Arc<Mutex<F>>,
+    cancel: &Arc<AtomicBool>,
+) -> Result<GlowSheetWorkOutcome, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
+    check_cancel(cancel.as_ref())?;
+    let mut issues: Vec<ReportIssue> = Vec::new();
+    let stem = pair.stem.clone();
+    let completed_ref = Arc::clone(completed);
+    let on_progress_ref = Arc::clone(on_progress);
+    let plists_ref = Arc::clone(plists_done_atomic);
+    let mut split = split_sheet_candidate_memory(pair, splitter_opts, || {
+        let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
+        on_progress_ref.lock().unwrap()(operation_progress(
+            stem.clone(),
+            n,
+            total_units,
+            plists_ref.load(Ordering::Relaxed),
+            plists_total,
+        ));
+    })?;
+    issues.extend(split.issues);
+
+    if split.files_processed == 0 {
+        issues.push(ReportIssue {
+            level: ReportLevel::Warning,
+            message: "No sprites extracted from icons sheet; skipping glow generation.".to_string(),
+            file: Some(format!("{}.plist", pair.stem)),
+        });
+        let plist_done_now = plists_done_atomic.fetch_add(1, Ordering::Relaxed) + 1;
+        on_progress.lock().unwrap()(operation_progress(
+            stem,
+            completed.load(Ordering::Relaxed),
+            total_units,
+            plist_done_now,
+            plists_total,
+        ));
+        return Ok(GlowSheetWorkOutcome {
+            sheets_written: 0,
+            issues,
+        });
+    }
+
+    let frame_names: Vec<String> = split.sprites.keys().cloned().collect();
+    for frame_name in frame_names {
+        check_cancel(cancel.as_ref())?;
+        if !frame_name.contains("_glow_") {
+            continue;
+        }
+        let Some(primary_name) = glow_primary_name_for(&frame_name) else {
+            continue;
+        };
+        let Some(primary_sprite) = split.sprites.get(&primary_name).cloned() else {
+            issues.push(ReportIssue {
+                level: ReportLevel::Warning,
+                message: "glow sprite has no matching primary sprite in sheet".to_string(),
+                file: Some(frame_name.clone()),
+            });
+            continue;
+        };
+        let generated = render_icon_glow_from_primary(&primary_sprite, options);
+        split.sprites.insert(frame_name.clone(), generated);
+    }
+
+    let completed_ref = Arc::clone(completed);
+    let on_progress_ref = Arc::clone(on_progress);
+    let plists_ref = Arc::clone(plists_done_atomic);
+    let (atlas, _w, _h, _count, merge_issues) = merge_plist_from_memory(
+        &mut split.plist_root,
+        &split.sprites,
+        pair.stem.as_str(),
+        merger_opts,
+        &mut |label| {
+            let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
+            on_progress_ref.lock().unwrap()(operation_progress(
+                label,
+                n,
+                total_units,
+                plists_ref.load(Ordering::Relaxed),
+                plists_total,
+            ));
+        },
+    )?;
+    issues.extend(merge_issues);
+
+    save_merged_sheet(generated_glow_dir, pair.stem.as_str(), &split.plist_root, &atlas)?;
+    let plist_done_now = plists_done_atomic.fetch_add(1, Ordering::Relaxed) + 1;
+    on_progress.lock().unwrap()(operation_progress(
+        pair.stem.clone(),
+        completed.load(Ordering::Relaxed),
+        total_units,
+        plist_done_now,
+        plists_total,
+    ));
+
+    Ok(GlowSheetWorkOutcome {
+        sheets_written: 1,
+        issues,
+    })
+}
+
 fn execute_convert_to_new_version<F>(
     plan: &OperationPlan,
     input_dir: &Path,
@@ -1306,7 +1560,7 @@ fn execute_convert_to_new_version<F>(
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let converted_dir = output_dir.join("ConvertedToLatestVersion");
     fs::create_dir_all(&converted_dir)?;
@@ -1365,36 +1619,43 @@ where
     });
     let mut sheets_written = 0usize;
 
-    let pool = build_sheet_pool(options.sheet_concurrency)?;
+    let convert_sheet_jobs: Vec<(u64, SheetCandidate)> = sheet_pairs
+        .iter()
+        .map(|pair| (sheet_input_weight_bytes(pair), pair.clone()))
+        .collect();
     let latest_sheet_sprite_cache: Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>> =
         Arc::new(Mutex::new(HashMap::new()));
     check_cancel(cancel.as_ref())?;
-    let cancel_for_pool = Arc::clone(&cancel);
+    let cancel_for_convert = Arc::clone(&cancel);
     let completed_for_pool = Arc::clone(&completed);
     let plists_for_pool = Arc::clone(&plists_done_atomic);
     let progress_for_pool = Arc::clone(on_progress);
     let latest_sheet_sprite_cache_for_pool = Arc::clone(&latest_sheet_sprite_cache);
-    let results: Vec<Result<ConvertSheetWorkOutcome, AppError>> = pool.install(|| {
-        sheet_pairs
-            .par_iter()
-            .map(|pair| -> Result<ConvertSheetWorkOutcome, AppError> {
-                check_cancel(cancel_for_pool.as_ref())?;
-                convert_process_one_sheet_candidate(
-                    pair,
-                    &splitter_opts,
-                    &merger_opts,
-                    &latest_plists_by_stem,
-                    &latest_sheet_sprite_cache_for_pool,
-                    converted_dir.as_path(),
-                    total_units,
-                    &completed_for_pool,
-                    &plists_for_pool,
-                    plists_total,
-                    &progress_for_pool,
-                )
-            })
-            .collect()
-    });
+    let splitter_opts_for_convert = splitter_opts.clone();
+    let merger_opts_for_convert = merger_opts.clone();
+    let latest_plists_for_convert = latest_plists_by_stem.clone();
+    let converted_dir_for_convert = converted_dir.clone();
+    let results: Vec<Result<ConvertSheetWorkOutcome, AppError>> = scope_run_weighted_job_queue(
+        convert_sheet_jobs,
+        options.sheet_concurrency,
+        Arc::clone(&cancel),
+        Arc::new(move |pair: SheetCandidate| {
+            check_cancel(cancel_for_convert.as_ref())?;
+            convert_process_one_sheet_candidate(
+                &pair,
+                &splitter_opts_for_convert,
+                &merger_opts_for_convert,
+                &latest_plists_for_convert,
+                &latest_sheet_sprite_cache_for_pool,
+                converted_dir_for_convert.as_path(),
+                total_units,
+                &completed_for_pool,
+                &plists_for_pool,
+                plists_total,
+                &progress_for_pool,
+            )
+        }),
+    )?;
 
     for entry in results {
         let outcome = match entry {
@@ -1440,7 +1701,7 @@ fn execute_glow_maker<F>(
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let input_is_icons = input_dir
         .file_name()
@@ -1495,95 +1756,50 @@ where
         sheet_concurrency: 1,
     };
 
+    let glow_sheet_jobs: Vec<(u64, SheetCandidate)> = sheet_pairs
+        .iter()
+        .map(|pair| (sheet_input_weight_bytes(pair), pair.clone()))
+        .collect();
+    let sheet_concurrency = phase_defaults().merger.sheet_concurrency;
+
     let mut issues: Vec<ReportIssue> = Vec::new();
     let mut sheets_written = 0usize;
-    let mut plists_done = 0u32;
+    let plists_done_atomic = Arc::new(AtomicU32::new(0));
 
-    for pair in &sheet_pairs {
-        check_cancel(cancel.as_ref())?;
-        let stem = pair.stem.clone();
-        let completed_ref = Arc::clone(&completed);
-        let on_progress_ref = Arc::clone(on_progress);
-        let mut split = split_sheet_candidate_memory(pair, &splitter_opts, || {
-            let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
-            on_progress_ref.lock().unwrap()(operation_progress(
-                stem.clone(),
-                n,
+    check_cancel(cancel.as_ref())?;
+    let cancel_for_glow = Arc::clone(&cancel);
+    let completed_for_glow = Arc::clone(&completed);
+    let on_progress_for_glow = Arc::clone(on_progress);
+    let generated_glow_dir_for_glow = generated_glow_dir.clone();
+    let options_for_glow = options.clone();
+    let splitter_opts_for_glow = splitter_opts.clone();
+    let merger_opts_for_glow = merger_opts.clone();
+
+    let glow_results: Vec<Result<GlowSheetWorkOutcome, AppError>> = scope_run_weighted_job_queue(
+        glow_sheet_jobs,
+        sheet_concurrency,
+        Arc::clone(&cancel),
+        Arc::new(move |pair: SheetCandidate| {
+            glow_maker_process_one_sheet_candidate(
+                &pair,
+                &splitter_opts_for_glow,
+                &merger_opts_for_glow,
+                &options_for_glow,
+                generated_glow_dir_for_glow.as_path(),
                 total_units,
-                plists_done,
+                &completed_for_glow,
+                &plists_done_atomic,
                 plists_total,
-            ));
-        })?;
-        issues.extend(split.issues);
+                &on_progress_for_glow,
+                &cancel_for_glow,
+            )
+        }),
+    )?;
 
-        if split.files_processed == 0 {
-            issues.push(ReportIssue {
-                level: ReportLevel::Warning,
-                message: "No sprites extracted from icons sheet; skipping glow generation.".to_string(),
-                file: Some(format!("{}.plist", pair.stem)),
-            });
-            plists_done = plists_done.saturating_add(1);
-            on_progress.lock().unwrap()(operation_progress(
-                stem,
-                completed.load(Ordering::Relaxed),
-                total_units,
-                plists_done,
-                plists_total,
-            ));
-            continue;
-        }
-
-        let frame_names: Vec<String> = split.sprites.keys().cloned().collect();
-        for frame_name in frame_names {
-            check_cancel(cancel.as_ref())?;
-            if !frame_name.contains("_glow_") {
-                continue;
-            }
-            let Some(primary_name) = glow_primary_name_for(&frame_name) else {
-                continue;
-            };
-            let Some(primary_sprite) = split.sprites.get(&primary_name).cloned() else {
-                issues.push(ReportIssue {
-                    level: ReportLevel::Warning,
-                    message: "glow sprite has no matching primary sprite in sheet".to_string(),
-                    file: Some(frame_name.clone()),
-                });
-                continue;
-            };
-            let generated = render_icon_glow_from_primary(&primary_sprite, options);
-            split.sprites.insert(frame_name.clone(), generated);
-        }
-
-        let completed_ref = Arc::clone(&completed);
-        let on_progress_ref = Arc::clone(on_progress);
-        let (atlas, _w, _h, _count, merge_issues) = merge_plist_from_memory(
-            &mut split.plist_root,
-            &split.sprites,
-            pair.stem.as_str(),
-            &merger_opts,
-            &mut |label| {
-                let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
-                on_progress_ref.lock().unwrap()(operation_progress(
-                    label,
-                    n,
-                    total_units,
-                    plists_done,
-                    plists_total,
-                ));
-            },
-        )?;
-        issues.extend(merge_issues);
-
-        save_merged_sheet(&generated_glow_dir, pair.stem.as_str(), &split.plist_root, &atlas)?;
-        sheets_written = sheets_written.saturating_add(1);
-        plists_done = plists_done.saturating_add(1);
-        on_progress.lock().unwrap()(operation_progress(
-            pair.stem.clone(),
-            completed.load(Ordering::Relaxed),
-            total_units,
-            plists_done,
-            plists_total,
-        ));
+    for entry in glow_results {
+        let outcome = entry?;
+        sheets_written = sheets_written.saturating_add(outcome.sheets_written);
+        issues.extend(outcome.issues);
     }
 
     if sheet_pairs.is_empty() {
@@ -1614,7 +1830,7 @@ fn execute_merger<F>(
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
 where
-    F: FnMut(OperationProgress) + Send,
+    F: FnMut(OperationProgress) + Send + 'static,
 {
     let merged_dir = output_dir.join("Merged");
     fs::create_dir_all(&merged_dir)?;
@@ -1637,49 +1853,64 @@ where
         0,
     ));
 
-    let pool = build_sheet_pool(options.sheet_concurrency)?;
+    let mut plist_jobs: Vec<(u64, PathBuf, PathBuf, PathBuf)> = Vec::new();
+    for source in &source_dirs {
+        let relative_dir = source
+            .strip_prefix(input_dir)
+            .map_err(|_| AppError::InvalidOperation("failed to compute merger relative dir"))?;
+        let destination = flattened_bundle_output_dir(&merged_dir, relative_dir);
+        for plist_path in direct_plist_files(source)? {
+            let plist_size_bytes = fs::metadata(&plist_path).map(|meta| meta.len()).unwrap_or(0);
+            plist_jobs.push((plist_size_bytes, source.clone(), destination.clone(), plist_path));
+        }
+    }
     let completed = Arc::new(AtomicUsize::new(0));
-
     check_cancel(cancel.as_ref())?;
-    let cancel_for_pool = Arc::clone(&cancel);
-    let merge_results: Vec<Result<(usize, Vec<ReportIssue>), AppError>> = pool.install(|| {
-        source_dirs
-            .par_iter()
-            .map(|source| -> Result<(usize, Vec<ReportIssue>), AppError> {
-                check_cancel(cancel_for_pool.as_ref())?;
-                let relative_dir = source.strip_prefix(input_dir).map_err(|_| {
-                    AppError::InvalidOperation("failed to compute merger relative dir")
-                })?;
-                let destination = flattened_bundle_output_dir(&merged_dir, relative_dir);
-                let completed = Arc::clone(&completed);
-                let on_progress = Arc::clone(on_progress);
-                let merge_result = merge_sheet_directory(
-                    source.as_path(),
-                    &destination,
-                    options,
-                    move |gamesheet_name| {
-                        let n = completed.fetch_add(1, Ordering::Relaxed) + 1;
-                        on_progress.lock().unwrap()(operation_progress(
-                            gamesheet_name,
-                            n,
-                            total_sprites,
-                            0,
-                            0,
-                        ));
-                    },
-                )?;
-                Ok((merge_result.files_processed, merge_result.issues))
-            })
-            .collect()
-    });
+    let merger_options = options.clone();
+    let completed_for_jobs = Arc::clone(&completed);
+    let on_progress_for_jobs = Arc::clone(on_progress);
+    let merge_results = scope_run_weighted_job_queue(
+        plist_jobs
+            .into_iter()
+            .map(|(w, s, d, p)| (w, (s, d, p)))
+            .collect(),
+        options.sheet_concurrency,
+        Arc::clone(&cancel),
+        Arc::new(move |(source_dir, destination_dir, plist_path)| {
+            let plist_display = plist_path.to_string_lossy().to_string();
+            let mut emit = |gamesheet_name: String| {
+                let n = completed_for_jobs.fetch_add(1, Ordering::Relaxed) + 1;
+                on_progress_for_jobs.lock().unwrap()(operation_progress(
+                    gamesheet_name,
+                    n,
+                    total_sprites,
+                    0,
+                    0,
+                ));
+            };
+            match merge_one_plist_file(
+                source_dir.as_path(),
+                destination_dir.as_path(),
+                plist_path.as_path(),
+                &merger_options,
+                &mut emit,
+            ) {
+                Ok(pair) => pair,
+                Err(e) => (
+                    0,
+                    vec![ReportIssue {
+                        level: ReportLevel::Error,
+                        message: e.to_string(),
+                        file: Some(plist_display),
+                    }],
+                ),
+            }
+        }),
+    )?;
 
     let mut issues: Vec<ReportIssue> = Vec::new();
     let mut processed = 0_usize;
-    for entry in merge_results {
-        let (count, mut local_issues) = match entry {
-            Ok(v) => v,
-            Err(e) => return Err(e),
-        };
+    for (count, mut local_issues) in merge_results {
         processed += count;
         issues.append(&mut local_issues);
     }

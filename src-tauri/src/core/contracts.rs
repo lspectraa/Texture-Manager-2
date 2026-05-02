@@ -42,7 +42,7 @@ pub struct PorterOptions {
 pub struct MergerOptions {
     pub include_outside_plist_files: bool,
     pub dimensions: Option<DimensionOverride>,
-    /// Max concurrent merge source folders (each may contain multiple plists).
+    /// Max concurrent gamesheet plist merges (one job per plist file under discovered source dirs).
     pub sheet_concurrency: u32,
 }
 

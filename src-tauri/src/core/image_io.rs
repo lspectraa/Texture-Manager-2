@@ -8,6 +8,9 @@ use image::{DynamicImage, ExtendedColorType, ImageEncoder, RgbaImage};
 use crate::core::errors::AppError;
 
 /// PNG write tuned for speed over smallest file size (batch splits / atlases).
+///
+/// Uses `FilterType::NoFilter` instead of adaptive filtering: adaptive per-row selection is
+/// much slower on large RGBA atlases with little benefit for tooling output size.
 pub fn save_rgba_png_fast(path: &Path, rgba: &RgbaImage) -> Result<(), AppError> {
     let (width, height) = rgba.dimensions();
     let file = File::create(path).map_err(|e| AppError::IoError(e.to_string()))?;

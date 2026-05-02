@@ -1,14 +1,15 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
 
 use image::imageops::overlay;
-use image::{DynamicImage, Rgba, RgbaImage};
+use image::{Rgba, RgbaImage};
 use plist::{Dictionary, Value};
 
 use crate::core::contracts::{DimensionOverride, MergerOptions};
 use crate::core::errors::AppError;
-use crate::core::image_io::save_dynamic_png_fast;
+use crate::core::image_io::save_rgba_png_fast;
 use crate::core::report::{ReportIssue, ReportLevel};
 
 /// Transparent gutter between packed sprite rects so bilinear filtering does not sample
@@ -16,11 +17,6 @@ use crate::core::report::{ReportIssue, ReportLevel};
 /// sprite is drawn at the slot origin, so horizontally/vertically adjacent sprites have
 /// exactly `gap` atlas pixels between their opaque bounds (not `2 * gap` from per-side padding).
 const PACK_SPRITE_INTER_GAP_PX: u32 = 1;
-
-pub struct MergeExecutionResult {
-    pub files_processed: usize,
-    pub issues: Vec<ReportIssue>,
-}
 
 struct SpritePlacement {
     name: String,
@@ -35,45 +31,24 @@ pub(crate) fn direct_plist_files(source_dir: &Path) -> Result<Vec<PathBuf>, AppE
     direct_plist_files_inner(source_dir)
 }
 
-pub fn merge_sheet_directory<F>(
+/// Merge one gamesheet plist under `source_dir` into `destination_dir` (one unit of work for parallel merger).
+pub fn merge_one_plist_file<F>(
     source_dir: &Path,
     destination_dir: &Path,
+    plist_file: &Path,
     options: &MergerOptions,
-    mut on_sprite_loaded: F,
-) -> Result<MergeExecutionResult, AppError>
+    on_sprite_loaded: &mut F,
+) -> Result<(usize, Vec<ReportIssue>), AppError>
 where
     F: FnMut(String) + Send,
 {
-    let plist_files = direct_plist_files_inner(source_dir)?;
-    let mut files_processed = 0_usize;
-    let mut issues: Vec<ReportIssue> = Vec::new();
-
-    for plist_file in plist_files {
-        match merge_single_plist(
-            source_dir,
-            destination_dir,
-            &plist_file,
-            options,
-            &mut on_sprite_loaded,
-        ) {
-            Ok((processed_sprites, local_issues)) => {
-                files_processed += processed_sprites;
-                issues.extend(local_issues);
-            }
-            Err(err) => {
-                issues.push(ReportIssue {
-                    level: ReportLevel::Error,
-                    message: err.to_string(),
-                    file: Some(plist_file.to_string_lossy().to_string()),
-                });
-            }
-        }
-    }
-
-    Ok(MergeExecutionResult {
-        files_processed,
-        issues,
-    })
+    merge_single_plist(
+        source_dir,
+        destination_dir,
+        plist_file,
+        options,
+        on_sprite_loaded,
+    )
 }
 
 fn merge_single_plist<F>(
@@ -235,10 +210,20 @@ where
     let output_png = destination_dir.join(format!("{output_base_name}.png"));
     let output_plist = destination_dir.join(format!("{output_base_name}.plist"));
 
-    save_dynamic_png_fast(&output_png, &DynamicImage::ImageRgba8(atlas))?;
-    plist_root
-        .to_file_xml(output_plist)
-        .map_err(|err| AppError::IoError(err.to_string()))?;
+    thread::scope(|s| {
+        let png_path = &output_png;
+        let plist_path = &output_plist;
+        let rgba = &atlas;
+        let png_handle = s.spawn(|| save_rgba_png_fast(png_path, rgba));
+        plist_root
+            .to_file_xml(plist_path)
+            .map_err(|err| AppError::IoError(err.to_string()))?;
+        match png_handle.join() {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(AppError::IoError("png write thread panicked".to_string())),
+        }
+    })?;
 
     Ok((placements.len(), issues))
 }

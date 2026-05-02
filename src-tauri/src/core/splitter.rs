@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use image::imageops::{overlay, rotate270};
+use rayon::prelude::*;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use plist::{Dictionary, Value};
 
@@ -109,6 +110,7 @@ where
     let mut issues: Vec<ReportIssue> = Vec::new();
     let mut files_processed = 0_usize;
 
+    let mut pending: Vec<(PathBuf, DynamicImage, String)> = Vec::new();
     for (frame_name, frame_value) in frames.iter_mut() {
         let Some(frame_dict) = frame_value.as_dictionary_mut() else {
             issues.push(ReportIssue {
@@ -122,10 +124,35 @@ where
         match extract_frame_image(&source_image, frame_dict, options) {
             Ok(extracted) => {
                 let sprite_path = build_sprite_output_path(candidate, output_dir, frame_name);
+                pending.push((sprite_path, extracted, frame_name.clone()));
+            }
+            Err(err) => {
+                issues.push(ReportIssue {
+                    level: ReportLevel::Warning,
+                    message: err.to_string(),
+                    file: Some(frame_name.clone()),
+                });
+            }
+        }
+    }
+
+    let write_results: Vec<(String, Result<(), AppError>)> = pending
+        .into_par_iter()
+        .map(|(sprite_path, extracted, frame_name)| {
+            let write = (|| -> Result<(), AppError> {
                 if let Some(parent) = sprite_path.parent() {
                     fs::create_dir_all(parent)?;
                 }
                 save_dynamic_png_fast(&sprite_path, &extracted)?;
+                Ok(())
+            })();
+            (frame_name, write)
+        })
+        .collect();
+
+    for (frame_name, write) in write_results {
+        match write {
+            Ok(()) => {
                 files_processed += 1;
                 on_sprite_done();
             }
@@ -133,7 +160,7 @@ where
                 issues.push(ReportIssue {
                     level: ReportLevel::Warning,
                     message: err.to_string(),
-                    file: Some(frame_name.clone()),
+                    file: Some(frame_name),
                 });
             }
         }

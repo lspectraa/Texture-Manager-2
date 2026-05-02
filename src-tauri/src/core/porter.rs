@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::thread;
 
 use image::imageops::{self, FilterType};
 use image::RgbaImage;
@@ -378,10 +379,20 @@ pub fn save_merged_sheet(
     std::fs::create_dir_all(destination_dir)?;
     let output_png = destination_dir.join(format!("{stem}.png"));
     let output_plist = destination_dir.join(format!("{stem}.plist"));
-    crate::core::image_io::save_rgba_png_fast(&output_png, atlas)?;
-    plist_root
-        .to_file_xml(output_plist)
-        .map_err(|e| AppError::IoError(e.to_string()))?;
+    // PNG and plist are independent files: encode and serialize concurrently.
+    thread::scope(|s| {
+        let png_path = &output_png;
+        let rgba = atlas;
+        let png_handle = s.spawn(|| crate::core::image_io::save_rgba_png_fast(png_path, rgba));
+        plist_root
+            .to_file_xml(&output_plist)
+            .map_err(|e| AppError::IoError(e.to_string()))?;
+        match png_handle.join() {
+            Ok(Ok(())) => Ok(()),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err(AppError::IoError("png write thread panicked".to_string())),
+        }
+    })?;
     Ok(())
 }
 
