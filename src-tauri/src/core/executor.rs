@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use image::imageops::{self, FilterType};
+use image::RgbaImage;
 use plist::{Dictionary, Value};
 use rayon::prelude::*;
 
@@ -940,6 +941,76 @@ fn recursive_find_file_named(root: &Path, wanted_file_name: &str) -> Option<Path
     None
 }
 
+fn resolve_latest_sheet_png_path(latest_plist_path: &Path) -> Result<PathBuf, AppError> {
+    let parent = latest_plist_path
+        .parent()
+        .ok_or(AppError::InvalidPath("latest plist has no parent directory"))?;
+    let direct = latest_plist_path.with_extension("png");
+    if direct.exists() {
+        return Ok(direct);
+    }
+
+    let root = Value::from_file(latest_plist_path)
+        .map_err(|err| AppError::ParseError(format!("failed to parse latest plist: {err}")))?;
+    let root_dict = root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("latest plist root must be a dictionary".to_string()))?;
+    if let Some(metadata) = root_dict.get("metadata").and_then(Value::as_dictionary) {
+        for key in ["realTextureFileName", "textureFileName"] {
+            let Some(file_name) = metadata.get(key).and_then(Value::as_string) else {
+                continue;
+            };
+            let candidate = parent.join(file_name);
+            if candidate.exists() {
+                return Ok(candidate);
+            }
+        }
+    }
+
+    Ok(direct)
+}
+
+fn load_latest_sheet_sprites(
+    latest_plist_path: &Path,
+    splitter_opts: &SplitterOptions,
+) -> Result<HashMap<String, RgbaImage>, AppError> {
+    let stem = latest_plist_path
+        .file_stem()
+        .and_then(|v| v.to_str())
+        .ok_or(AppError::InvalidPath("latest placeholder plist has invalid file stem"))?
+        .to_string();
+    let png_path = resolve_latest_sheet_png_path(latest_plist_path)?;
+    let candidate = SheetCandidate {
+        stem,
+        relative_dir: PathBuf::new(),
+        plist_path: latest_plist_path.to_path_buf(),
+        png_path,
+    };
+    let split = split_sheet_candidate_memory(&candidate, splitter_opts, || {})?;
+    Ok(split.sprites.into_iter().collect())
+}
+
+fn latest_sheet_sprite_from_cache(
+    latest_plist_path: &Path,
+    frame_name: &str,
+    splitter_opts: &SplitterOptions,
+    latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
+) -> Result<Option<RgbaImage>, AppError> {
+    let cache_key = latest_plist_path.to_string_lossy().to_string();
+    {
+        let cache_guard = latest_sheet_sprite_cache.lock().unwrap();
+        if let Some(map) = cache_guard.get(&cache_key) {
+            return Ok(map.get(frame_name).cloned());
+        }
+    }
+
+    let loaded = load_latest_sheet_sprites(latest_plist_path, splitter_opts)?;
+    let sprite = loaded.get(frame_name).cloned();
+    let mut cache_guard = latest_sheet_sprite_cache.lock().unwrap();
+    cache_guard.insert(cache_key, loaded);
+    Ok(sprite)
+}
+
 fn resolve_split_sprite_path(source_dir: &Path, frame_name: &str) -> Option<PathBuf> {
     let normalized = frame_name
         .replace('\\', "/")
@@ -1018,6 +1089,7 @@ fn convert_process_one_sheet_candidate<F>(
     splitter_opts: &SplitterOptions,
     merger_opts: &MergerOptions,
     latest_plists_by_stem: &HashMap<String, PathBuf>,
+    latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
     converted_dir: &Path,
     total_units: usize,
     completed: &Arc<AtomicUsize>,
@@ -1119,12 +1191,35 @@ where
             continue;
         };
         let Some(sprite_path) = resolve_split_sprite_path(&latest_sheet_dir, &frame_name) else {
-            issues.push(ReportIssue {
-                level: ReportLevel::Warning,
-                message: "missing sprite payload in latest placeholder split data".to_string(),
-                file: Some(frame_name),
-            });
-            continue;
+            match latest_sheet_sprite_from_cache(
+                latest_plist_path.as_path(),
+                &frame_name,
+                splitter_opts,
+                latest_sheet_sprite_cache,
+            ) {
+                Ok(Some(sprite)) => {
+                    frames_mut.insert(frame_name.clone(), frame_value);
+                    merged_sprites.insert(frame_name, sprite);
+                    merged_additions = merged_additions.saturating_add(1);
+                    continue;
+                }
+                Ok(None) => {
+                    issues.push(ReportIssue {
+                        level: ReportLevel::Warning,
+                        message: "missing sprite payload in latest placeholder split data".to_string(),
+                        file: Some(frame_name),
+                    });
+                    continue;
+                }
+                Err(err) => {
+                    issues.push(ReportIssue {
+                        level: ReportLevel::Warning,
+                        message: format!("failed latest gamesheet fallback payload lookup: {err}"),
+                        file: Some(frame_name),
+                    });
+                    continue;
+                }
+            }
         };
         let sprite = match image::open(&sprite_path) {
             Ok(img) => img.to_rgba8(),
@@ -1271,11 +1366,14 @@ where
     let mut sheets_written = 0usize;
 
     let pool = build_sheet_pool(options.sheet_concurrency)?;
+    let latest_sheet_sprite_cache: Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>> =
+        Arc::new(Mutex::new(HashMap::new()));
     check_cancel(cancel.as_ref())?;
     let cancel_for_pool = Arc::clone(&cancel);
     let completed_for_pool = Arc::clone(&completed);
     let plists_for_pool = Arc::clone(&plists_done_atomic);
     let progress_for_pool = Arc::clone(on_progress);
+    let latest_sheet_sprite_cache_for_pool = Arc::clone(&latest_sheet_sprite_cache);
     let results: Vec<Result<ConvertSheetWorkOutcome, AppError>> = pool.install(|| {
         sheet_pairs
             .par_iter()
@@ -1286,6 +1384,7 @@ where
                     &splitter_opts,
                     &merger_opts,
                     &latest_plists_by_stem,
+                    &latest_sheet_sprite_cache_for_pool,
                     converted_dir.as_path(),
                     total_units,
                     &completed_for_pool,
