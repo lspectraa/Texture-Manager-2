@@ -5,6 +5,7 @@ import {
   Box,
   Sparkles,
   GitBranch,
+  Shuffle,
   Scissors,
   WandSparkles,
   FileOutput,
@@ -32,6 +33,7 @@ import { PorterToolPanel } from "./components/tools/PorterToolPanel";
 import { SplitterToolPanel } from "./components/tools/SplitterToolPanel";
 import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVersionToolPanel";
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
+import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import convertVersionMap from "./config/convertVersionMap.json";
 
 type PrimaryTool =
@@ -40,6 +42,7 @@ type PrimaryTool =
   | "splitter"
   | "porter"
   | "merger"
+  | "randomizer"
   | "convertToNewVersion"
   | "glowMaker";
 
@@ -54,6 +57,7 @@ const TOOL_ENTRIES: ReadonlyArray<{
   { id: "splitter", label: "Splitter", icon: Scissors },
   { id: "merger", label: "Merger", icon: FileOutput },
   { id: "porter", label: "Porter", icon: GitBranch },
+  { id: "randomizer", label: "Randomizer", icon: Shuffle },
   { id: "glowMaker", label: "Glow Maker", icon: WandSparkles },
   { id: "convertToNewVersion", label: "Convert to New Version", icon: RefreshCw },
 ];
@@ -138,6 +142,9 @@ function App() {
   const [convertSheetConcurrency, setConvertSheetConcurrency] = useState(
     DEFAULT_SHEET_CONCURRENCY,
   );
+  const [randomizerInputDir, setRandomizerInputDir] = useState("");
+  const [randomizerOutputDir, setRandomizerOutputDir] = useState("");
+  const [randomizerSeed, setRandomizerSeed] = useState("");
 
   const [glowInputDir, setGlowInputDir] = useState("");
   const [glowOutputDir, setGlowOutputDir] = useState("");
@@ -281,6 +288,21 @@ function App() {
           type: "convertToNewVersion",
           gameVersion: convertGameVersion.trim(),
           sheetConcurrency: convertSheetConcurrency,
+        },
+      };
+    }
+    if (selectedTool === "randomizer") {
+      if (!randomizerInputDir || !randomizerOutputDir) {
+        setRunError("Randomizer requires both input and output directories.");
+        return;
+      }
+      request = {
+        kind: "randomizer",
+        inputDir: randomizerInputDir,
+        outputDir: randomizerOutputDir,
+        options: {
+          type: "randomizer",
+          seed: randomizerSeed.trim() ? randomizerSeed.trim() : null,
         },
       };
     }
@@ -512,6 +534,18 @@ function App() {
             pickFolder={pickFolder}
           />
         );
+      case "randomizer":
+        return (
+          <RandomizerToolPanel
+            inputDir={randomizerInputDir}
+            outputDir={randomizerOutputDir}
+            seed={randomizerSeed}
+            onInputDirChange={setRandomizerInputDir}
+            onOutputDirChange={setRandomizerOutputDir}
+            onSeedChange={setRandomizerSeed}
+            pickFolder={pickFolder}
+          />
+        );
       default: {
         const neverTool: never = selectedTool;
         throw new Error(`Unhandled tool selection: ${neverTool}`);
@@ -668,10 +702,6 @@ function App() {
           })}
           <button className="menu-btn disabled" type="button" disabled>
             Create Geode Buttons (later)
-          </button>
-          <div className="tm-tool-divider" role="separator" aria-hidden="true" />
-          <button className="menu-btn disabled" type="button" disabled>
-            Randomizer
           </button>
         </aside>
 

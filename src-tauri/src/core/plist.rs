@@ -64,9 +64,9 @@ pub fn count_frames_in_plist(plist_path: &Path) -> Result<usize, AppError> {
     let frames = dict
         .get("frames")
         .and_then(Value::as_dictionary)
-        .ok_or_else(|| AppError::ParseError(
-            "plist missing top-level `frames` dictionary".to_string(),
-        ))?;
+        .ok_or_else(|| {
+            AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
+        })?;
     Ok(frames.len())
 }
 

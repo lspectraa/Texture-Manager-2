@@ -15,8 +15,8 @@ use crate::core::icon_editor::{
     icon_editor_import_frame as icon_editor_import_frame_core,
     icon_editor_rename_sheet as icon_editor_rename_sheet_core,
     icon_editor_save_plist as icon_editor_save_plist_core,
-    icon_editor_sheet_info as icon_editor_sheet_info_core, IconEditorFrameUpdate,
-    IconEditorExtractedFrame, IconEditorRenameResult, IconEditorSheetInfo,
+    icon_editor_sheet_info as icon_editor_sheet_info_core, IconEditorExtractedFrame,
+    IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
 };
 use crate::core::operations::build_operation_plan;
 use crate::core::pipeline::{alpha_trim_bounds, normalize_rotation, nullify_offset};
@@ -86,21 +86,19 @@ fn phase1_primitives_smoke_report() -> OperationReport {
     let mut issues: Vec<ReportIssue> = Vec::new();
 
     match parse_pair("{10.0,20.0}") {
-        Ok(parsed) => {
-            match scale_pair_ceil(parsed, 2.0) {
-                Ok(scaled) => {
-                    let _formatted = format_pair(scaled);
-                    let _scaled_floor = scale_pair_floor(parsed, 2.0);
-                }
-                Err(err) => {
-                    issues.push(ReportIssue {
-                        level: ReportLevel::Error,
-                        message: format!("scale_pair_ceil failed: {err}"),
-                        file: None,
-                    });
-                }
+        Ok(parsed) => match scale_pair_ceil(parsed, 2.0) {
+            Ok(scaled) => {
+                let _formatted = format_pair(scaled);
+                let _scaled_floor = scale_pair_floor(parsed, 2.0);
             }
-        }
+            Err(err) => {
+                issues.push(ReportIssue {
+                    level: ReportLevel::Error,
+                    message: format!("scale_pair_ceil failed: {err}"),
+                    file: None,
+                });
+            }
+        },
         Err(err) => {
             issues.push(ReportIssue {
                 level: ReportLevel::Error,
@@ -182,7 +180,8 @@ fn icon_editor_add_frame(
 
 #[tauri::command]
 fn icon_editor_extract_frames(plist_path: String) -> Result<Vec<IconEditorExtractedFrame>, String> {
-    icon_editor_extract_frames_core(std::path::Path::new(&plist_path)).map_err(|err| err.to_string())
+    icon_editor_extract_frames_core(std::path::Path::new(&plist_path))
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]

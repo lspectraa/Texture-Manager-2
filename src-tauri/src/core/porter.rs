@@ -51,7 +51,12 @@ pub fn porter_stem_eligible(stem: &str) -> bool {
 
 /// Linear scale for standalone bitmaps (`.png` without plist) and bitmap font textures, aligned with
 /// classic Porter `divideBy` when `dimensions` is unset.
-pub fn standalone_asset_port_scale(width: u32, height: u32, stem: &str, opts: &PorterOptions) -> Option<f32> {
+pub fn standalone_asset_port_scale(
+    width: u32,
+    height: u32,
+    stem: &str,
+    opts: &PorterOptions,
+) -> Option<f32> {
     if !porter_stem_eligible(stem) {
         return None;
     }
@@ -119,7 +124,9 @@ fn port_apply_rename(source_stem: &str, mode: PortPlistRenameMode, value: &str) 
         PortPlistRenameMode::TierFromStem => {
             port_rename_identifier(value, port_source_tier_from_stem(source_stem))
         }
-        PortPlistRenameMode::MediumFromUhd => port_rename_identifier(value, PortSourceGraphicsTier::Uhd),
+        PortPlistRenameMode::MediumFromUhd => {
+            port_rename_identifier(value, PortSourceGraphicsTier::Uhd)
+        }
         PortPlistRenameMode::MediumFromHd => value.to_string(),
         PortPlistRenameMode::ForceLow => port_rename_identifier_force_low(value),
     }
@@ -303,7 +310,11 @@ fn scale_frame_dictionary(frame_dict: &mut Dictionary, scale: f32) -> Result<(),
     Ok(())
 }
 
-fn scale_rect_or_pair_string(raw: &str, scale: f32, is_texture_rect: bool) -> Result<String, AppError> {
+fn scale_rect_or_pair_string(
+    raw: &str,
+    scale: f32,
+    is_texture_rect: bool,
+) -> Result<String, AppError> {
     let nums = parse_numbers_loose(raw)?;
     if is_texture_rect {
         if nums.len() != 4 {
@@ -344,7 +355,10 @@ fn parse_two_uints(raw: &str) -> Option<(u32, u32)> {
     if nums.len() != 2 {
         return None;
     }
-    Some((nums[0].floor().max(0.0) as u32, nums[1].floor().max(0.0) as u32))
+    Some((
+        nums[0].floor().max(0.0) as u32,
+        nums[1].floor().max(0.0) as u32,
+    ))
 }
 
 fn parse_numbers_loose(value: &str) -> Result<Vec<f64>, AppError> {
@@ -396,7 +410,10 @@ pub fn save_merged_sheet(
     Ok(())
 }
 
-fn porter_fnt_page_graphics_replacement(stem: &str, opts: &PorterOptions) -> Option<(&'static str, &'static str)> {
+fn porter_fnt_page_graphics_replacement(
+    stem: &str,
+    opts: &PorterOptions,
+) -> Option<(&'static str, &'static str)> {
     if stem.ends_with("-uhd") {
         if opts.low_port {
             Some(("-uhd", ""))
@@ -420,7 +437,11 @@ fn scale_i64_div_floor(n: i64, divide_by: i32) -> i64 {
     (n as f64 / d).floor() as i64
 }
 
-fn fnt_port_linear_scale(stem: &str, texture_wh: Option<(u32, u32)>, opts: &PorterOptions) -> Result<f32, AppError> {
+fn fnt_port_linear_scale(
+    stem: &str,
+    texture_wh: Option<(u32, u32)>,
+    opts: &PorterOptions,
+) -> Result<f32, AppError> {
     if let Some((w, h)) = texture_wh {
         if opts.dimensions.is_some() {
             return Ok(porter_sheet_fit_scale(w, h, opts));
@@ -448,7 +469,9 @@ pub fn port_bitmap_fnt(
             "porter skipped ineligible .fnt `{source_stem}`"
         )));
     }
-    let Some((graphics_from, graphics_to)) = porter_fnt_page_graphics_replacement(source_stem, opts) else {
+    let Some((graphics_from, graphics_to)) =
+        porter_fnt_page_graphics_replacement(source_stem, opts)
+    else {
         return Err(AppError::ParseError(format!(
             "could not derive graphics replacement for `{source_stem}.fnt`"
         )));
@@ -470,8 +493,10 @@ pub fn port_bitmap_fnt(
         r"char[ ]+id=(?P<id>\w+)[ ]+x=(?P<x>\w+)[ ]+y=(?P<y>\w+)[ ]+width=(?P<width>\w+)[ ]+height=(?P<height>\w+)[ ]+xoffset=(?P<xoffset>[\w-]+)[ ]+yoffset=(?P<yoffset>[\w-]+)[ ]+xadvance=(?P<xadvance>[\w-]+)[ ]+page=(?P<page>\w+)[ ]+chnl=(?P<chnl>\w+)",
     )
     .map_err(|e| AppError::ParseError(e.to_string()))?;
-    let kerning_re = Regex::new(r"[ ]*kerning first=(?P<first>\w+) second=(?P<second>\w+) amount=(?P<amount>[\w-]+)")
-        .map_err(|e| AppError::ParseError(e.to_string()))?;
+    let kerning_re = Regex::new(
+        r"[ ]*kerning first=(?P<first>\w+) second=(?P<second>\w+) amount=(?P<amount>[\w-]+)",
+    )
+    .map_err(|e| AppError::ParseError(e.to_string()))?;
 
     let info_caps = info_re
         .captures(&raw)
@@ -515,9 +540,7 @@ pub fn port_bitmap_fnt(
         .ok_or_else(|| AppError::InvalidPath("fnt has no parent directory"))?;
     let texture_path = fnt_parent.join(&page_file_plain);
     let texture_wh = if texture_path.is_file() {
-        Some(
-            image::image_dimensions(&texture_path).map_err(|e| AppError::IoError(e.to_string()))?,
-        )
+        Some(image::image_dimensions(&texture_path).map_err(|e| AppError::IoError(e.to_string()))?)
     } else {
         None
     };
@@ -579,8 +602,12 @@ pub fn port_bitmap_fnt(
                 continue;
             };
             let id = caps["id"].to_string();
-            let x: i64 = caps["x"].parse().map_err(|_| AppError::ParseError("char x".to_string()))?;
-            let y: i64 = caps["y"].parse().map_err(|_| AppError::ParseError("char y".to_string()))?;
+            let x: i64 = caps["x"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char x".to_string()))?;
+            let y: i64 = caps["y"]
+                .parse()
+                .map_err(|_| AppError::ParseError("char y".to_string()))?;
             let width: i64 = caps["width"]
                 .parse()
                 .map_err(|_| AppError::ParseError("char width".to_string()))?;
@@ -683,7 +710,10 @@ pub fn port_bitmap_fnt(
     let relative_file = fnt_path
         .strip_prefix(input_root)
         .map_err(|_| AppError::InvalidOperation("failed to compute relative .fnt path"))?;
-    let relative_dir = relative_file.parent().map(Path::to_path_buf).unwrap_or_default();
+    let relative_dir = relative_file
+        .parent()
+        .map(Path::to_path_buf)
+        .unwrap_or_default();
     let bundle_stem = PathBuf::from(source_stem);
     let relative_sheet: PathBuf = if relative_dir.as_os_str().is_empty() {
         bundle_stem
@@ -744,8 +774,8 @@ mod port_rename_tests {
     use crate::core::contracts::PorterOptions;
 
     use super::{
-        flattened_bundle_output_dir, porter_medium_and_low_linear_scales, port_rename_identifier,
-        port_rename_identifier_force_low, port_source_tier_from_stem, PortSourceGraphicsTier,
+        flattened_bundle_output_dir, port_rename_identifier, port_rename_identifier_force_low,
+        port_source_tier_from_stem, porter_medium_and_low_linear_scales, PortSourceGraphicsTier,
     };
 
     fn porter_opts(low_port: bool, _auto_adjust: bool) -> PorterOptions {
@@ -761,7 +791,10 @@ mod port_rename_tests {
         let t = PortSourceGraphicsTier::Uhd;
         assert_eq!(port_rename_identifier("icons-uhd", t), "icons-hd");
         assert_eq!(port_rename_identifier("icons-hd", t), "icons-hd");
-        assert_eq!(port_rename_identifier("sheet-uhd-extra", t), "sheet-hd-extra");
+        assert_eq!(
+            port_rename_identifier("sheet-uhd-extra", t),
+            "sheet-hd-extra"
+        );
     }
 
     #[test]
@@ -774,16 +807,28 @@ mod port_rename_tests {
 
     #[test]
     fn tier_from_stem_prefers_uhd_token() {
-        assert_eq!(port_source_tier_from_stem("icons-uhd"), PortSourceGraphicsTier::Uhd);
-        assert_eq!(port_source_tier_from_stem("icons-hd"), PortSourceGraphicsTier::Hd);
-        assert_eq!(port_source_tier_from_stem("Icons"), PortSourceGraphicsTier::Low);
+        assert_eq!(
+            port_source_tier_from_stem("icons-uhd"),
+            PortSourceGraphicsTier::Uhd
+        );
+        assert_eq!(
+            port_source_tier_from_stem("icons-hd"),
+            PortSourceGraphicsTier::Hd
+        );
+        assert_eq!(
+            port_source_tier_from_stem("Icons"),
+            PortSourceGraphicsTier::Low
+        );
     }
 
     #[test]
     fn force_low_ports_uhd_and_hd_to_low_names() {
         assert_eq!(port_rename_identifier_force_low("icons-uhd"), "icons");
         assert_eq!(port_rename_identifier_force_low("icons-hd"), "icons");
-        assert_eq!(port_rename_identifier_force_low("sheet-uhd-extra"), "sheet-extra");
+        assert_eq!(
+            port_rename_identifier_force_low("sheet-uhd-extra"),
+            "sheet-extra"
+        );
     }
 
     #[test]
@@ -802,7 +847,10 @@ mod port_rename_tests {
     #[test]
     fn dual_scales_none_when_low_port_off() {
         let o = porter_opts(false, false);
-        assert!(porter_medium_and_low_linear_scales(100, 100, PortSourceGraphicsTier::Uhd, &o).is_none());
+        assert!(
+            porter_medium_and_low_linear_scales(100, 100, PortSourceGraphicsTier::Uhd, &o)
+                .is_none()
+        );
     }
 
     #[test]
@@ -826,6 +874,9 @@ mod port_rename_tests {
     #[test]
     fn dual_scales_low_tier_returns_none() {
         let o = porter_opts(true, false);
-        assert!(porter_medium_and_low_linear_scales(100, 100, PortSourceGraphicsTier::Low, &o).is_none());
+        assert!(
+            porter_medium_and_low_linear_scales(100, 100, PortSourceGraphicsTier::Low, &o)
+                .is_none()
+        );
     }
 }

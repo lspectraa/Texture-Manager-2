@@ -1,7 +1,7 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
-use std::collections::BTreeMap;
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -10,9 +10,9 @@ use image::{DynamicImage, ImageFormat, RgbaImage};
 use plist::{Dictionary, Value};
 use serde::{Deserialize, Serialize};
 
+use crate::core::contracts::MergerOptions;
 use crate::core::errors::AppError;
 use crate::core::image_io::save_dynamic_png_fast;
-use crate::core::contracts::MergerOptions;
 use crate::core::merger::merge_plist_from_memory;
 
 #[derive(Debug, Clone, Serialize)]
@@ -141,9 +141,7 @@ pub fn icon_editor_sheet_info(plist_path: &Path) -> Result<IconEditorSheetInfo, 
 fn is_removable_extra_frame_key(name: &str) -> bool {
     let base = name.trim();
     let stem = base.strip_suffix(".png").unwrap_or(base);
-    stem
-        .to_ascii_lowercase()
-        .ends_with("_extra_001")
+    stem.to_ascii_lowercase().ends_with("_extra_001")
 }
 
 pub fn icon_editor_save_plist(
@@ -222,23 +220,24 @@ pub fn icon_editor_save_plist(
                 raw_crop
             }
         };
-        let final_sprite = if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-            let mut resized = RgbaImage::from_pixel(
-                sprite_size.width.max(1),
-                sprite_size.height.max(1),
-                image::Rgba([0, 0, 0, 0]),
-            );
-            let copy_w = sprite.width().min(resized.width());
-            let copy_h = sprite.height().min(resized.height());
-            for y in 0..copy_h {
-                for x in 0..copy_w {
-                    resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+        let final_sprite =
+            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
+                let mut resized = RgbaImage::from_pixel(
+                    sprite_size.width.max(1),
+                    sprite_size.height.max(1),
+                    image::Rgba([0, 0, 0, 0]),
+                );
+                let copy_w = sprite.width().min(resized.width());
+                let copy_h = sprite.height().min(resized.height());
+                for y in 0..copy_h {
+                    for x in 0..copy_w {
+                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+                    }
                 }
-            }
-            resized
-        } else {
-            sprite
-        };
+                resized
+            } else {
+                sprite
+            };
 
         if used_swapped_size {
             corrected_texture_rects.insert(frame_name.clone(), resolved_texture_rect.clone());
@@ -359,7 +358,9 @@ pub fn icon_editor_import_frame(
         atlas.height(),
     )?;
 
-    if blit_sprite.width() != resolved_texture_rect.width || blit_sprite.height() != resolved_texture_rect.height {
+    if blit_sprite.width() != resolved_texture_rect.width
+        || blit_sprite.height() != resolved_texture_rect.height
+    {
         return Err(AppError::InvalidOperation(
             "imported texture dimensions do not match frame textureRect",
         ));
@@ -368,7 +369,11 @@ pub fn icon_editor_import_frame(
     for y in 0..blit_sprite.height() {
         for x in 0..blit_sprite.width() {
             let pixel = blit_sprite.get_pixel(x, y);
-            atlas.put_pixel(resolved_texture_rect.x + x, resolved_texture_rect.y + y, *pixel);
+            atlas.put_pixel(
+                resolved_texture_rect.x + x,
+                resolved_texture_rect.y + y,
+                *pixel,
+            );
         }
     }
 
@@ -417,7 +422,8 @@ pub fn icon_editor_add_frame(
     let old_height = atlas_old.height().max(1);
     let new_width = old_width.max(sprite_width);
     let new_height = old_height.saturating_add(sprite_height);
-    let mut atlas_new = image::RgbaImage::from_pixel(new_width, new_height, image::Rgba([0, 0, 0, 0]));
+    let mut atlas_new =
+        image::RgbaImage::from_pixel(new_width, new_height, image::Rgba([0, 0, 0, 0]));
 
     for y in 0..old_height {
         for x in 0..old_width {
@@ -450,10 +456,7 @@ pub fn icon_editor_add_frame(
         Value::String(
             format!(
                 "{{{{{},{}}},{{{},{} }}}}",
-                0,
-                old_height,
-                sprite_width,
-                sprite_height
+                0, old_height, sprite_width, sprite_height
             )
             .replace(" ", ""),
         ),
@@ -532,23 +535,24 @@ pub fn icon_editor_extract_frames(
             }
         };
 
-        let final_sprite = if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-            let mut resized = RgbaImage::from_pixel(
-                sprite_size.width.max(1),
-                sprite_size.height.max(1),
-                image::Rgba([0, 0, 0, 0]),
-            );
-            let copy_w = sprite.width().min(resized.width());
-            let copy_h = sprite.height().min(resized.height());
-            for y in 0..copy_h {
-                for x in 0..copy_w {
-                    resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+        let final_sprite =
+            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
+                let mut resized = RgbaImage::from_pixel(
+                    sprite_size.width.max(1),
+                    sprite_size.height.max(1),
+                    image::Rgba([0, 0, 0, 0]),
+                );
+                let copy_w = sprite.width().min(resized.width());
+                let copy_h = sprite.height().min(resized.height());
+                for y in 0..copy_h {
+                    for x in 0..copy_w {
+                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+                    }
                 }
-            }
-            resized
-        } else {
-            sprite
-        };
+                resized
+            } else {
+                sprite
+            };
 
         let mut cursor = Cursor::new(Vec::<u8>::new());
         DynamicImage::ImageRgba8(final_sprite)
@@ -572,7 +576,9 @@ pub fn icon_editor_rename_sheet(
         return Err(AppError::InvalidOperation("new sheet name cannot be empty"));
     }
     if new_stem.contains('/') || new_stem.contains('\\') {
-        return Err(AppError::InvalidOperation("new sheet name cannot contain separators"));
+        return Err(AppError::InvalidOperation(
+            "new sheet name cannot contain separators",
+        ));
     }
 
     let old_stem = plist_path
@@ -681,14 +687,18 @@ fn frames_dictionary(root_dict: &Dictionary) -> Result<&Dictionary, AppError> {
     root_dict
         .get("frames")
         .and_then(Value::as_dictionary)
-        .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
+        .ok_or_else(|| {
+            AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
+        })
 }
 
 fn frames_dictionary_mut(root_dict: &mut Dictionary) -> Result<&mut Dictionary, AppError> {
     root_dict
         .get_mut("frames")
         .and_then(Value::as_dictionary_mut)
-        .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
+        .ok_or_else(|| {
+            AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
+        })
 }
 
 fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathBuf, AppError> {
@@ -731,7 +741,11 @@ fn write_plist_atomically(path: &Path, value: &Value) -> Result<(), AppError> {
     Ok(())
 }
 
-fn upsert_metadata_size(root_dict: &mut Dictionary, width: u32, height: u32) -> Result<(), AppError> {
+fn upsert_metadata_size(
+    root_dict: &mut Dictionary,
+    width: u32,
+    height: u32,
+) -> Result<(), AppError> {
     if !root_dict.contains_key("metadata") {
         root_dict.insert("metadata".to_string(), Value::Dictionary(Dictionary::new()));
     }
@@ -923,7 +937,11 @@ fn format_pair_f32(value: &IconEditorPoint) -> String {
 }
 
 fn format_texture_rect(rect: &IconEditorRect) -> String {
-    format!("{{{{{},{}}},{{{},{} }}}}", rect.x, rect.y, rect.width, rect.height).replace(" ", "")
+    format!(
+        "{{{{{},{}}},{{{},{} }}}}",
+        rect.x, rect.y, rect.width, rect.height
+    )
+    .replace(" ", "")
 }
 
 fn transparent_1x1_sprite() -> RgbaImage {
@@ -946,7 +964,9 @@ fn collect_sheet_sprites_for_remerge(
         let frame_dict = frames
             .get(&frame_name)
             .and_then(Value::as_dictionary)
-            .ok_or_else(|| AppError::ParseError(format!("frame `{frame_name}` is not a dictionary")))?;
+            .ok_or_else(|| {
+                AppError::ParseError(format!("frame `{frame_name}` is not a dictionary"))
+            })?;
         let texture_rect = parse_texture_rect(get_required_string(frame_dict, "textureRect")?)?;
         let sprite_size = parse_pair_u32(get_required_string(frame_dict, "spriteSize")?)?;
         let texture_rotated = frame_dict
@@ -980,23 +1000,24 @@ fn collect_sheet_sprites_for_remerge(
             }
         };
 
-        let final_sprite = if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-            let mut resized = RgbaImage::from_pixel(
-                sprite_size.width.max(1),
-                sprite_size.height.max(1),
-                image::Rgba([0, 0, 0, 0]),
-            );
-            let copy_w = sprite.width().min(resized.width());
-            let copy_h = sprite.height().min(resized.height());
-            for y in 0..copy_h {
-                for x in 0..copy_w {
-                    resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+        let final_sprite =
+            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
+                let mut resized = RgbaImage::from_pixel(
+                    sprite_size.width.max(1),
+                    sprite_size.height.max(1),
+                    image::Rgba([0, 0, 0, 0]),
+                );
+                let copy_w = sprite.width().min(resized.width());
+                let copy_h = sprite.height().min(resized.height());
+                for y in 0..copy_h {
+                    for x in 0..copy_w {
+                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+                    }
                 }
-            }
-            resized
-        } else {
-            sprite
-        };
+                resized
+            } else {
+                sprite
+            };
 
         sprites.insert(frame_name, final_sprite);
     }
@@ -1066,12 +1087,24 @@ fn rename_all_string_values(
         }
         Value::Dictionary(dict) => {
             for (_, child) in dict.iter_mut() {
-                rename_all_string_values(child, old_stem, new_stem, old_sprite_stem, new_sprite_stem);
+                rename_all_string_values(
+                    child,
+                    old_stem,
+                    new_stem,
+                    old_sprite_stem,
+                    new_sprite_stem,
+                );
             }
         }
         Value::Array(items) => {
             for child in items.iter_mut() {
-                rename_all_string_values(child, old_stem, new_stem, old_sprite_stem, new_sprite_stem);
+                rename_all_string_values(
+                    child,
+                    old_stem,
+                    new_stem,
+                    old_sprite_stem,
+                    new_sprite_stem,
+                );
             }
         }
         _ => {}

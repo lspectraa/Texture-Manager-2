@@ -30,7 +30,11 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
                 OperationOptions::PorterSplitter(with_porter_phase_one_defaults(existing))
             }
             None => OperationOptions::PorterSplitter(defaults.porter),
-            Some(_) => return Err(AppError::InvalidOperation("porter splitter options mismatch")),
+            Some(_) => {
+                return Err(AppError::InvalidOperation(
+                    "porter splitter options mismatch",
+                ))
+            }
         },
         OperationKind::Merger => match request.options {
             Some(OperationOptions::Merger(existing)) => {
@@ -41,7 +45,9 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
         },
         OperationKind::ConvertToNewVersion => match request.options {
             Some(OperationOptions::ConvertToNewVersion(existing)) => {
-                OperationOptions::ConvertToNewVersion(with_convert_to_new_version_defaults(existing))
+                OperationOptions::ConvertToNewVersion(with_convert_to_new_version_defaults(
+                    existing,
+                ))
             }
             None => OperationOptions::ConvertToNewVersion(defaults.convert_to_new_version),
             Some(_) => {
@@ -51,9 +57,7 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
             }
         },
         OperationKind::Randomizer => match request.options {
-            Some(OperationOptions::Randomizer(existing)) => {
-                OperationOptions::Randomizer(existing)
-            }
+            Some(OperationOptions::Randomizer(existing)) => OperationOptions::Randomizer(existing),
             None => OperationOptions::Randomizer(RandomizerOptions { seed: None }),
             Some(_) => return Err(AppError::InvalidOperation("randomizer options mismatch")),
         },
@@ -114,8 +118,8 @@ fn with_convert_to_new_version_defaults(
 #[cfg(test)]
 mod tests {
     use crate::core::contracts::{
-        ConvertToNewVersionOptions, MergerOptions, OperationKind, OperationOptions, OperationRequest,
-        PorterOptions,
+        ConvertToNewVersionOptions, MergerOptions, OperationKind, OperationOptions,
+        OperationRequest, PorterOptions,
     };
     use crate::core::operations::build_operation_plan;
 
@@ -125,9 +129,11 @@ mod tests {
             kind: OperationKind::Splitter,
             input_dir: "input".to_string(),
             output_dir: "output".to_string(),
-            options: Some(OperationOptions::Splitter(crate::core::contracts::SplitterOptions {
-                sheet_concurrency: 2,
-            })),
+            options: Some(OperationOptions::Splitter(
+                crate::core::contracts::SplitterOptions {
+                    sheet_concurrency: 2,
+                },
+            )),
         };
 
         let plan = build_operation_plan(request).expect("plan should be built");

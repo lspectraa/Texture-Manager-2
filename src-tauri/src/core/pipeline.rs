@@ -87,11 +87,7 @@ mod tests {
 
     #[test]
     fn trim_bounds_finds_opaque_region() {
-        let alpha = vec![
-            vec![0, 0, 0, 0],
-            vec![0, 255, 255, 0],
-            vec![0, 255, 255, 0],
-        ];
+        let alpha = vec![vec![0, 0, 0, 0], vec![0, 255, 255, 0], vec![0, 255, 255, 0]];
         assert_eq!(
             alpha_trim_bounds(&alpha),
             Some(Bounds {

@@ -119,7 +119,7 @@ pub fn phase_defaults() -> PhaseDefaults {
         merger: MergerOptions {
             include_outside_plist_files: false,
             dimensions: None,
-            sheet_concurrency: 5
+            sheet_concurrency: 5,
         },
         convert_to_new_version: ConvertToNewVersionOptions {
             game_version: String::new(),

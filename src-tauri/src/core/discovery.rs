@@ -8,7 +8,7 @@ use crate::core::porter::porter_stem_eligible;
 
 /// True when `path` is under `input_root` and either:
 /// - the first path segment after `input_root` is one of the tool output buckets
-///   (`Split`, `Merged`, `Ported`, `GeneratedGlow`, `ConvertedToLatestVersion`), or
+///   (`Split`, `Merged`, `Ported`, `GeneratedGlow`, `ConvertedToLatestVersion`, `Randomized`), or
 /// - any nested segment is `GeneratedGlow` (for icon glow output inside `icons/GeneratedGlow`).
 pub fn path_is_under_reserved_output_subtree(input_root: &Path, path: &Path) -> bool {
     let Ok(rel) = path.strip_prefix(input_root) else {
@@ -40,6 +40,7 @@ fn reserved_output_dir_name(name: &OsStr) -> bool {
         || s.eq_ignore_ascii_case("Ported")
         || s.eq_ignore_ascii_case("GeneratedGlow")
         || s.eq_ignore_ascii_case("ConvertedToLatestVersion")
+        || s.eq_ignore_ascii_case("Randomized")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -67,7 +68,10 @@ pub fn discover_sheet_pairs(input_dir: &Path) -> Result<Vec<SheetCandidate>, App
             .strip_prefix(input_dir)
             .map_err(|_| AppError::InvalidOperation("failed to compute relative file path"))?
             .to_path_buf();
-        let parent = relative_file.parent().map(Path::to_path_buf).unwrap_or_default();
+        let parent = relative_file
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
         let key = parent.join(stem);
 
         match ext.to_ascii_lowercase().as_str() {

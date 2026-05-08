@@ -3,9 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use image::imageops::{overlay, rotate270};
-use rayon::prelude::*;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use plist::{Dictionary, Value};
+use rayon::prelude::*;
 
 use crate::core::contracts::SplitterOptions;
 use crate::core::discovery::SheetCandidate;
@@ -177,7 +177,11 @@ where
     })
 }
 
-fn build_sprite_output_path(candidate: &SheetCandidate, output_dir: &Path, frame_name: &str) -> std::path::PathBuf {
+fn build_sprite_output_path(
+    candidate: &SheetCandidate,
+    output_dir: &Path,
+    frame_name: &str,
+) -> std::path::PathBuf {
     let normalized_frame = frame_name.replace('\\', "/");
     let relative_parent = candidate
         .relative_dir
@@ -216,8 +220,8 @@ fn extract_frame_image(
 ) -> Result<DynamicImage, AppError> {
     let texture_rect_raw = get_string(frame_dict, "textureRect")?;
     let sprite_size_raw = get_string(frame_dict, "spriteSize")?;
-    let sprite_offset_raw = get_optional_string(frame_dict, "spriteOffset")
-        .map(std::string::ToString::to_string);
+    let sprite_offset_raw =
+        get_optional_string(frame_dict, "spriteOffset").map(std::string::ToString::to_string);
     let texture_rotated = get_bool(frame_dict, "textureRotated").unwrap_or(false);
 
     let rect = parse_texture_rect(texture_rect_raw)?;
@@ -261,7 +265,10 @@ fn extract_frame_image(
 
         let baked_w = baked.width();
         let baked_h = baked.height();
-        frame_dict.insert("spriteOffset".to_string(), Value::String("{0,0}".to_string()));
+        frame_dict.insert(
+            "spriteOffset".to_string(),
+            Value::String("{0,0}".to_string()),
+        );
         frame_dict.insert(
             "spriteSize".to_string(),
             Value::String(format!("{{{},{} }}", baked_w, baked_h).replace(" ", "")),

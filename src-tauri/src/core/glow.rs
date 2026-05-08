@@ -13,9 +13,13 @@ pub fn glow_primary_name_for(glow_frame_name: &str) -> Option<String> {
     if let Some(prefix) = glow_frame_name.strip_suffix("_glow_001.png") {
         return Some(format!("{prefix}_001.png"));
     }
-    glow_frame_name
-        .find("_glow_")
-        .map(|pos| format!("{}{}", &glow_frame_name[..pos], &glow_frame_name[(pos + 5)..]))
+    glow_frame_name.find("_glow_").map(|pos| {
+        format!(
+            "{}{}",
+            &glow_frame_name[..pos],
+            &glow_frame_name[(pos + 5)..]
+        )
+    })
 }
 
 fn disk_offsets(radius: u32) -> Vec<(i32, i32)> {
@@ -70,7 +74,10 @@ pub fn render_icon_glow_from_primary(primary: &RgbaImage, options: &GlowMakerOpt
     let threshold = options.tolerance;
     let pad = radius;
     let out_w = primary.width().saturating_add(pad.saturating_mul(2)).max(1);
-    let out_h = primary.height().saturating_add(pad.saturating_mul(2)).max(1);
+    let out_h = primary
+        .height()
+        .saturating_add(pad.saturating_mul(2))
+        .max(1);
 
     let mut original_mask = vec![0_u8; (out_w as usize).saturating_mul(out_h as usize)];
     let mut dilated_mask = vec![0_u8; (out_w as usize).saturating_mul(out_h as usize)];
@@ -116,7 +123,9 @@ pub fn render_icon_glow_from_primary(primary: &RgbaImage, options: &GlowMakerOpt
     const AA_ALPHA_BOOST: f32 = 1.2;
     let blurred = blur_alpha_box3(&glow_alpha, out_w, out_h);
     for i in 0..glow_alpha.len() {
-        let boosted = ((blurred[i] as f32) * AA_ALPHA_BOOST).round().clamp(0.0, 255.0) as u8;
+        let boosted = ((blurred[i] as f32) * AA_ALPHA_BOOST)
+            .round()
+            .clamp(0.0, 255.0) as u8;
         glow_alpha[i] = glow_alpha[i].max(boosted);
     }
 

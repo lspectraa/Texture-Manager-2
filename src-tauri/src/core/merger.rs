@@ -64,9 +64,9 @@ where
     let mut plist_root = Value::from_file(plist_file)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
 
-    let root_dict = plist_root
-        .as_dictionary_mut()
-        .ok_or(AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let root_dict = plist_root.as_dictionary_mut().ok_or(AppError::ParseError(
+        "plist root must be a dictionary".to_string(),
+    ))?;
     let frames = root_dict
         .get_mut("frames")
         .and_then(Value::as_dictionary_mut)
@@ -123,7 +123,10 @@ where
             );
             frame_dict.insert(
                 "spriteOffset".to_string(),
-                Value::String(format!("{{{:.3},{:.3}}}", adjusted_offset.0, adjusted_offset.1)),
+                Value::String(format!(
+                    "{{{:.3},{:.3}}}",
+                    adjusted_offset.0, adjusted_offset.1
+                )),
             );
         }
 
@@ -173,14 +176,13 @@ where
             if let Some(frame_dict) = frame_value.as_dictionary_mut() {
                 frame_dict.insert(
                     "textureRect".to_string(),
-                    Value::String(format!(
-                        "{{{{{},{}}},{{{},{} }}}}",
-                        draw_x,
-                        draw_y,
-                        placement.width,
-                        placement.height
-                    )
-                    .replace(" ", "")),
+                    Value::String(
+                        format!(
+                            "{{{{{},{}}},{{{},{} }}}}",
+                            draw_x, draw_y, placement.width, placement.height
+                        )
+                        .replace(" ", ""),
+                    ),
                 );
             }
         }
@@ -189,12 +191,12 @@ where
     if !root_dict.contains_key("metadata") {
         root_dict.insert("metadata".to_string(), Value::Dictionary(Dictionary::new()));
     }
-    let metadata = root_dict
-        .get_mut("metadata")
-        .ok_or(AppError::ParseError("failed to create metadata section".to_string()))?;
-    let metadata_dict = metadata
-        .as_dictionary_mut()
-        .ok_or(AppError::ParseError("metadata section must be dictionary".to_string()))?;
+    let metadata = root_dict.get_mut("metadata").ok_or(AppError::ParseError(
+        "failed to create metadata section".to_string(),
+    ))?;
+    let metadata_dict = metadata.as_dictionary_mut().ok_or(AppError::ParseError(
+        "metadata section must be dictionary".to_string(),
+    ))?;
     metadata_dict.insert(
         "size".to_string(),
         Value::String(
@@ -239,9 +241,9 @@ pub fn merge_plist_from_memory<F>(
 where
     F: FnMut(String) + Send,
 {
-    let root_dict = plist_root
-        .as_dictionary_mut()
-        .ok_or(AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let root_dict = plist_root.as_dictionary_mut().ok_or(AppError::ParseError(
+        "plist root must be a dictionary".to_string(),
+    ))?;
     let frames = root_dict
         .get_mut("frames")
         .and_then(Value::as_dictionary_mut)
@@ -287,7 +289,10 @@ where
             );
             frame_dict.insert(
                 "spriteOffset".to_string(),
-                Value::String(format!("{{{:.3},{:.3}}}", adjusted_offset.0, adjusted_offset.1)),
+                Value::String(format!(
+                    "{{{:.3},{:.3}}}",
+                    adjusted_offset.0, adjusted_offset.1
+                )),
             );
         }
 
@@ -337,14 +342,13 @@ where
             if let Some(frame_dict) = frame_value.as_dictionary_mut() {
                 frame_dict.insert(
                     "textureRect".to_string(),
-                    Value::String(format!(
-                        "{{{{{},{}}},{{{},{} }}}}",
-                        draw_x,
-                        draw_y,
-                        placement.width,
-                        placement.height
-                    )
-                    .replace(" ", "")),
+                    Value::String(
+                        format!(
+                            "{{{{{},{}}},{{{},{} }}}}",
+                            draw_x, draw_y, placement.width, placement.height
+                        )
+                        .replace(" ", ""),
+                    ),
                 );
             }
         }
@@ -353,12 +357,12 @@ where
     if !root_dict.contains_key("metadata") {
         root_dict.insert("metadata".to_string(), Value::Dictionary(Dictionary::new()));
     }
-    let metadata = root_dict
-        .get_mut("metadata")
-        .ok_or(AppError::ParseError("failed to create metadata section".to_string()))?;
-    let metadata_dict = metadata
-        .as_dictionary_mut()
-        .ok_or(AppError::ParseError("metadata section must be dictionary".to_string()))?;
+    let metadata = root_dict.get_mut("metadata").ok_or(AppError::ParseError(
+        "failed to create metadata section".to_string(),
+    ))?;
+    let metadata_dict = metadata.as_dictionary_mut().ok_or(AppError::ParseError(
+        "metadata section must be dictionary".to_string(),
+    ))?;
     metadata_dict.insert(
         "size".to_string(),
         Value::String(
@@ -463,12 +467,8 @@ fn pack_sprites_maxrects(placements: &mut [SpritePlacement], target_width: u32) 
     let mut max_bottom = 1_u32;
 
     for placement in placements.iter_mut() {
-        let pw = placement
-            .width
-            .saturating_add(PACK_SPRITE_INTER_GAP_PX);
-        let ph = placement
-            .height
-            .saturating_add(PACK_SPRITE_INTER_GAP_PX);
+        let pw = placement.width.saturating_add(PACK_SPRITE_INTER_GAP_PX);
+        let ph = placement.height.saturating_add(PACK_SPRITE_INTER_GAP_PX);
 
         let mut expansions = 0_u32;
         let (px, py) = loop {
@@ -590,10 +590,7 @@ fn maxrects_split_free_node(free: FreeRect, used: FreeRect, out: &mut Vec<FreeRe
         if used.y.saturating_add(used.h) < free.y.saturating_add(free.h) {
             let mut new_node = free;
             new_node.y = used.y.saturating_add(used.h);
-            new_node.h = free
-                .y
-                .saturating_add(free.h)
-                .saturating_sub(new_node.y);
+            new_node.h = free.y.saturating_add(free.h).saturating_sub(new_node.y);
             if new_node.h > 0 {
                 out.push(new_node);
             }
@@ -611,10 +608,7 @@ fn maxrects_split_free_node(free: FreeRect, used: FreeRect, out: &mut Vec<FreeRe
         if used.x.saturating_add(used.w) < free.x.saturating_add(free.w) {
             let mut new_node = free;
             new_node.x = used.x.saturating_add(used.w);
-            new_node.w = free
-                .x
-                .saturating_add(free.w)
-                .saturating_sub(new_node.x);
+            new_node.w = free.x.saturating_add(free.w).saturating_sub(new_node.x);
             if new_node.w > 0 {
                 out.push(new_node);
             }
@@ -691,7 +685,8 @@ fn trim_transparent_edges(image: &RgbaImage) -> TrimResult {
 
     let trimmed_width = max_x.saturating_sub(min_x) + 1;
     let trimmed_height = max_y.saturating_sub(min_y) + 1;
-    let cropped = image::imageops::crop_imm(image, min_x, min_y, trimmed_width, trimmed_height).to_image();
+    let cropped =
+        image::imageops::crop_imm(image, min_x, min_y, trimmed_width, trimmed_height).to_image();
     TrimResult {
         image: cropped,
         left: min_x,
@@ -813,12 +808,10 @@ fn recursive_find_file_named(root: &Path, wanted_file_name: &str) -> Option<Path
 }
 
 fn path_from_slashes(value: &str) -> PathBuf {
-    value
-        .split('/')
-        .fold(PathBuf::new(), |mut acc, part| {
-            if !part.is_empty() {
-                acc.push(part);
-            }
-            acc
-        })
+    value.split('/').fold(PathBuf::new(), |mut acc, part| {
+        if !part.is_empty() {
+            acc.push(part);
+        }
+        acc
+    })
 }
