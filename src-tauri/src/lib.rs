@@ -9,6 +9,10 @@ use tauri::{AppHandle, Emitter};
 
 use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
 use crate::core::executor::execute_operation_plan;
+use crate::core::geode_buttons::{
+    geode_buttons_target_index, geode_buttons_template_preview_data_url,
+    resolve_geode_buttons_default_input_dir, resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
+};
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
     icon_editor_extract_frames as icon_editor_extract_frames_core,
@@ -205,6 +209,26 @@ fn icon_editor_save_png_data_url(output_path: String, png_data_url: String) -> R
     std::fs::write(&output_path, bytes).map_err(|err| format!("failed to write png: {err}"))
 }
 
+#[tauri::command]
+fn geode_buttons_target_index_cmd(plist_path: String) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
+    geode_buttons_target_index(std::path::Path::new(&plist_path)).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn geode_buttons_autoselect_plist_cmd(input_dir: String) -> Result<Option<String>, String> {
+    resolve_geode_buttons_plist(std::path::Path::new(&input_dir)).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn geode_buttons_default_input_dir_cmd() -> Option<String> {
+    resolve_geode_buttons_default_input_dir()
+}
+
+#[tauri::command]
+fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<String, String> {
+    geode_buttons_template_preview_data_url(path.as_str()).map_err(|err| err.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -217,6 +241,10 @@ pub fn run() {
             run_operation,
             cancel_operation,
             phase1_primitives_smoke_report,
+            geode_buttons_target_index_cmd,
+            geode_buttons_autoselect_plist_cmd,
+            geode_buttons_default_input_dir_cmd,
+            geode_buttons_template_preview_data_url_cmd,
             icon_editor_sheet_info,
             icon_editor_save_plist,
             icon_editor_import_frame,

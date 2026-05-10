@@ -10,8 +10,8 @@ use image::imageops::{self, FilterType};
 use rayon::prelude::*;
 
 use crate::core::contracts::{
-    phase_defaults, MergerOptions, OperationKind, OperationOptions, OperationPlan, PorterOptions,
-    SplitterOptions,
+    phase_defaults, GeodeButtonsOptions, MergerOptions, OperationKind, OperationOptions,
+    OperationPlan, PorterOptions, SplitterOptions,
 };
 use crate::core::convert_to_new_version::execute_convert_to_new_version as run_convert_to_new_version;
 use crate::core::discovery::{
@@ -32,6 +32,7 @@ use crate::core::porter::{
 use crate::core::randomizer::execute_randomizer;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
 use crate::core::splitter::{split_sheet_candidate, split_sheet_candidate_memory};
+use crate::core::geode_buttons::run_geode_buttons;
 
 fn progress_total_as_u32(total: usize) -> u32 {
     total.max(1).min(u32::MAX as usize) as u32
@@ -251,14 +252,91 @@ where
             &on_progress,
             cancel,
         )?,
+        (OperationKind::GeodeButtons, OperationOptions::GeodeButtons(options)) => {
+            execute_geode_buttons(
+                plan,
+                input_dir,
+                output_dir,
+                started_at,
+                options,
+                &on_progress,
+                cancel,
+            )?
+        }
         _ => {
             return Err(AppError::InvalidOperation(
-                "executor currently supports splitter, porter, merger, convert to new version, glow maker, and randomizer",
+                "executor currently supports splitter, porter, merger, convert to new version, glow maker, randomizer, and geode buttons",
             ));
         }
     };
 
     Ok(report)
+}
+
+fn execute_geode_buttons<F>(
+    _plan: &OperationPlan,
+    input_dir: &Path,
+    output_dir: &Path,
+    started_at: Instant,
+    options: &GeodeButtonsOptions,
+    on_progress: &Arc<Mutex<F>>,
+    cancel: Arc<AtomicBool>,
+) -> Result<OperationReport, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
+    check_cancel(cancel.as_ref())?;
+
+    let mut candidates = discover_sheet_pairs(input_dir)?;
+    let stem_filter = options.sheet_stem.trim().to_ascii_lowercase();
+    if !stem_filter.is_empty() {
+        candidates.retain(|c| c.stem.to_ascii_lowercase() == stem_filter);
+    }
+
+    if candidates.is_empty() {
+        return Ok(OperationReport {
+            operation: "geodeButtons".to_string(),
+            files_seen: 0,
+            files_processed: 0,
+            output_dir: output_dir.to_string_lossy().to_string(),
+            elapsed_ms: started_at.elapsed().as_millis(),
+            issues: vec![ReportIssue {
+                level: ReportLevel::Warning,
+                message: "No matching sheets found for Geode Buttons.".to_string(),
+                file: None,
+            }],
+        });
+    }
+
+    let mut combined_issues: Vec<ReportIssue> = Vec::new();
+    let mut processed_total = 0usize;
+    let mut out_label = output_dir.to_string_lossy().to_string();
+
+    // Sequential: most users run this for a single BlankSheet.
+    for candidate in candidates {
+        check_cancel(cancel.as_ref())?;
+        let mut progress = on_progress.lock().unwrap();
+        let report = run_geode_buttons(
+            "geodeButtons",
+            &candidate,
+            output_dir,
+            options,
+            &mut *progress,
+            Arc::clone(&cancel),
+        )?;
+        processed_total = processed_total.saturating_add(report.files_processed);
+        out_label = report.output_dir.clone();
+        combined_issues.extend(report.issues);
+    }
+
+    Ok(OperationReport {
+        operation: "geodeButtons".to_string(),
+        files_seen: 1,
+        files_processed: processed_total,
+        output_dir: out_label,
+        elapsed_ms: started_at.elapsed().as_millis(),
+        issues: combined_issues,
+    })
 }
 
 fn execute_splitter<F>(

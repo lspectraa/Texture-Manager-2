@@ -1,0 +1,65 @@
+import { invoke } from "@tauri-apps/api/core";
+import { isTauriRuntime } from "./tauriOperations";
+
+export type GeodeButtonsTargetSize = {
+  width: number;
+  height: number;
+};
+
+export type GeodeButtonsTargetFrame = {
+  name: string;
+  spriteSize: GeodeButtonsTargetSize;
+};
+
+export type GeodeButtonsTargetGroup = {
+  id: string;
+  label: string;
+  frames: GeodeButtonsTargetFrame[];
+  previewPngDataUrl: string | null;
+};
+
+export const getGeodeButtonsTargetIndex = async (
+  plistPath: string,
+): Promise<GeodeButtonsTargetGroup[]> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Geode Buttons target index requires Tauri runtime.");
+  }
+  return invoke<GeodeButtonsTargetGroup[]>("geode_buttons_target_index_cmd", {
+    plistPath,
+  });
+};
+
+export const autoSelectGeodeButtonsPlist = async (
+  inputDir: string,
+): Promise<string | null> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Geode Buttons plist autoselect requires Tauri runtime.");
+  }
+  const result = await invoke<string | null>("geode_buttons_autoselect_plist_cmd", {
+    inputDir,
+  });
+  return result ?? null;
+};
+
+export const getGeodeButtonsDefaultInputDir = async (): Promise<string | null> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Geode Buttons default input requires Tauri runtime.");
+  }
+  const result = await invoke<string | null>("geode_buttons_default_input_dir_cmd");
+  return result ?? null;
+};
+
+/** Load a template file as a PNG data URL (same path handling as export). Use when `convertFileSrc` is blocked. */
+export const getGeodeButtonsTemplatePreviewDataUrl = async (
+  path: string,
+): Promise<string | null> => {
+  if (!isTauriRuntime() || !path.trim()) {
+    return null;
+  }
+  try {
+    return await invoke<string>("geode_buttons_template_preview_data_url_cmd", { path });
+  } catch {
+    return null;
+  }
+};
+

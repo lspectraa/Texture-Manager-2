@@ -5,6 +5,7 @@ pub mod errors;
 pub mod executor;
 pub mod glow;
 pub mod glow_maker;
+pub mod geode_buttons;
 pub mod icon_editor;
 pub mod image_io;
 pub mod merger;

@@ -9,6 +9,7 @@ pub enum OperationKind {
     ConvertToNewVersion,
     Randomizer,
     GlowMaker,
+    GeodeButtons,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -68,7 +69,66 @@ pub struct GlowMakerOptions {
     pub dimensions: Option<DimensionOverride>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct HsvDelta {
+    /// Hue delta in degrees (wraps 0..360).
+    pub hue_deg: f32,
+    /// Saturation delta, additive (-1..1 clamped after apply).
+    pub sat_delta: f32,
+    /// Value delta, additive (-1..1 clamped after apply).
+    pub val_delta: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+#[serde(rename_all = "camelCase")]
+pub enum GeodeButtonsVariant {
+    Primary,
+    Secondary,
+    DarkAqua,
+    DarkPurple,
+    Gray,
+    Error,
+    Info,
+    Pink,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GeodeButtonsVariantRule {
+    pub variant: GeodeButtonsVariant,
+    pub hsv: HsvDelta,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct GeodeButtonsTemplates {
+    /// One template image per family id (e.g. `circleBig`, `editorBase`), except `tabs`.
+    pub family_templates: std::collections::BTreeMap<String, String>,
+    /// Optional per-tab-state templates (frame keys). If missing, falls back to `family_templates["tabs"]`.
+    pub tab_selected: Option<String>,
+    pub tab_unselected: Option<String>,
+    pub tab_unselected_dark: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GeodeButtonsOptions {
+    /// If non-empty, only sheets whose stem matches (case-insensitive) are processed.
+    /// Default will target `BlankSheet-uhd`.
+    pub sheet_stem: String,
+    pub templates: GeodeButtonsTemplates,
+    /// Global variant HSV rules (applies unless overridden per family).
+    pub variant_rules: Vec<GeodeButtonsVariantRule>,
+    /// Optional per-family overrides: family id -> variant -> hsv delta.
+    pub family_variant_rules: Option<
+        std::collections::BTreeMap<String, std::collections::BTreeMap<GeodeButtonsVariant, HsvDelta>>,
+    >,
+    /// Max concurrent sheets (1–64). Typically 1 here.
+    pub sheet_concurrency: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum OperationOptions {
     Splitter(SplitterOptions),
@@ -77,9 +137,10 @@ pub enum OperationOptions {
     ConvertToNewVersion(ConvertToNewVersionOptions),
     Randomizer(RandomizerOptions),
     GlowMaker(GlowMakerOptions),
+    GeodeButtons(GeodeButtonsOptions),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationRequest {
     pub kind: OperationKind,
@@ -88,7 +149,7 @@ pub struct OperationRequest {
     pub options: Option<OperationOptions>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationPlan {
     pub kind: OperationKind,

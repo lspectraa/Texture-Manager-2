@@ -1,7 +1,7 @@
 use crate::core::contracts::{
-    phase_defaults, ConvertToNewVersionOptions, GlowMakerOptions, MergerOptions, OperationKind,
-    OperationOptions, OperationPlan, OperationRequest, PorterOptions, RandomizerOptions,
-    SplitterOptions,
+    phase_defaults, ConvertToNewVersionOptions, GeodeButtonsOptions, GlowMakerOptions, MergerOptions,
+    OperationKind, OperationOptions, OperationPlan, OperationRequest, PorterOptions,
+    RandomizerOptions, SplitterOptions,
 };
 use crate::core::errors::AppError;
 
@@ -72,6 +72,28 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
             }),
             Some(_) => return Err(AppError::InvalidOperation("glow maker options mismatch")),
         },
+        OperationKind::GeodeButtons => match request.options {
+            Some(OperationOptions::GeodeButtons(existing)) => {
+                OperationOptions::GeodeButtons(with_geode_buttons_defaults(existing))
+            }
+            None => OperationOptions::GeodeButtons(GeodeButtonsOptions {
+                sheet_stem: "BlankSheet-uhd".to_string(),
+                templates: crate::core::contracts::GeodeButtonsTemplates {
+                    family_templates: std::collections::BTreeMap::new(),
+                    tab_selected: None,
+                    tab_unselected: None,
+                    tab_unselected_dark: None,
+                },
+                variant_rules: Vec::new(),
+                family_variant_rules: None,
+                sheet_concurrency: 1,
+            }),
+            Some(_) => {
+                return Err(AppError::InvalidOperation(
+                    "geode buttons options mismatch",
+                ))
+            }
+        },
     };
 
     Ok(OperationPlan {
@@ -95,6 +117,16 @@ fn with_glow_phase_three_defaults(existing: GlowMakerOptions) -> GlowMakerOption
         thickness: existing.thickness.clamp(1, 128),
         tolerance: existing.tolerance,
         dimensions: existing.dimensions,
+    }
+}
+
+fn with_geode_buttons_defaults(existing: GeodeButtonsOptions) -> GeodeButtonsOptions {
+    GeodeButtonsOptions {
+        sheet_stem: existing.sheet_stem.trim().to_string(),
+        templates: existing.templates,
+        variant_rules: existing.variant_rules,
+        family_variant_rules: existing.family_variant_rules,
+        sheet_concurrency: existing.sheet_concurrency.clamp(1, 64),
     }
 }
 

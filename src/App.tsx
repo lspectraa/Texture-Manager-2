@@ -21,6 +21,7 @@ import {
   OperationReport,
   OperationRequest,
 } from "./domain/operations";
+import type { GeodeButtonsOptions } from "./domain/operations";
 import {
   getPhaseDefaults,
   isTauriRuntime,
@@ -34,6 +35,7 @@ import { SplitterToolPanel } from "./components/tools/SplitterToolPanel";
 import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVersionToolPanel";
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
 import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
+import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
 import convertVersionMap from "./config/convertVersionMap.json";
 
 type PrimaryTool =
@@ -44,7 +46,8 @@ type PrimaryTool =
   | "merger"
   | "randomizer"
   | "convertToNewVersion"
-  | "glowMaker";
+  | "glowMaker"
+  | "geodeButtons";
 
 type AppTool = Exclude<PrimaryTool, "home">;
 
@@ -60,6 +63,7 @@ const TOOL_ENTRIES: ReadonlyArray<{
   { id: "randomizer", label: "Randomizer", icon: Shuffle },
   { id: "glowMaker", label: "Glow Maker", icon: WandSparkles },
   { id: "convertToNewVersion", label: "Convert to New Version", icon: RefreshCw },
+  { id: "geodeButtons", label: "Create Geode Buttons", icon: Sparkles },
 ];
 
 type Rgb = [number, number, number];
@@ -150,6 +154,30 @@ function App() {
   const [glowOutputDir, setGlowOutputDir] = useState("");
   const [glowThickness, setGlowThickness] = useState(3);
   const [glowTolerance, setGlowTolerance] = useState(32);
+
+  const [geodeButtonsInputDir, setGeodeButtonsInputDir] = useState("");
+  const [geodeButtonsOutputDir, setGeodeButtonsOutputDir] = useState("");
+  const [geodeButtonsOptions, setGeodeButtonsOptions] = useState<GeodeButtonsOptions>(() => ({
+    sheetStem: "BlankSheet-uhd",
+    templates: {
+      familyTemplates: {} as Record<string, string>,
+      tabSelected: null as string | null,
+      tabUnselected: null as string | null,
+      tabUnselectedDark: null as string | null,
+    },
+    variantRules: [
+      { variant: "primary", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "secondary", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "darkAqua", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "darkPurple", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "gray", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "error", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "info", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+      { variant: "pink", hsv: { hueDeg: 0, satDelta: 0, valDelta: 0 } },
+    ],
+    familyVariantRules: null,
+    sheetConcurrency: 1,
+  }));
 
   useEffect(() => {
     const loadDefaults = async (): Promise<void> => {
@@ -307,6 +335,22 @@ function App() {
       };
     }
 
+    if (selectedTool === "geodeButtons") {
+      if (!geodeButtonsInputDir || !geodeButtonsOutputDir) {
+        setRunError("Create Geode Buttons requires both input and output directories.");
+        return;
+      }
+      request = {
+        kind: "geodeButtons",
+        inputDir: geodeButtonsInputDir,
+        outputDir: geodeButtonsOutputDir,
+        options: {
+          type: "geodeButtons",
+          ...geodeButtonsOptions,
+        },
+      };
+    }
+
     if (!request) {
       setRunError("No operation request was built.");
       return;
@@ -430,7 +474,9 @@ function App() {
         : "idle";
   const isIconEditor = selectedTool === "iconEditor";
   const isHome = selectedTool === "home";
-  const showOperationAndReport = !isIconEditor && !isHome;
+  const isGeodeButtons = selectedTool === "geodeButtons";
+  const showRunAction = !isIconEditor && !isHome;
+  const showOperationAndReport = !isIconEditor && !isHome && !isGeodeButtons;
 
   const toolPanel = (() => {
     switch (selectedTool) {
@@ -543,6 +589,18 @@ function App() {
             onInputDirChange={setRandomizerInputDir}
             onOutputDirChange={setRandomizerOutputDir}
             onSeedChange={setRandomizerSeed}
+            pickFolder={pickFolder}
+          />
+        );
+      case "geodeButtons":
+        return (
+          <GeodeButtonsToolPanel
+            inputDir={geodeButtonsInputDir}
+            outputDir={geodeButtonsOutputDir}
+            options={geodeButtonsOptions}
+            onInputDirChange={setGeodeButtonsInputDir}
+            onOutputDirChange={setGeodeButtonsOutputDir}
+            onOptionsChange={setGeodeButtonsOptions}
             pickFolder={pickFolder}
           />
         );
@@ -662,7 +720,7 @@ function App() {
 
       <section
         className={`tm-layout ${
-          isIconEditor || isHome ? "tm-layout-icon-editor" : ""
+          isIconEditor || isHome || isGeodeButtons ? "tm-layout-icon-editor" : ""
         }`}
       >
         <aside className="tm-sidebar tm-glass-card">
@@ -700,15 +758,12 @@ function App() {
               </Fragment>
             );
           })}
-          <button className="menu-btn disabled" type="button" disabled>
-            Create Geode Buttons (later)
-          </button>
         </aside>
 
         <section className={`tm-panel tm-glass-card${isIconEditor ? " tm-panel-icon-editor" : ""}`}>
           {toolPanel}
 
-          {showOperationAndReport ? (
+          {showRunAction ? (
             <div className="actions">
               <button
                 type="button"
