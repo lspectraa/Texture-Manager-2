@@ -16,6 +16,7 @@ import {
   Download,
   Search,
   PencilLine,
+  Copy,
   Upload,
   ZoomIn,
   ZoomOut,
@@ -35,6 +36,7 @@ import {
   IconEditorFrameInfo,
   IconEditorPoint,
   IconEditorSheetInfo,
+  copyIconEditorSheet,
   renameIconEditorSheet,
   saveIconEditorPlist,
 } from "../../services/tauriIconEditor";
@@ -1209,6 +1211,54 @@ export function IconEditorToolPanel() {
     }
   }, [loadSheet, renameValue, sheetInfo]);
 
+  const currentSheetStem = useMemo(
+    () => sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") ?? "",
+    [sheetInfo?.plistPath],
+  );
+  const canSaveCopy =
+    Boolean(sheetInfo) && renameValue.trim() !== "" && renameValue.trim() !== currentSheetStem;
+
+  const saveCopy = useCallback(async () => {
+    if (!sheetInfo || !canSaveCopy) {
+      return;
+    }
+    setIsBusy(true);
+    setToolbarError(null);
+    setToolbarErrorDetail(null);
+    setIsErrorDetailOpen(false);
+    try {
+      const updates = Object.entries(offsetEdits).map(([name, spriteOffset]) => ({
+        name,
+        spriteOffset,
+      }));
+      const removedFrameNames: string[] = [];
+      if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
+        removedFrameNames.push(extraMappingBaseline.trim());
+      }
+      const copied = await copyIconEditorSheet(
+        sheetInfo.plistPath,
+        renameValue.trim(),
+        updates,
+        removedFrameNames,
+      );
+      await loadSheet(copied.plistPath, { omitBusy: true });
+    } catch (error) {
+      const parsed = toIconEditorErrorInfo(error, "Failed to save sheet copy.");
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
+    } finally {
+      setIsBusy(false);
+    }
+  }, [
+    canSaveCopy,
+    extraMappingBaseline,
+    loadSheet,
+    offsetEdits,
+    renameValue,
+    roleMap.extra,
+    sheetInfo,
+  ]);
+
   const importFrame = useCallback(
     async (role: IconLayerRole) => {
       if (!sheetInfo) {
@@ -2042,6 +2092,15 @@ export function IconEditorToolPanel() {
               <button type="button" onClick={() => renameSheet().catch(() => {})} disabled={!sheetInfo || isBusy}>
                 <PencilLine size={14} />
                 Rename
+              </button>
+              <button
+                type="button"
+                onClick={() => saveCopy().catch(() => {})}
+                disabled={!canSaveCopy || isBusy}
+                title="Save a copy with the new name and current settings"
+              >
+                <Copy size={14} />
+                Save Copy
               </button>
             </div>
           </label>

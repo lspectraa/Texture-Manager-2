@@ -99,3 +99,16 @@ export const renameIconEditorSheet = async (
   newStem: string,
 ): Promise<IconEditorRenameResult> =>
   invoke<IconEditorRenameResult>("icon_editor_rename_sheet", { plistPath, newStem });
+
+export const copyIconEditorSheet = async (
+  plistPath: string,
+  newStem: string,
+  updates: IconEditorFrameUpdate[],
+  removedFrameNames?: string[],
+): Promise<IconEditorRenameResult> =>
+  invoke<IconEditorRenameResult>("icon_editor_copy_sheet", {
+    plistPath,
+    newStem,
+    updates,
+    removedFrameNames: removedFrameNames ?? [],
+  });
