@@ -14,6 +14,7 @@ use crate::core::contracts::{
     OperationPlan, PorterOptions, SplitterOptions,
 };
 use crate::core::convert_to_new_version::execute_convert_to_new_version as run_convert_to_new_version;
+use crate::core::game_files::GameFilesLayout;
 use crate::core::discovery::{
     discover_merge_source_dirs, discover_sheet_pairs, discover_standalone_fnts,
     discover_standalone_pngs, SheetCandidate,
@@ -169,6 +170,7 @@ where
 
 pub fn execute_operation_plan<F>(
     plan: &OperationPlan,
+    game_files: &GameFilesLayout,
     on_progress: F,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -230,6 +232,7 @@ where
                 output_dir,
                 started_at,
                 options,
+                game_files,
                 &on_progress,
                 cancel,
             )?

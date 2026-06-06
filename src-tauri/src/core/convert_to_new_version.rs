@@ -14,6 +14,10 @@ use crate::core::contracts::{
 };
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
+use crate::core::game_files::{
+    build_plist_index_under, ensure_current_library_split_cached, resolve_cached_split_sprite,
+    GameFilesLayout,
+};
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::plist::count_frames_in_plist;
 use crate::core::porter::flattened_bundle_output_dir;
@@ -141,71 +145,6 @@ where
     Ok(taken)
 }
 
-fn resolve_latest_placeholder_split_dir() -> Option<PathBuf> {
-    let mut candidates: Vec<PathBuf> = Vec::new();
-    if let Ok(env_override) = std::env::var("TM_LATEST_SPLIT_DIR") {
-        if !env_override.trim().is_empty() {
-            candidates.push(PathBuf::from(env_override));
-        }
-    }
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    candidates.push(manifest_dir.join("..").join("..").join("Default"));
-    candidates.push(
-        manifest_dir
-            .join("..")
-            .join("..")
-            .join("Default")
-            .join("Split"),
-    );
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("Default"));
-        candidates.push(cwd.join("..").join("Default"));
-        candidates.push(cwd.join("..").join("..").join("Default"));
-        candidates.push(cwd.join("Default").join("Split"));
-        candidates.push(cwd.join("..").join("Default").join("Split"));
-        candidates.push(cwd.join("..").join("..").join("Default").join("Split"));
-    }
-    candidates
-        .into_iter()
-        .find(|candidate| candidate.exists() && candidate.is_dir())
-}
-
-fn collect_plists_recursive(root: &Path) -> Result<Vec<PathBuf>, AppError> {
-    let mut files: Vec<PathBuf> = Vec::new();
-    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir)? {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-                continue;
-            }
-            let is_plist = path
-                .extension()
-                .and_then(|ext| ext.to_str())
-                .map(|ext| ext.eq_ignore_ascii_case("plist"))
-                .unwrap_or(false);
-            if is_plist {
-                files.push(path);
-            }
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn build_latest_plist_index(latest_split_dir: &Path) -> Result<HashMap<String, PathBuf>, AppError> {
-    let mut index: HashMap<String, PathBuf> = HashMap::new();
-    for plist_path in collect_plists_recursive(latest_split_dir)? {
-        let Some(stem) = plist_path.file_stem().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        index.insert(stem.to_ascii_lowercase(), plist_path);
-    }
-    Ok(index)
-}
-
 fn frames_dictionary<'a>(plist_root: &'a Value) -> Result<&'a Dictionary, AppError> {
     plist_root
         .as_dictionary()
@@ -244,91 +183,17 @@ pub(crate) fn missing_frame_keys(
     missing
 }
 
-fn path_from_slashes(value: &str) -> PathBuf {
-    value.split('/').fold(PathBuf::new(), |mut acc, part| {
-        if !part.is_empty() {
-            acc.push(part);
-        }
-        acc
-    })
-}
-
-fn recursive_find_file_named(root: &Path, wanted_file_name: &str) -> Option<PathBuf> {
-    let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
-    while let Some(dir) = stack.pop() {
-        let entries = fs::read_dir(&dir).ok()?;
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-                continue;
-            }
-            let matches = path
-                .file_name()
-                .and_then(|v| v.to_str())
-                .map(|v| v.eq_ignore_ascii_case(wanted_file_name))
-                .unwrap_or(false);
-            if matches {
-                return Some(path);
-            }
-        }
-    }
-    None
-}
-
-fn resolve_latest_sheet_png_path(latest_plist_path: &Path) -> Result<PathBuf, AppError> {
-    let parent = latest_plist_path.parent().ok_or(AppError::InvalidPath(
-        "latest plist has no parent directory",
-    ))?;
-    let direct = latest_plist_path.with_extension("png");
-    if direct.exists() {
-        return Ok(direct);
-    }
-
-    let root = Value::from_file(latest_plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse latest plist: {err}")))?;
-    let root_dict = root.as_dictionary().ok_or_else(|| {
-        AppError::ParseError("latest plist root must be a dictionary".to_string())
-    })?;
-    if let Some(metadata) = root_dict.get("metadata").and_then(Value::as_dictionary) {
-        for key in ["realTextureFileName", "textureFileName"] {
-            let Some(file_name) = metadata.get(key).and_then(Value::as_string) else {
-                continue;
-            };
-            let candidate = parent.join(file_name);
-            if candidate.exists() {
-                return Ok(candidate);
-            }
-        }
-    }
-
-    Ok(direct)
-}
-
 fn load_latest_sheet_sprites(
-    latest_plist_path: &Path,
+    source_pair: &SheetCandidate,
     splitter_opts: &SplitterOptions,
 ) -> Result<HashMap<String, RgbaImage>, AppError> {
-    let stem = latest_plist_path
-        .file_stem()
-        .and_then(|v| v.to_str())
-        .ok_or(AppError::InvalidPath(
-            "latest placeholder plist has invalid file stem",
-        ))?
-        .to_string();
-    let png_path = resolve_latest_sheet_png_path(latest_plist_path)?;
-    let candidate = SheetCandidate {
-        stem,
-        relative_dir: PathBuf::new(),
-        plist_path: latest_plist_path.to_path_buf(),
-        png_path,
-    };
-    let split = split_sheet_candidate_memory(&candidate, splitter_opts, || {})?;
+    let split = split_sheet_candidate_memory(source_pair, splitter_opts, || {})?;
     Ok(split.sprites.into_iter().collect())
 }
 
 fn latest_sheet_sprite_from_cache(
     latest_plist_path: &Path,
+    source_pair: Option<&SheetCandidate>,
     frame_name: &str,
     splitter_opts: &SplitterOptions,
     latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
@@ -341,75 +206,14 @@ fn latest_sheet_sprite_from_cache(
         }
     }
 
-    let loaded = load_latest_sheet_sprites(latest_plist_path, splitter_opts)?;
+    let Some(source_pair) = source_pair else {
+        return Ok(None);
+    };
+    let loaded = load_latest_sheet_sprites(source_pair, splitter_opts)?;
     let sprite = loaded.get(frame_name).cloned();
     let mut cache_guard = latest_sheet_sprite_cache.lock().unwrap();
     cache_guard.insert(cache_key, loaded);
     Ok(sprite)
-}
-
-fn resolve_split_sprite_path(source_dir: &Path, frame_name: &str) -> Option<PathBuf> {
-    let normalized = frame_name
-        .replace('\\', "/")
-        .trim_start_matches("./")
-        .trim_start_matches('/')
-        .to_string();
-
-    let direct = source_dir.join(path_from_slashes(&normalized));
-    if direct.exists() {
-        return Some(direct);
-    }
-
-    let mut prefixes: Vec<String> = Vec::new();
-    if let Some(dir_name) = source_dir.file_name().and_then(|v| v.to_str()) {
-        if !dir_name.is_empty() {
-            prefixes.push(format!("{dir_name}/"));
-        }
-    }
-    if let Some(parent_name) = source_dir
-        .parent()
-        .and_then(|value| value.file_name())
-        .and_then(|value| value.to_str())
-    {
-        if !parent_name.is_empty() {
-            prefixes.push(format!("{parent_name}/"));
-        }
-    }
-    prefixes.push("icons/".to_string());
-    for prefix in prefixes {
-        if let Some(trimmed) = normalized.strip_prefix(&prefix) {
-            let trimmed_path = source_dir.join(path_from_slashes(trimmed));
-            if trimmed_path.exists() {
-                return Some(trimmed_path);
-            }
-        }
-    }
-
-    if let Some(file_name_only) = normalized.rsplit('/').next() {
-        let direct_filename = source_dir.join(file_name_only);
-        if direct_filename.exists() {
-            return Some(direct_filename);
-        }
-        if let Some(found) = recursive_find_file_named(source_dir, file_name_only) {
-            return Some(found);
-        }
-    }
-
-    let parts: Vec<&str> = normalized
-        .split('/')
-        .filter(|part| !part.is_empty())
-        .collect();
-    if parts.len() > 1 {
-        for start in 1..parts.len() {
-            let remainder = parts[start..].join("/");
-            let candidate = source_dir.join(path_from_slashes(&remainder));
-            if candidate.exists() {
-                return Some(candidate);
-            }
-        }
-    }
-
-    None
 }
 
 pub(crate) fn sheet_is_under_icons(relative_dir: &Path) -> bool {
@@ -554,6 +358,7 @@ fn resolve_glow_frames_for_icon(
     sheet02_split: &SplitMemoryResult,
     glow_sheet_split: Option<&SplitMemoryResult>,
     latest_plist_path: Option<&Path>,
+    latest_source_pair: Option<&SheetCandidate>,
     splitter_opts: &SplitterOptions,
     latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
 ) -> Result<BTreeMap<String, (Value, RgbaImage)>, AppError> {
@@ -575,6 +380,7 @@ fn resolve_glow_frames_for_icon(
             }
             let sprite = match latest_sheet_sprite_from_cache(
                 latest_path,
+                latest_source_pair,
                 frame_name,
                 splitter_opts,
                 latest_sheet_sprite_cache,
@@ -640,6 +446,7 @@ fn convert_legacy_icon_gamesheet<F>(
     splitter_opts: &SplitterOptions,
     merger_opts: &MergerOptions,
     latest_plists_by_stem: &HashMap<String, PathBuf>,
+    current_pairs_by_stem: &HashMap<String, SheetCandidate>,
     latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
     converted_dir: &Path,
     total_units: usize,
@@ -771,11 +578,14 @@ where
     for (icon_id, icon_frame_names) in &groups {
         let output_stem = format!("{icon_id}{quality_suffix}");
         let latest_plist_path = latest_plists_by_stem.get(&output_stem.to_ascii_lowercase());
+        let latest_source_pair = latest_plist_path
+            .and_then(|_| current_pairs_by_stem.get(&output_stem.to_ascii_lowercase()));
         let glow_frames = resolve_glow_frames_for_icon(
             icon_id.as_str(),
             &split,
             glow_sheet_split.as_ref(),
             latest_plist_path.map(PathBuf::as_path),
+            latest_source_pair,
             splitter_opts,
             latest_sheet_sprite_cache,
         )?;
@@ -888,6 +698,7 @@ fn convert_process_one_sheet_candidate<F>(
     splitter_opts: &SplitterOptions,
     merger_opts: &MergerOptions,
     latest_plists_by_stem: &HashMap<String, PathBuf>,
+    current_pairs_by_stem: &HashMap<String, SheetCandidate>,
     latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
     converted_dir: &Path,
     total_units: usize,
@@ -939,6 +750,7 @@ where
             splitter_opts,
             merger_opts,
             latest_plists_by_stem,
+            current_pairs_by_stem,
             latest_sheet_sprite_cache,
             converted_dir,
             total_units,
@@ -1022,9 +834,12 @@ where
         let Some(frame_value) = latest_frames.get(&frame_name).cloned() else {
             continue;
         };
-        let Some(sprite_path) = resolve_split_sprite_path(&latest_sheet_dir, &frame_name) else {
+        let Some(sprite_path) = resolve_cached_split_sprite(&latest_sheet_dir, &frame_name) else {
+            let latest_source_pair =
+                current_pairs_by_stem.get(&pair.stem.to_ascii_lowercase());
             match latest_sheet_sprite_from_cache(
                 latest_plist_path.as_path(),
+                latest_source_pair,
                 &frame_name,
                 splitter_opts,
                 latest_sheet_sprite_cache,
@@ -1137,6 +952,7 @@ pub fn execute_convert_to_new_version<F>(
     output_dir: &Path,
     started_at: Instant,
     options: &ConvertToNewVersionOptions,
+    game_files: &GameFilesLayout,
     on_progress: &Arc<Mutex<F>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -1146,11 +962,15 @@ where
     let converted_dir = output_dir.join("ConvertedToLatestVersion");
     fs::create_dir_all(&converted_dir)?;
 
-    let latest_split_dir = resolve_latest_placeholder_split_dir().ok_or(AppError::InvalidPath(
-        "latest placeholder split directory not found",
-    ))?;
-    let latest_plists_by_stem = build_latest_plist_index(&latest_split_dir)?;
     let splitter_opts = phase_defaults().splitter;
+    ensure_current_library_split_cached(game_files, &splitter_opts)?;
+    let latest_split_dir = game_files.current_split.clone();
+    let latest_plists_by_stem = build_plist_index_under(&latest_split_dir)?;
+    let current_pairs = crate::core::game_files::discover_current_sheet_pairs(game_files)?;
+    let current_pairs_by_stem: HashMap<String, SheetCandidate> = current_pairs
+        .into_iter()
+        .map(|pair| (pair.stem.to_ascii_lowercase(), pair))
+        .collect();
     let merger_opts = MergerOptions {
         include_outside_plist_files: false,
         dimensions: None,
@@ -1220,6 +1040,7 @@ where
     let splitter_opts_for_convert = splitter_opts.clone();
     let merger_opts_for_convert = merger_opts.clone();
     let latest_plists_for_convert = latest_plists_by_stem.clone();
+    let current_pairs_for_convert = current_pairs_by_stem.clone();
     let converted_dir_for_convert = converted_dir.clone();
     let all_sheet_pairs_for_convert = all_sheet_pairs.clone();
     let results: Vec<Result<ConvertSheetWorkOutcome, AppError>> = scope_run_weighted_job_queue(
@@ -1234,6 +1055,7 @@ where
                 &splitter_opts_for_convert,
                 &merger_opts_for_convert,
                 &latest_plists_for_convert,
+                &current_pairs_for_convert,
                 &latest_sheet_sprite_cache_for_pool,
                 converted_dir_for_convert.as_path(),
                 total_units,

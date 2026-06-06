@@ -9,7 +9,12 @@ use plist::{Dictionary, Value};
 use regex::Regex;
 use serde::Serialize;
 
+use crate::core::contracts::phase_defaults;
 use crate::core::errors::AppError;
+use crate::core::game_files::{
+    ensure_sheet_split_cached, find_current_sheet_for_plist, png_path_to_data_url,
+    resolve_cached_split_sprite, GameFilesLayout,
+};
 use crate::core::icon_editor::icon_editor_extract_frames;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::porter::save_merged_sheet;
@@ -197,7 +202,10 @@ fn individual_frame_group_id(base_type: &str, frame_name: &str) -> String {
 /// Builds a structured index of the Geode loader UI primitives we generate for.
 /// This is used by the Create Geode Buttons tool to power the grid and ensure we only target frames
 /// that actually exist in the loaded sheet.
-pub fn geode_buttons_target_index(plist_path: &Path) -> Result<Vec<GeodeButtonsTargetGroup>, AppError> {
+pub fn geode_buttons_target_index(
+    plist_path: &Path,
+    layout: &GameFilesLayout,
+) -> Result<Vec<GeodeButtonsTargetGroup>, AppError> {
     let root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
 
@@ -255,19 +263,30 @@ pub fn geode_buttons_target_index(plist_path: &Path) -> Result<Vec<GeodeButtonsT
         group.frames.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
-    if let Ok(extracted) = icon_editor_extract_frames(plist_path) {
-        let extracted_by_name: BTreeMap<String, String> = extracted
-            .into_iter()
-            .map(|f| (f.name, f.png_data_url))
-            .collect();
-        for group in groups.values_mut() {
-            let biggest_name = group
-                .frames
-                .iter()
-                .max_by_key(|f| (f.sprite_size.width as u64) * (f.sprite_size.height as u64))
-                .map(|f| f.name.as_str());
-            if let Some(frame_name) = biggest_name {
-                group.preview_png_data_url = extracted_by_name.get(frame_name).cloned();
+    let splitter_opts = phase_defaults().splitter;
+    let split_dir = find_current_sheet_for_plist(layout, plist_path)?
+        .and_then(|pair| ensure_sheet_split_cached(layout, &pair, &splitter_opts).ok());
+
+    for group in groups.values_mut() {
+        let biggest_name = group
+            .frames
+            .iter()
+            .max_by_key(|f| (f.sprite_size.width as u64) * (f.sprite_size.height as u64))
+            .map(|f| f.name.clone());
+        let Some(frame_name) = biggest_name else {
+            continue;
+        };
+        if let Some(split_dir) = split_dir.as_ref() {
+            if let Some(sprite_path) = resolve_cached_split_sprite(split_dir, frame_name.as_str()) {
+                if let Ok(data_url) = png_path_to_data_url(&sprite_path) {
+                    group.preview_png_data_url = Some(data_url);
+                    continue;
+                }
+            }
+        }
+        if let Ok(extracted) = icon_editor_extract_frames(plist_path) {
+            if let Some(frame) = extracted.into_iter().find(|f| f.name == frame_name) {
+                group.preview_png_data_url = Some(frame.png_data_url);
             }
         }
     }
@@ -300,26 +319,6 @@ pub fn resolve_geode_buttons_plist(input_dir: &Path) -> Result<Option<String>, A
     }
 
     Ok(best_path)
-}
-
-/// Resolve the default source directory used by Geode Buttons.
-/// Prefers the repository-level `Default` folder used by Convert-to-Newest.
-pub fn resolve_geode_buttons_default_input_dir() -> Option<String> {
-    let manifest_dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let mut candidates: Vec<std::path::PathBuf> = vec![
-        manifest_dir.join("..").join("..").join("Default"),
-    ];
-    if let Ok(cwd) = std::env::current_dir() {
-        candidates.push(cwd.join("Default"));
-        candidates.push(cwd.join("..").join("Default"));
-        candidates.push(cwd.join("..").join("..").join("Default"));
-    }
-    for candidate in candidates {
-        if candidate.exists() && candidate.is_dir() {
-            return Some(candidate.to_string_lossy().to_string());
-        }
-    }
-    None
 }
 
 fn progress_total_as_u32(total: usize) -> u32 {

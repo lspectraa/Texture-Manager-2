@@ -5,13 +5,14 @@ use std::sync::Arc;
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
 use crate::core::executor::execute_operation_plan;
+use crate::core::game_files::{bootstrap_game_files, GameFilesLayoutDto, GameFilesState};
 use crate::core::geode_buttons::{
-    geode_buttons_target_index, geode_buttons_template_preview_data_url,
-    resolve_geode_buttons_default_input_dir, resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
+    geode_buttons_target_index, geode_buttons_template_preview_data_url, resolve_geode_buttons_plist,
+    GeodeButtonsTargetGroup,
 };
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
@@ -67,15 +68,18 @@ fn cancel_operation(cancel: tauri::State<'_, OperationCancel>) {
 async fn run_operation(
     app: AppHandle,
     cancel: tauri::State<'_, OperationCancel>,
+    game_files: tauri::State<'_, GameFilesState>,
     request: OperationRequest,
 ) -> Result<OperationReport, String> {
     cancel.prepare_run();
     let cancel_flag = cancel.token();
     let plan = build_operation_plan(request).map_err(|err| err.to_string())?;
+    let layout = Arc::clone(&game_files.0);
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         execute_operation_plan(
             &plan,
+            layout.as_ref(),
             move |progress| {
                 let _ = app_handle.emit("operation-progress", &progress);
             },
@@ -238,8 +242,17 @@ fn icon_editor_save_png_data_url(output_path: String, png_data_url: String) -> R
 }
 
 #[tauri::command]
-fn geode_buttons_target_index_cmd(plist_path: String) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
-    geode_buttons_target_index(std::path::Path::new(&plist_path)).map_err(|err| err.to_string())
+fn get_game_files_layout(game_files: tauri::State<'_, GameFilesState>) -> GameFilesLayoutDto {
+    game_files.0.to_dto()
+}
+
+#[tauri::command]
+fn geode_buttons_target_index_cmd(
+    game_files: tauri::State<'_, GameFilesState>,
+    plist_path: String,
+) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
+    geode_buttons_target_index(std::path::Path::new(&plist_path), game_files.0.as_ref())
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -248,8 +261,8 @@ fn geode_buttons_autoselect_plist_cmd(input_dir: String) -> Result<Option<String
 }
 
 #[tauri::command]
-fn geode_buttons_default_input_dir_cmd() -> Option<String> {
-    resolve_geode_buttons_default_input_dir()
+fn geode_buttons_default_input_dir_cmd(game_files: tauri::State<'_, GameFilesState>) -> String {
+    game_files.0.current.to_string_lossy().to_string()
 }
 
 #[tauri::command]
@@ -262,9 +275,15 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let layout = bootstrap_game_files().map_err(|err| err.to_string())?;
+            app.manage(GameFilesState(Arc::new(layout)));
+            Ok(())
+        })
         .manage(OperationCancel::default())
         .invoke_handler(tauri::generate_handler![
             get_phase_defaults,
+            get_game_files_layout,
             validate_operation_request,
             run_operation,
             cancel_operation,

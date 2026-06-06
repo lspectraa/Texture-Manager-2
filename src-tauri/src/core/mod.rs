@@ -1,6 +1,7 @@
 pub mod contracts;
 pub mod convert_to_new_version;
 pub mod discovery;
+pub mod game_files;
 pub mod errors;
 pub mod executor;
 pub mod glow;

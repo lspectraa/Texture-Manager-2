@@ -484,7 +484,9 @@ export function GeodeButtonsToolPanel({
         if (resolved?.trim()) {
           onInputDirChange(resolved);
         } else {
-          setTargetsError("Could not resolve Default source directory.");
+          setTargetsError(
+            "Could not resolve game files directory. Place BlankSheet gamesheets under your TextureManager2/game-files/current folder.",
+          );
         }
       })
       .catch((err: unknown) => {

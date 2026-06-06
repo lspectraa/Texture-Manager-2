@@ -41,12 +41,25 @@ export const autoSelectGeodeButtonsPlist = async (
   return result ?? null;
 };
 
-export const getGeodeButtonsDefaultInputDir = async (): Promise<string | null> => {
+export type GameFilesLayout = {
+  rootDir: string;
+  currentDir: string;
+  splitDir: string;
+  legacyDir: string;
+};
+
+export const getGameFilesLayout = async (): Promise<GameFilesLayout> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Game files layout requires Tauri runtime.");
+  }
+  return invoke<GameFilesLayout>("get_game_files_layout");
+};
+
+export const getGeodeButtonsDefaultInputDir = async (): Promise<string> => {
   if (!isTauriRuntime()) {
     throw new Error("Geode Buttons default input requires Tauri runtime.");
   }
-  const result = await invoke<string | null>("geode_buttons_default_input_dir_cmd");
-  return result ?? null;
+  return invoke<string>("geode_buttons_default_input_dir_cmd");
 };
 
 /** Load a template file as a PNG data URL (same path handling as export). Use when `convertFileSrc` is blocked. */
