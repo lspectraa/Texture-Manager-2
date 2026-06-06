@@ -19,6 +19,7 @@ use crate::core::icon_editor::{
     icon_editor_import_frame as icon_editor_import_frame_core,
     icon_editor_copy_sheet as icon_editor_copy_sheet_core,
     icon_editor_rename_sheet as icon_editor_rename_sheet_core,
+    icon_editor_swap_rename_sheet as icon_editor_swap_rename_sheet_core,
     icon_editor_save_plist as icon_editor_save_plist_core,
     icon_editor_sheet_info as icon_editor_sheet_info_core, IconEditorExtractedFrame,
     IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
@@ -199,6 +200,15 @@ fn icon_editor_rename_sheet(
 }
 
 #[tauri::command]
+fn icon_editor_swap_rename_sheet(
+    plist_path: String,
+    new_stem: String,
+) -> Result<IconEditorRenameResult, String> {
+    icon_editor_swap_rename_sheet_core(std::path::Path::new(&plist_path), new_stem.as_str())
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 fn icon_editor_copy_sheet(
     plist_path: String,
     new_stem: String,
@@ -269,6 +279,7 @@ pub fn run() {
             icon_editor_add_frame,
             icon_editor_extract_frames,
             icon_editor_rename_sheet,
+            icon_editor_swap_rename_sheet,
             icon_editor_copy_sheet,
             icon_editor_save_png_data_url
         ])

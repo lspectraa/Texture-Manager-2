@@ -37,8 +37,10 @@ import {
   IconEditorPoint,
   IconEditorSheetInfo,
   copyIconEditorSheet,
+  isIconEditorRenameTargetConflict,
   renameIconEditorSheet,
   saveIconEditorPlist,
+  swapRenameIconEditorSheet,
 } from "../../services/tauriIconEditor";
 
 type IconLayerRole = "primary" | "secondary" | "extra" | "glow" | "capsule";
@@ -837,6 +839,7 @@ export function IconEditorToolPanel() {
   const [toolbarError, setToolbarError] = useState<string | null>(null);
   const [toolbarErrorDetail, setToolbarErrorDetail] = useState<string | null>(null);
   const [isErrorDetailOpen, setIsErrorDetailOpen] = useState(false);
+  const [renameConflict, setRenameConflict] = useState<{ targetStem: string } | null>(null);
   const [isMiddlePanning, setIsMiddlePanning] = useState(false);
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
@@ -1199,10 +1202,15 @@ export function IconEditorToolPanel() {
     setToolbarError(null);
     setToolbarErrorDetail(null);
     setIsErrorDetailOpen(false);
+    setRenameConflict(null);
     try {
       const renamed = await renameIconEditorSheet(sheetInfo.plistPath, renameValue.trim());
       await loadSheet(renamed.plistPath, { omitBusy: true });
     } catch (error) {
+      if (isIconEditorRenameTargetConflict(error)) {
+        setRenameConflict({ targetStem: renameValue.trim() });
+        return;
+      }
       const parsed = toIconEditorErrorInfo(error, "Failed to rename sheet files.");
       setToolbarError(parsed.message);
       setToolbarErrorDetail(parsed.detail);
@@ -1210,6 +1218,30 @@ export function IconEditorToolPanel() {
       setIsBusy(false);
     }
   }, [loadSheet, renameValue, sheetInfo]);
+
+  const swapRenameSheet = useCallback(async () => {
+    if (!sheetInfo || !renameConflict) {
+      return;
+    }
+    setIsBusy(true);
+    setToolbarError(null);
+    setToolbarErrorDetail(null);
+    setIsErrorDetailOpen(false);
+    try {
+      const renamed = await swapRenameIconEditorSheet(
+        sheetInfo.plistPath,
+        renameConflict.targetStem,
+      );
+      setRenameConflict(null);
+      await loadSheet(renamed.plistPath, { omitBusy: true });
+    } catch (error) {
+      const parsed = toIconEditorErrorInfo(error, "Failed to swap sheet names.");
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
+    } finally {
+      setIsBusy(false);
+    }
+  }, [loadSheet, renameConflict, sheetInfo]);
 
   const currentSheetStem = useMemo(
     () => sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") ?? "",
@@ -2127,6 +2159,41 @@ export function IconEditorToolPanel() {
             {toolbarError}
           </button>
         </p>
+      ) : null}
+      {renameConflict ? (
+        <div
+          className="tm-icon-editor-confirm-dialog-backdrop"
+          onClick={() => setRenameConflict(null)}
+          role="presentation"
+        >
+          <div
+            className="tm-icon-editor-confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Rename conflict"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>Name already in use</h3>
+            <p>
+              <strong>{renameConflict.targetStem}</strong> already exists. Swap names so the current
+              sheet becomes <strong>{renameConflict.targetStem}</strong> and the existing sheet
+              becomes <strong>{currentSheetStem}</strong>, or cancel the rename.
+            </p>
+            <div className="tm-icon-editor-confirm-dialog-actions">
+              <button type="button" onClick={() => setRenameConflict(null)} disabled={isBusy}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="tm-icon-editor-confirm-dialog-primary"
+                onClick={() => swapRenameSheet().catch(() => {})}
+                disabled={isBusy}
+              >
+                Swap Names
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
       {isErrorDetailOpen && toolbarErrorDetail ? (
         <div

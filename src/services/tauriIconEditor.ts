@@ -94,11 +94,30 @@ export const extractIconEditorFrames = async (
 ): Promise<IconEditorExtractedFrame[]> =>
   invoke<IconEditorExtractedFrame[]>("icon_editor_extract_frames", { plistPath });
 
+export const ICON_EDITOR_RENAME_TARGET_PLIST_EXISTS =
+  "target plist name already exists in destination directory";
+export const ICON_EDITOR_RENAME_TARGET_PNG_EXISTS =
+  "target png name already exists in destination directory";
+
+export const isIconEditorRenameTargetConflict = (error: unknown): boolean => {
+  const text = error instanceof Error ? error.message : String(error);
+  return (
+    text.includes(ICON_EDITOR_RENAME_TARGET_PLIST_EXISTS) ||
+    text.includes(ICON_EDITOR_RENAME_TARGET_PNG_EXISTS)
+  );
+};
+
 export const renameIconEditorSheet = async (
   plistPath: string,
   newStem: string,
 ): Promise<IconEditorRenameResult> =>
   invoke<IconEditorRenameResult>("icon_editor_rename_sheet", { plistPath, newStem });
+
+export const swapRenameIconEditorSheet = async (
+  plistPath: string,
+  newStem: string,
+): Promise<IconEditorRenameResult> =>
+  invoke<IconEditorRenameResult>("icon_editor_swap_rename_sheet", { plistPath, newStem });
 
 export const copyIconEditorSheet = async (
   plistPath: string,

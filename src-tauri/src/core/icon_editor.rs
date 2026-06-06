@@ -568,10 +568,7 @@ pub fn icon_editor_extract_frames(
     Ok(extracted)
 }
 
-pub fn icon_editor_rename_sheet(
-    plist_path: &Path,
-    new_stem: &str,
-) -> Result<IconEditorRenameResult, AppError> {
+fn validate_sheet_stem(new_stem: &str) -> Result<(), AppError> {
     if new_stem.trim().is_empty() {
         return Err(AppError::InvalidOperation("new sheet name cannot be empty"));
     }
@@ -580,12 +577,79 @@ pub fn icon_editor_rename_sheet(
             "new sheet name cannot contain separators",
         ));
     }
+    Ok(())
+}
 
-    let old_stem = plist_path
+fn sheet_stem_from_plist_path(plist_path: &Path) -> Result<String, AppError> {
+    plist_path
         .file_stem()
         .and_then(|value| value.to_str())
-        .ok_or(AppError::InvalidPath("plist file name is invalid"))?
-        .to_string();
+        .map(str::to_string)
+        .ok_or(AppError::InvalidPath("plist file name is invalid"))
+}
+
+fn resolve_sheet_paths_for_stem(
+    plist_path: &Path,
+    stem: &str,
+) -> Result<(PathBuf, PathBuf), AppError> {
+    let plist_root = Value::from_file(plist_path)
+        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+    let parent_dir = plist_path
+        .parent()
+        .ok_or(AppError::InvalidPath("plist path has no parent directory"))?;
+    let target_plist_path = parent_dir.join(format!("{stem}.plist"));
+    let target_atlas_path = atlas_path.with_file_name(format!("{stem}.png"));
+    Ok((target_plist_path, target_atlas_path))
+}
+
+fn move_sheet_files_to_stem(
+    plist_path: &Path,
+    new_stem: &str,
+) -> Result<(PathBuf, PathBuf), AppError> {
+    if !plist_path.exists() {
+        return Err(AppError::InvalidPath("plist file does not exist"));
+    }
+
+    let (new_plist_path, new_atlas_path) = resolve_sheet_paths_for_stem(plist_path, new_stem)?;
+    let plist_root = Value::from_file(plist_path)
+        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+
+    if plist_path != new_plist_path.as_path() {
+        if new_plist_path.exists() {
+            return Err(AppError::InvalidOperation(
+                "target plist name already exists in destination directory",
+            ));
+        }
+        fs::rename(plist_path, &new_plist_path)?;
+    }
+    if atlas_path != new_atlas_path && atlas_path.exists() {
+        if new_atlas_path.exists() {
+            return Err(AppError::InvalidOperation(
+                "target png name already exists in destination directory",
+            ));
+        }
+        fs::rename(&atlas_path, &new_atlas_path)?;
+    }
+
+    Ok((new_plist_path, new_atlas_path))
+}
+
+fn finalize_sheet_stem_in_plist(
+    plist_path: &Path,
+    old_stem: &str,
+    new_stem: &str,
+) -> Result<(), AppError> {
+    if old_stem == new_stem {
+        return Ok(());
+    }
 
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
@@ -595,36 +659,12 @@ pub fn icon_editor_rename_sheet(
             .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
         resolve_atlas_path(plist_path, root_dict)?
     };
-    let parent_dir = plist_path
-        .parent()
-        .ok_or(AppError::InvalidPath("plist path has no parent directory"))?;
 
-    let renamed_plist_path = parent_dir.join(format!("{new_stem}.plist"));
-    let renamed_atlas_path = atlas_path.with_file_name(format!("{new_stem}.png"));
-
-    if renamed_plist_path != plist_path && renamed_plist_path.exists() {
-        return Err(AppError::InvalidOperation(
-            "target plist name already exists in destination directory",
-        ));
-    }
-    if renamed_atlas_path != atlas_path && renamed_atlas_path.exists() {
-        return Err(AppError::InvalidOperation(
-            "target png name already exists in destination directory",
-        ));
-    }
-
-    if atlas_path != renamed_atlas_path {
-        fs::rename(&atlas_path, &renamed_atlas_path)?;
-    }
-    if plist_path != renamed_plist_path {
-        fs::rename(plist_path, &renamed_plist_path)?;
-    }
-
-    let old_sprite_stem = strip_graphics_tier_suffix(&old_stem);
+    let old_sprite_stem = strip_graphics_tier_suffix(old_stem);
     let new_sprite_stem = strip_graphics_tier_suffix(new_stem);
     rename_plist_sheet_identifiers(
         &mut plist_root,
-        &old_stem,
+        old_stem,
         new_stem,
         old_sprite_stem.as_str(),
         new_sprite_stem.as_str(),
@@ -640,7 +680,7 @@ pub fn icon_editor_rename_sheet(
         .get_mut("metadata")
         .and_then(Value::as_dictionary_mut)
     {
-        let renamed_file_name = renamed_atlas_path
+        let renamed_file_name = atlas_path
             .file_name()
             .and_then(|value| value.to_str())
             .unwrap_or("icons.png")
@@ -656,16 +696,16 @@ pub fn icon_editor_rename_sheet(
         );
     }
 
-    let renamed_atlas_rgba = image::open(&renamed_atlas_path)
+    let atlas_rgba = image::open(&atlas_path)
         .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?
         .to_rgba8();
-    let sprites = collect_sheet_sprites_for_remerge(&plist_root, &renamed_atlas_rgba)?;
+    let sprites = collect_sheet_sprites_for_remerge(&plist_root, &atlas_rgba)?;
     let merger_options = MergerOptions {
         include_outside_plist_files: false,
         dimensions: None,
         sheet_concurrency: 1,
     };
-    let sheet_label = renamed_plist_path.to_string_lossy().to_string();
+    let sheet_label = plist_path.to_string_lossy().to_string();
     let mut on_sprite_loaded = |_label: String| {};
     let (merged_atlas, _w, _h, _count, _issues) = merge_plist_from_memory(
         &mut plist_root,
@@ -674,12 +714,69 @@ pub fn icon_editor_rename_sheet(
         &merger_options,
         &mut on_sprite_loaded,
     )?;
-    save_dynamic_png_fast(&renamed_atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    write_plist_atomically(plist_path, &plist_root)
+}
 
-    write_plist_atomically(&renamed_plist_path, &plist_root)?;
+pub fn icon_editor_rename_sheet(
+    plist_path: &Path,
+    new_stem: &str,
+) -> Result<IconEditorRenameResult, AppError> {
+    validate_sheet_stem(new_stem)?;
+    let old_stem = sheet_stem_from_plist_path(plist_path)?;
+
+    let (renamed_plist_path, renamed_atlas_path) =
+        move_sheet_files_to_stem(plist_path, new_stem)?;
+    finalize_sheet_stem_in_plist(&renamed_plist_path, &old_stem, new_stem)?;
+
     Ok(IconEditorRenameResult {
         plist_path: renamed_plist_path.to_string_lossy().to_string(),
         atlas_path: renamed_atlas_path.to_string_lossy().to_string(),
+    })
+}
+
+pub fn icon_editor_swap_rename_sheet(
+    plist_path: &Path,
+    new_stem: &str,
+) -> Result<IconEditorRenameResult, AppError> {
+    validate_sheet_stem(new_stem)?;
+    let old_stem = sheet_stem_from_plist_path(plist_path)?;
+    if old_stem == new_stem {
+        return Err(AppError::InvalidOperation(
+            "new sheet name must differ from current name",
+        ));
+    }
+
+    let parent_dir = plist_path
+        .parent()
+        .ok_or(AppError::InvalidPath("plist path has no parent directory"))?;
+    let other_plist_path = parent_dir.join(format!("{new_stem}.plist"));
+    if !other_plist_path.exists() {
+        return Err(AppError::InvalidOperation(
+            "target sheet does not exist for name swap",
+        ));
+    }
+
+    let temp_stem = format!(
+        "__tm_swap_{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_nanos())
+            .unwrap_or(0)
+    );
+
+    let (temp_plist_path, _) = move_sheet_files_to_stem(plist_path, &temp_stem)?;
+    move_sheet_files_to_stem(&other_plist_path, &old_stem)?;
+    let (final_plist_path, final_atlas_path) =
+        move_sheet_files_to_stem(&temp_plist_path, new_stem)?;
+
+    finalize_sheet_stem_in_plist(&final_plist_path, &old_stem, new_stem)?;
+    let swapped_away_plist_path = parent_dir.join(format!("{old_stem}.plist"));
+    finalize_sheet_stem_in_plist(&swapped_away_plist_path, new_stem, &old_stem)?;
+
+    Ok(IconEditorRenameResult {
+        plist_path: final_plist_path.to_string_lossy().to_string(),
+        atlas_path: final_atlas_path.to_string_lossy().to_string(),
     })
 }
 

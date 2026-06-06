@@ -1689,6 +1689,67 @@ select:focus-visible {
   cursor: pointer;
 }
 
+.tm-icon-editor-confirm-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 10, 23, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.tm-icon-editor-confirm-dialog {
+  width: min(520px, 100%);
+  border-radius: 14px;
+  border: 1px solid rgba(157, 207, 255, 0.42);
+  background: linear-gradient(165deg, rgba(22, 28, 44, 0.97), rgba(18, 22, 36, 0.97));
+  box-shadow: 0 26px 52px rgba(0, 0, 0, 0.45);
+  padding: 16px;
+}
+
+.tm-icon-editor-confirm-dialog h3 {
+  margin: 0 0 10px;
+  color: #e8f2ff;
+}
+
+.tm-icon-editor-confirm-dialog p {
+  margin: 0;
+  color: #c8d8f0;
+  line-height: 1.5;
+  font-size: 14px;
+}
+
+.tm-icon-editor-confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.tm-icon-editor-confirm-dialog-actions button {
+  border: 1px solid rgba(157, 207, 255, 0.36);
+  border-radius: 10px;
+  background: rgba(111, 163, 255, 0.16);
+  color: var(--tm-text);
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.tm-icon-editor-confirm-dialog-actions button.tm-icon-editor-confirm-dialog-primary {
+  border-color: rgba(151, 237, 183, 0.72);
+  background: linear-gradient(130deg, rgba(54, 155, 99, 0.78), rgba(43, 112, 77, 0.72));
+  color: #ecfff4;
+}
+
+.tm-icon-editor-confirm-dialog-actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .tm-icon-editor-zoom-row {
   display: inline-flex;
   align-items: center;
