@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, FileImage, FolderOpen, Palette } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -72,6 +72,10 @@ function resolveFamilyHsv(
     return familyMap[variant];
   }
   return getVariantRule(options.variantRules, variant);
+}
+
+function resolveGroupHsv(options: GeodeButtonsOptions, familyId: string): HsvDelta {
+  return resolveFamilyHsv(options, familyId, resolveAdjustVariant(familyId));
 }
 
 type FamilyGroupId = "uiChrome" | "circle" | "editorBase" | "account";
@@ -214,6 +218,13 @@ async function resolvePreviewImageSrc(path: string): Promise<string> {
 /** Disk template images decoded once; HSV preview only redraws from this bitmap. */
 const geodeTemplateImageByPath = new Map<string, HTMLImageElement>();
 const geodeTemplateImageInflight = new Map<string, Promise<HTMLImageElement | null>>();
+
+function invalidateDiskTemplateCache(path: string): void {
+  const key = normalizeFilesystemPath(path);
+  if (!key.trim()) return;
+  geodeTemplateImageByPath.delete(key);
+  geodeTemplateImageInflight.delete(key);
+}
 
 async function getOrLoadDiskTemplateImage(path: string): Promise<HTMLImageElement | null> {
   const key = normalizeFilesystemPath(path);
@@ -392,6 +403,9 @@ export function GeodeButtonsToolPanel({
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [previewByFamily, setPreviewByFamily] = useState<Record<string, string>>({});
   const [basePreviewByFamily, setBasePreviewByFamily] = useState<Record<string, string>>({});
+  const prevFamilyTemplatesRef = useRef<Record<string, string>>(options.templates.familyTemplates);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   const selectedFamily = useMemo(
     () => targets?.find((g) => g.id === selectedFamilyId) ?? null,
@@ -436,6 +450,11 @@ export function GeodeButtonsToolPanel({
     if (!selectedFamilyId) return defaultHsv();
     return resolveFamilyHsv(options, selectedFamilyId, selectedAdjustVariant);
   }, [options, selectedFamilyId, selectedAdjustVariant]);
+
+  const selectedTemplatePath = useMemo(() => {
+    if (!selectedFamilyId) return "";
+    return options.templates.familyTemplates[selectedFamilyId] ?? "";
+  }, [options.templates.familyTemplates, selectedFamilyId]);
 
   const pickTemplate = useCallback(
     async (assign: (path: string) => void) => {
@@ -555,9 +574,10 @@ export function GeodeButtonsToolPanel({
     const run = async (): Promise<void> => {
       const results = await Promise.all(
         targets.map(async (group): Promise<[string, string | null]> => {
-          const familyTemplatePath = options.templates.familyTemplates[group.id] ?? "";
+          const familyTemplatePath = optionsRef.current.templates.familyTemplates[group.id] ?? "";
           const basePreview = basePreviewByFamily[group.id] ?? "";
-          const preview = await previewForGroupSource(familyTemplatePath, basePreview, defaultHsv());
+          const hsv = resolveGroupHsv(optionsRef.current, group.id);
+          const preview = await previewForGroupSource(familyTemplatePath, basePreview, hsv);
           return [group.id, preview];
         }),
       );
@@ -574,7 +594,52 @@ export function GeodeButtonsToolPanel({
     return () => {
       alive = false;
     };
-  }, [targets, basePreviewByFamily, options.templates]);
+  }, [targets, basePreviewByFamily]);
+
+  // Refresh only grid cards whose template path changed; keep each card's HSV adjustments.
+  useEffect(() => {
+    if (!targets || targets.length === 0) {
+      return;
+    }
+    const prev = prevFamilyTemplatesRef.current;
+    const curr = options.templates.familyTemplates;
+    const changedIds: string[] = [];
+    const ids = new Set([...Object.keys(prev), ...Object.keys(curr)]);
+    for (const id of ids) {
+      if ((prev[id] ?? "") !== (curr[id] ?? "")) {
+        changedIds.push(id);
+      }
+    }
+    prevFamilyTemplatesRef.current = curr;
+    if (changedIds.length === 0) {
+      return;
+    }
+
+    let alive = true;
+    const run = async (): Promise<void> => {
+      for (const familyId of changedIds) {
+        const newPath = curr[familyId] ?? "";
+        const oldPath = prev[familyId] ?? "";
+        if (oldPath) {
+          invalidateDiskTemplateCache(oldPath);
+        }
+        if (newPath) {
+          invalidateDiskTemplateCache(newPath);
+        }
+        const basePreview = basePreviewByFamily[familyId] ?? "";
+        const hsv = resolveGroupHsv(optionsRef.current, familyId);
+        const preview = await previewForGroupSource(newPath, basePreview, hsv);
+        if (!alive || !preview) {
+          continue;
+        }
+        setPreviewByFamily((existing) => ({ ...existing, [familyId]: preview }));
+      }
+    };
+    run().catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [options.templates.familyTemplates, targets, basePreviewByFamily]);
 
   useEffect(() => {
     if (!targets || targets.length === 0 || !selectedFamilyId) {
@@ -586,9 +651,8 @@ export function GeodeButtonsToolPanel({
     }
     let alive = true;
     const run = async (): Promise<void> => {
-      const familyTemplatePath = options.templates.familyTemplates[selectedGroup.id] ?? "";
       const basePreview = basePreviewByFamily[selectedGroup.id] ?? "";
-      const preview = await previewForGroupSource(familyTemplatePath, basePreview, selectedHsv);
+      const preview = await previewForGroupSource(selectedTemplatePath, basePreview, selectedHsv);
       if (!alive || !preview) return;
       setPreviewByFamily((prev) => ({ ...prev, [selectedGroup.id]: preview }));
     };
@@ -596,7 +660,7 @@ export function GeodeButtonsToolPanel({
     return () => {
       alive = false;
     };
-  }, [targets, selectedFamilyId, selectedHsv, options.templates, basePreviewByFamily]);
+  }, [targets, selectedFamilyId, selectedHsv, selectedTemplatePath, basePreviewByFamily]);
 
   const setHsvField = useCallback(
     (partial: Partial<HsvDelta>) => {
@@ -626,6 +690,11 @@ export function GeodeButtonsToolPanel({
   const setFamilyTemplatePath = useCallback(
     (familyId: string, path: string) => {
       const normalized = normalizeFilesystemPath(path);
+      const prevPath = options.templates.familyTemplates[familyId];
+      if (prevPath) {
+        invalidateDiskTemplateCache(prevPath);
+      }
+      invalidateDiskTemplateCache(normalized);
       onOptionsChange({
         ...options,
         templates: {
