@@ -7,10 +7,14 @@ type GlowMakerToolPanelProps = {
   outputDir: string;
   thickness: number;
   tolerance: number;
+  rainbowGlow: boolean;
+  compositeLayers: boolean;
   onInputDirChange: (value: string) => void;
   onOutputDirChange: (value: string) => void;
   onThicknessChange: (value: number) => void;
   onToleranceChange: (value: number) => void;
+  onRainbowGlowChange: (value: boolean) => void;
+  onCompositeLayersChange: (value: boolean) => void;
   pickFolder: PickFolderFn;
 };
 
@@ -19,10 +23,14 @@ export function GlowMakerToolPanel({
   outputDir,
   thickness,
   tolerance,
+  rainbowGlow,
+  compositeLayers,
   onInputDirChange,
   onOutputDirChange,
   onThicknessChange,
   onToleranceChange,
+  onRainbowGlowChange,
+  onCompositeLayersChange,
   pickFolder,
 }: GlowMakerToolPanelProps) {
   return (
@@ -33,11 +41,12 @@ export function GlowMakerToolPanel({
       </h2>
       <p className="desc tm-explainer">
         Generate clean glow sprites from icon primaries and export rebuilt sheets to
-        <code> icons/GeneratedGlow/</code>.
+        <code> icons/GeneratedGlow/</code>. Outline alpha minimum filters faint debris pixels
+        that would otherwise distort the stroke.
       </p>
       <div className="tm-info-chips">
         <span className="chip">AA solid stroke</span>
-        <span className="chip">Pure white glow</span>
+        <span className="chip">{rainbowGlow ? "Extended rainbow" : "Pure white glow"}</span>
       </div>
       <div className="tm-form-row tm-form-row-2">
         <label>
@@ -90,13 +99,31 @@ export function GlowMakerToolPanel({
           />
         </label>
         <label className="tm-field-compact">
-          Alpha tolerance (0-255)
+          Outline alpha minimum (0-255)
           <GlassNumberInput
             value={tolerance}
             min={0}
             max={255}
             onChange={onToleranceChange}
           />
+        </label>
+      </div>
+      <div className="tm-form-row">
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={compositeLayers}
+            onChange={(event) => onCompositeLayersChange(event.target.checked)}
+          />
+          Composite icon layers before glow (primary + secondary + extra)
+        </label>
+        <label className="checkbox">
+          <input
+            type="checkbox"
+            checked={rainbowGlow}
+            onChange={(event) => onRainbowGlowChange(event.target.checked)}
+          />
+          Rainbow glow (extended spectrum, cyan → purple → reddish-violet)
         </label>
       </div>
     </>

@@ -153,7 +153,9 @@ function App() {
   const [glowInputDir, setGlowInputDir] = useState("");
   const [glowOutputDir, setGlowOutputDir] = useState("");
   const [glowThickness, setGlowThickness] = useState(3);
-  const [glowTolerance, setGlowTolerance] = useState(32);
+  const [glowTolerance, setGlowTolerance] = useState(6);
+  const [glowRainbow, setGlowRainbow] = useState(false);
+  const [glowCompositeLayers, setGlowCompositeLayers] = useState(false);
 
   const [geodeButtonsInputDir, setGeodeButtonsInputDir] = useState("");
   const [geodeButtonsOutputDir, setGeodeButtonsOutputDir] = useState("");
@@ -295,6 +297,8 @@ function App() {
           thickness: Math.min(128, Math.max(1, glowThickness)),
           tolerance: Math.min(255, Math.max(0, glowTolerance)),
           dimensions: null,
+          rainbowGlow: glowRainbow,
+          compositeLayers: glowCompositeLayers,
         },
       };
     }
@@ -558,10 +562,14 @@ function App() {
             outputDir={glowOutputDir}
             thickness={glowThickness}
             tolerance={glowTolerance}
+            rainbowGlow={glowRainbow}
+            compositeLayers={glowCompositeLayers}
             onInputDirChange={setGlowInputDir}
             onOutputDirChange={setGlowOutputDir}
             onThicknessChange={setGlowThickness}
             onToleranceChange={setGlowTolerance}
+            onRainbowGlowChange={setGlowRainbow}
+            onCompositeLayersChange={setGlowCompositeLayers}
             pickFolder={pickFolder}
           />
         );

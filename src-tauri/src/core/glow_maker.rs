@@ -12,6 +12,7 @@ use crate::core::contracts::{
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::glow::{glow_primary_name_for, render_icon_glow_from_primary};
+use crate::core::glow_composite::composite_icon_layers_for_glow;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::plist::count_frames_in_plist;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
@@ -230,7 +231,32 @@ where
             });
             continue;
         };
-        let generated = render_icon_glow_from_primary(&primary_sprite, options);
+        let glow_source = if options.composite_layers {
+            match composite_icon_layers_for_glow(
+                &split.sprites,
+                &split.plist_root,
+                &primary_name,
+            ) {
+                Ok(Some(composite)) => composite,
+                Ok(None) => primary_sprite.clone(),
+                Err(err) => {
+                    issues.push(ReportIssue {
+                        level: ReportLevel::Warning,
+                        message: format!(
+                            "composite glow fallback to primary for `{frame_name}`: {err}"
+                        ),
+                        file: Some(frame_name.clone()),
+                    });
+                    primary_sprite.clone()
+                }
+            }
+        } else {
+            primary_sprite.clone()
+        };
+
+        // Discard the original glow sprite entirely; regenerate only from primary/composite.
+        split.sprites.remove(&frame_name);
+        let generated = render_icon_glow_from_primary(&glow_source, options);
         split.sprites.insert(frame_name.clone(), generated);
     }
 

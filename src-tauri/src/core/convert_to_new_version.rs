@@ -258,6 +258,7 @@ pub(crate) fn is_excluded_legacy_icon_id(icon_id: &str) -> bool {
     lower.starts_with("portal_")
         || lower.starts_with("boost_")
         || lower.starts_with("checkpoint_")
+        || lower.starts_with("floorline_")
 }
 
 pub(crate) fn is_glow_frame_name(frame_name: &str) -> bool {
@@ -1215,6 +1216,7 @@ mod tests {
             "boost_01_001.png".to_string(),
             "portal_01_back_001.png".to_string(),
             "checkpoint_01_001.png".to_string(),
+            "floorLine_01_001.png".to_string(),
             "fireBoost_001.png".to_string(),
         ];
         let groups = group_icon_output_frames(frames);
@@ -1223,8 +1225,10 @@ mod tests {
         assert!(!groups.contains_key("boost_01"));
         assert!(!groups.contains_key("portal_01"));
         assert!(!groups.contains_key("checkpoint_01"));
+        assert!(!groups.contains_key("floorLine_01"));
         assert!(is_excluded_legacy_icon_id("boost_01"));
         assert!(is_excluded_legacy_icon_id("portal_07"));
+        assert!(is_excluded_legacy_icon_id("floorLine_01"));
         assert!(is_glow_frame_name("bird_01_glow_001.png"));
         assert!(is_fireboost_frame_name("fireBoost_001.png"));
     }
@@ -1272,6 +1276,7 @@ mod tests {
         assert!(!groups.contains_key("boost_01"));
         assert!(!groups.contains_key("checkpoint_01"));
         assert!(!groups.contains_key("portal_01"));
+        assert!(!groups.contains_key("floorLine_01"));
 
         let grouped_count: usize = groups.values().map(|entries| entries.len()).sum();
         assert!(

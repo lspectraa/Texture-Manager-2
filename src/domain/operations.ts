@@ -96,6 +96,8 @@ export type OperationOptions =
       thickness: number;
       tolerance: number;
       dimensions: DimensionOverride | null;
+      rainbowGlow: boolean;
+      compositeLayers: boolean;
     }
   | ({ type: "geodeButtons" } & GeodeButtonsOptions);
 

@@ -67,6 +67,8 @@ pub struct GlowMakerOptions {
     pub thickness: u32,
     pub tolerance: u8,
     pub dimensions: Option<DimensionOverride>,
+    pub rainbow_glow: bool,
+    pub composite_layers: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -67,8 +67,10 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
             }
             None => OperationOptions::GlowMaker(GlowMakerOptions {
                 thickness: 3,
-                tolerance: 32,
+                tolerance: 6,
                 dimensions: None,
+                rainbow_glow: false,
+                composite_layers: false,
             }),
             Some(_) => return Err(AppError::InvalidOperation("glow maker options mismatch")),
         },
@@ -117,6 +119,8 @@ fn with_glow_phase_three_defaults(existing: GlowMakerOptions) -> GlowMakerOption
         thickness: existing.thickness.clamp(1, 128),
         tolerance: existing.tolerance,
         dimensions: existing.dimensions,
+        rainbow_glow: existing.rainbow_glow,
+        composite_layers: existing.composite_layers,
     }
 }
 
