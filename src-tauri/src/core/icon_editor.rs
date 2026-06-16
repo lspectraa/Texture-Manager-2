@@ -5,7 +5,6 @@ use std::path::{Path, PathBuf};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
-use image::imageops::rotate90;
 use image::{DynamicImage, ImageFormat, RgbaImage};
 use plist::{Dictionary, Value};
 use serde::{Deserialize, Serialize};
@@ -315,69 +314,27 @@ pub fn icon_editor_import_frame(
     frame_name: &str,
     texture_path: &Path,
 ) -> Result<(), AppError> {
-    let plist_root = Value::from_file(plist_path)
+    let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
     let frames = frames_dictionary(root_dict)?;
-    let frame_dict = frames
-        .get(frame_name)
-        .and_then(Value::as_dictionary)
-        .ok_or_else(|| AppError::ParseError(format!("frame `{frame_name}` not found in plist")))?;
-    let texture_rect = parse_texture_rect(get_required_string(frame_dict, "textureRect")?)?;
-    let sprite_size = parse_pair_u32(get_required_string(frame_dict, "spriteSize")?)?;
-    let texture_rotated = frame_dict
-        .get("textureRotated")
-        .and_then(Value::as_boolean)
-        .unwrap_or(false);
+    let actual_frame_key = find_frame_key(frames, frame_name).ok_or_else(|| {
+        AppError::ParseError(format!("frame `{frame_name}` not found in plist"))
+    })?;
     let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
 
     let imported = image::open(texture_path)
         .map_err(|err| AppError::ParseError(format!("failed to open imported png: {err}")))?
         .to_rgba8();
-    if imported.width() != sprite_size.width || imported.height() != sprite_size.height {
-        return Err(AppError::InvalidOperation(
-            "imported texture dimensions must match spriteSize",
-        ));
-    }
-
-    let blit_sprite: RgbaImage = if texture_rotated {
-        rotate90(&imported)
-    } else {
-        imported
-    };
-    let mut atlas = image::open(&atlas_path)
+    let atlas_rgba = image::open(&atlas_path)
         .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?
         .to_rgba8();
-    let read_texture_rect = texture_rect_for_read(&texture_rect, texture_rotated);
-    let (resolved_texture_rect, _used_swapped_size) = resolve_texture_rect_for_atlas(
-        frame_name,
-        read_texture_rect,
-        atlas.width(),
-        atlas.height(),
-    )?;
+    let mut sprites = collect_sheet_sprites_for_remerge(&plist_root, &atlas_rgba)?;
+    sprites.insert(actual_frame_key, imported);
 
-    if blit_sprite.width() != resolved_texture_rect.width
-        || blit_sprite.height() != resolved_texture_rect.height
-    {
-        return Err(AppError::InvalidOperation(
-            "imported texture dimensions do not match frame textureRect",
-        ));
-    }
-
-    for y in 0..blit_sprite.height() {
-        for x in 0..blit_sprite.width() {
-            let pixel = blit_sprite.get_pixel(x, y);
-            atlas.put_pixel(
-                resolved_texture_rect.x + x,
-                resolved_texture_rect.y + y,
-                *pixel,
-            );
-        }
-    }
-
-    save_dynamic_png_fast(&atlas_path, &image::DynamicImage::ImageRgba8(atlas))
+    remerge_and_write_sheet(plist_path, &mut plist_root, &sprites)
 }
 
 pub fn icon_editor_add_frame(
@@ -391,18 +348,13 @@ pub fn icon_editor_add_frame(
 
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
-    let atlas_path = {
-        let root_dict = plist_root
-            .as_dictionary()
-            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
-        resolve_atlas_path(plist_path, root_dict)?
-    };
     let root_dict = plist_root
-        .as_dictionary_mut()
+        .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
     {
-        let frames = frames_dictionary_mut(root_dict)?;
-        if frames.contains_key(frame_name) {
+        let frames = frames_dictionary(root_dict)?;
+        if find_frame_key(frames, frame_name).is_some() {
             return Err(AppError::InvalidOperation(
                 "frame already exists in gamesheet plist",
             ));
@@ -414,61 +366,41 @@ pub fn icon_editor_add_frame(
         .to_rgba8();
     let sprite_width = sprite.width().max(1);
     let sprite_height = sprite.height().max(1);
-
-    let atlas_old = image::open(&atlas_path)
+    let atlas_rgba = image::open(&atlas_path)
         .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?
         .to_rgba8();
-    let old_width = atlas_old.width().max(1);
-    let old_height = atlas_old.height().max(1);
-    let new_width = old_width.max(sprite_width);
-    let new_height = old_height.saturating_add(sprite_height);
-    let mut atlas_new =
-        image::RgbaImage::from_pixel(new_width, new_height, image::Rgba([0, 0, 0, 0]));
+    let mut sprites = collect_sheet_sprites_for_remerge(&plist_root, &atlas_rgba)?;
 
-    for y in 0..old_height {
-        for x in 0..old_width {
-            atlas_new.put_pixel(x, y, *atlas_old.get_pixel(x, y));
-        }
-    }
-    for y in 0..sprite_height {
-        for x in 0..sprite_width {
-            atlas_new.put_pixel(x, old_height + y, *sprite.get_pixel(x, y));
-        }
-    }
-
+    let plist_key = ensure_png_frame_key(frame_name);
     let mut frame_dict = Dictionary::new();
     frame_dict.insert("aliases".to_string(), Value::Array(Vec::new()));
     frame_dict.insert(
         "spriteOffset".to_string(),
         Value::String("{0.000,0.000}".to_string()),
     );
-    frame_dict.insert(
-        "spriteSize".to_string(),
-        Value::String(format!("{{{},{} }}", sprite_width, sprite_height).replace(" ", "")),
-    );
-    frame_dict.insert(
-        "spriteSourceSize".to_string(),
-        Value::String(format!("{{{},{} }}", sprite_width, sprite_height).replace(" ", "")),
-    );
+    let size_text = format!("{{{},{} }}", sprite_width, sprite_height).replace(" ", "");
+    frame_dict.insert("spriteSize".to_string(), Value::String(size_text.clone()));
+    frame_dict.insert("spriteSourceSize".to_string(), Value::String(size_text));
     frame_dict.insert("textureRotated".to_string(), Value::Boolean(false));
     frame_dict.insert(
         "textureRect".to_string(),
-        Value::String(
-            format!(
-                "{{{{{},{}}},{{{},{} }}}}",
-                0, old_height, sprite_width, sprite_height
-            )
-            .replace(" ", ""),
-        ),
+        Value::String(format_texture_rect(&IconEditorRect {
+            x: 0,
+            y: 0,
+            width: sprite_width,
+            height: sprite_height,
+        })),
     );
     {
-        let frames = frames_dictionary_mut(root_dict)?;
-        frames.insert(frame_name.to_string(), Value::Dictionary(frame_dict));
+        let root_dict_mut = plist_root
+            .as_dictionary_mut()
+            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+        let frames = frames_dictionary_mut(root_dict_mut)?;
+        frames.insert(plist_key.clone(), Value::Dictionary(frame_dict));
     }
-    upsert_metadata_size(root_dict, new_width, new_height)?;
+    sprites.insert(plist_key, sprite);
 
-    save_dynamic_png_fast(&atlas_path, &image::DynamicImage::ImageRgba8(atlas_new))?;
-    write_plist_atomically(plist_path, &plist_root)
+    remerge_and_write_sheet(plist_path, &mut plist_root, &sprites)
 }
 
 pub fn icon_editor_extract_frames(
@@ -1023,6 +955,30 @@ pub fn icon_editor_copy_sheet(
     })
 }
 
+fn frame_key_stem(name: &str) -> &str {
+    name.trim().strip_suffix(".png").unwrap_or(name.trim())
+}
+
+fn ensure_png_frame_key(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    if trimmed.ends_with(".png") {
+        trimmed.to_string()
+    } else {
+        format!("{trimmed}.png")
+    }
+}
+
+fn find_frame_key(frames: &Dictionary, name: &str) -> Option<String> {
+    let stem = frame_key_stem(name);
+    frames
+        .keys()
+        .find(|key| frame_key_stem(key).eq_ignore_ascii_case(stem))
+        .cloned()
+}
+
 fn frames_dictionary(root_dict: &Dictionary) -> Result<&Dictionary, AppError> {
     root_dict
         .get("frames")
@@ -1190,6 +1146,33 @@ fn resolve_texture_rect_for_atlas(
     Err(AppError::ParseError(format!(
         "frame `{frame_name}` textureRect is outside atlas bounds"
     )))
+}
+
+fn remerge_and_write_sheet(
+    plist_path: &Path,
+    plist_root: &mut Value,
+    sprites: &BTreeMap<String, RgbaImage>,
+) -> Result<(), AppError> {
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+    let merger_options = MergerOptions {
+        include_outside_plist_files: false,
+        dimensions: None,
+        sheet_concurrency: 1,
+    };
+    let sheet_label = plist_path.to_string_lossy().to_string();
+    let mut on_sprite_loaded = |_label: String| {};
+    let (merged_atlas, _w, _h, _count, _issues) = merge_plist_from_memory(
+        plist_root,
+        sprites,
+        sheet_label.as_str(),
+        &merger_options,
+        &mut on_sprite_loaded,
+    )?;
+    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    write_plist_atomically(plist_path, plist_root)
 }
 
 fn number_to_u32(value: f32) -> Result<u32, AppError> {

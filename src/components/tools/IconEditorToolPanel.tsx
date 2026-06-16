@@ -455,6 +455,14 @@ const makeDefaultRoleMap = (): Record<IconLayerRole, string> => ({
 
 const stripPngExtension = (name: string): string => name.replace(/\.png$/i, "").trim();
 
+const ensurePngExtension = (name: string): string => {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  return /\.png$/i.test(trimmed) ? trimmed : `${trimmed}.png`;
+};
+
 /**
  * Plist frame naming: `{type}_{number}_001`, `{type}_{number}_2_001`, `{type}_{number}_glow_001`,
  * `{type}_{number}_extra_001` (optional `.png`). Returns `{type}_{number}` stem or null if unknown.
@@ -488,15 +496,15 @@ function parseIconFrameStem(name: string): string | null {
 function buildIconFrameNameForRole(stem: string, role: IconLayerRole): string {
   switch (role) {
     case "primary":
-      return `${stem}_001`;
+      return ensurePngExtension(`${stem}_001`);
     case "secondary":
-      return `${stem}_2_001`;
+      return ensurePngExtension(`${stem}_2_001`);
     case "glow":
-      return `${stem}_glow_001`;
+      return ensurePngExtension(`${stem}_glow_001`);
     case "extra":
-      return `${stem}_extra_001`;
+      return ensurePngExtension(`${stem}_extra_001`);
     case "capsule":
-      return `${stem}_3_001`;
+      return ensurePngExtension(`${stem}_3_001`);
   }
 }
 
@@ -526,8 +534,10 @@ function inferStemFromFrames(frames: IconEditorFrameInfo[]): string | null {
 }
 
 function resolveFrameNameFromPlist(frames: IconEditorFrameInfo[], canonical: string): string | null {
-  const lower = canonical.toLowerCase();
-  const found = frames.find((frame) => frame.name.toLowerCase() === lower);
+  const lower = stripPngExtension(canonical).toLowerCase();
+  const found = frames.find(
+    (frame) => stripPngExtension(frame.name).toLowerCase() === lower,
+  );
   return found?.name ?? null;
 }
 
@@ -1342,7 +1352,7 @@ export function IconEditorToolPanel() {
                     : role === "extra"
                       ? "_extra_001"
                       : "_3_001";
-            return `${robotStem}_${selectedRobotPartId}${suffix}`;
+            return ensurePngExtension(`${robotStem}_${selectedRobotPartId}${suffix}`);
           })()
         : isSpiderSheet
           ? (() => {
@@ -1361,7 +1371,7 @@ export function IconEditorToolPanel() {
                       : role === "extra"
                         ? "_extra_001"
                         : "_3_001";
-              return `${spiderStem}_${selectedSpiderPartId}${suffix}`;
+              return ensurePngExtension(`${spiderStem}_${selectedSpiderPartId}${suffix}`);
             })()
           : buildIconFrameNameForRole(stem, role);
       const existingPlistName = resolveFrameNameFromPlist(sheetInfo.frames, targetFrameName);
