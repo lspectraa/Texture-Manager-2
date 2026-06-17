@@ -25,7 +25,6 @@ export function AppSidebar({
       }`}
       aria-label="Application navigation"
     >
-      <div className="tm-sidebar-main">
       <button
         type="button"
         className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${
@@ -111,7 +110,6 @@ export function AppSidebar({
           </section>
         );
       })}
-      </div>
 
       <button
         type="button"

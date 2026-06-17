@@ -26,6 +26,10 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  FileCode2,
+  Layers3,
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { isTauriRuntime } from "../../services/tauriOperations";
@@ -77,6 +81,14 @@ const BIRD_CAPSULE_ROLES: IconLayerRole[] = ["capsule"];
 const BASE_LAYER_ROLES: IconLayerRole[] = ["glow", "secondary", "primary", "extra"];
 const BIRD_LAYER_ROLES: IconLayerRole[] = ["glow", "capsule", "secondary", "primary", "extra"];
 const TINT_TARGETS: TintTarget[] = ["primary", "secondary", "glow"];
+
+const ROLE_LABELS: Record<IconLayerRole, string> = {
+  glow: "Glow",
+  secondary: "Secondary",
+  primary: "Primary",
+  extra: "Extra",
+  capsule: "Capsule",
+};
 const ROBOT_PART_DRAW_ORDER: RobotPartId[] = ["02", "03", "04", "01"];
 const ROBOT_PART_LABELS: Record<RobotPartId, string> = {
   "01": "Head",
@@ -282,20 +294,24 @@ function computeFloorTopY(): number {
 
 const quantizeOffset = (value: number): number => Math.round(value / OFFSET_STEP) * OFFSET_STEP;
 
-/** Zoom UI and auto baseline use 10% steps (0.1). */
+/** Manual zoom controls snap to 10% steps (0.1). */
 const snapZoomToTenth = (value: number): number => Math.round(value * 10) / 10;
 const clampZoom = (value: number): number =>
   snapZoomToTenth(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value)));
 
-/** CSS viewport height: 1080 → 100%, 2160 (4K-class) → 200%; linear between, clamped, snapped to 10%. */
-const ZOOM_AUTO_VIEWPORT_HEIGHT_1080P = 1080;
-const ZOOM_AUTO_VIEWPORT_HEIGHT_4K = 2160;
+/** Scrollport height mapped to 100% auto zoom (typical 1080p-class layout). */
+const ZOOM_AUTO_VIEWPORT_HEIGHT_BASE = 1000;
+/** Scrollport height mapped to 200% auto zoom — lower values ramp zoom sooner on large windows. */
+const ZOOM_AUTO_VIEWPORT_HEIGHT_FULL = 1600;
+const ZOOM_AUTO_ZOOM_MIN = 1;
+const ZOOM_AUTO_ZOOM_MAX = 2;
 
+/** Linear auto zoom from scrollport height; continuous (not snapped to 10% steps). */
 function computeAutoResolutionZoom(cssViewportHeight: number): number {
-  const span = Math.max(1, ZOOM_AUTO_VIEWPORT_HEIGHT_4K - ZOOM_AUTO_VIEWPORT_HEIGHT_1080P);
-  const linear = 1 + (cssViewportHeight - ZOOM_AUTO_VIEWPORT_HEIGHT_1080P) / span;
-  const clampedLinear = Math.min(2, Math.max(1, linear));
-  return snapZoomToTenth(clampedLinear);
+  const height = Math.max(1, cssViewportHeight);
+  const span = Math.max(1, ZOOM_AUTO_VIEWPORT_HEIGHT_FULL - ZOOM_AUTO_VIEWPORT_HEIGHT_BASE);
+  const linear = ZOOM_AUTO_ZOOM_MIN + (height - ZOOM_AUTO_VIEWPORT_HEIGHT_BASE) / span;
+  return Math.min(ZOOM_AUTO_ZOOM_MAX, Math.max(ZOOM_AUTO_ZOOM_MIN, linear));
 }
 
 /** Alpha trim insets from full image edges (matches `merger::trim_transparent_edges` semantics). */
@@ -810,6 +826,82 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
   return <canvas ref={canvasRef} className="tm-icon-editor-layer-canvas" />;
 }
 
+type SpriteOffsetAxisControlsProps = {
+  axis: "x" | "y";
+  value: number;
+  frameName: string;
+  onBump: (frameName: string, axis: "x" | "y", sign: number, step?: number) => void;
+};
+
+function SpriteOffsetAxisControls({
+  axis,
+  value,
+  frameName,
+  onBump,
+}: SpriteOffsetAxisControlsProps) {
+  const isX = axis === "x";
+  const DecreaseIcon = isX ? ChevronLeft : ChevronUp;
+  const IncreaseIcon = isX ? ChevronRight : ChevronDown;
+  const axisLabel = axis.toUpperCase();
+
+  return (
+    <div className={`tm-icon-editor-plist-offset-card tm-icon-editor-plist-offset-card-${axis}`}>
+      <span className={`tm-icon-editor-plist-offset-axis tm-icon-editor-plist-offset-axis-${axis}`}>
+        {axisLabel}
+      </span>
+      <div className={`tm-icon-editor-plist-offset-controls tm-icon-editor-plist-offset-controls-${axis}`}>
+        <div className="tm-icon-editor-plist-offset-step-group">
+          <button
+            type="button"
+            className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-coarse"
+            aria-label={`Decrease sprite offset ${axisLabel} by 1`}
+            title="−1"
+            onClick={() => onBump(frameName, axis, -1, OFFSET_BUMP_COARSE)}
+          >
+            <DecreaseIcon size={15} strokeWidth={2.25} aria-hidden />
+            <span className="tm-icon-editor-plist-offset-btn-step">1</span>
+          </button>
+          <button
+            type="button"
+            className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-fine"
+            aria-label={`Decrease sprite offset ${axisLabel} by 0.5`}
+            title="−0.5"
+            onClick={() => onBump(frameName, axis, -1)}
+          >
+            <DecreaseIcon size={12} strokeWidth={2} aria-hidden />
+            <span className="tm-icon-editor-plist-offset-btn-step">½</span>
+          </button>
+        </div>
+        <div className="tm-icon-editor-plist-offset-value" aria-label={`Sprite offset ${axisLabel}`}>
+          {value.toFixed(1)}
+        </div>
+        <div className="tm-icon-editor-plist-offset-step-group">
+          <button
+            type="button"
+            className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-fine"
+            aria-label={`Increase sprite offset ${axisLabel} by 0.5`}
+            title="+0.5"
+            onClick={() => onBump(frameName, axis, 1)}
+          >
+            <IncreaseIcon size={12} strokeWidth={2} aria-hidden />
+            <span className="tm-icon-editor-plist-offset-btn-step">½</span>
+          </button>
+          <button
+            type="button"
+            className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-coarse"
+            aria-label={`Increase sprite offset ${axisLabel} by 1`}
+            title="+1"
+            onClick={() => onBump(frameName, axis, 1, OFFSET_BUMP_COARSE)}
+          >
+            <IncreaseIcon size={15} strokeWidth={2.25} aria-hidden />
+            <span className="tm-icon-editor-plist-offset-btn-step">1</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function IconEditorToolPanel() {
   const [sheetInfo, setSheetInfo] = useState<IconEditorSheetInfo | null>(null);
   const [isBusy, setIsBusy] = useState(false);
@@ -819,7 +911,7 @@ export function IconEditorToolPanel() {
   >({});
   const [trimByFrameName, setTrimByFrameName] = useState<Record<string, TrimInsets>>({});
   const [viewportCssHeight, setViewportCssHeight] = useState(() =>
-    typeof window !== "undefined" ? window.innerHeight : ZOOM_AUTO_VIEWPORT_HEIGHT_1080P,
+    typeof window !== "undefined" ? window.innerHeight : ZOOM_AUTO_VIEWPORT_HEIGHT_BASE,
   );
   const autoResolutionZoom = useMemo(
     () => computeAutoResolutionZoom(viewportCssHeight),
@@ -858,8 +950,9 @@ export function IconEditorToolPanel() {
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
-  const hasAppliedInitialZoomRef = useRef(false);
+  const lastObservedScrollportHeightRef = useRef(0);
   const stageScrollPortRef = useRef<HTMLDivElement | null>(null);
+  const focusStageAnchorRafRef = useRef<number | null>(null);
   const stageElementRef = useRef<HTMLDivElement | null>(null);
   const scrollPanRef = useRef<{
     pointerId: number;
@@ -1006,7 +1099,7 @@ export function IconEditorToolPanel() {
     () =>
       Math.max(
         STAGE_BASE_WIDTH,
-        Math.ceil(scrollportSize.w / Math.max(0.001, VIEW_PIXEL_SCALE * zoom)),
+        scrollportSize.w / Math.max(0.001, VIEW_PIXEL_SCALE * zoom),
       ),
     [scrollportSize.w, zoom],
   );
@@ -1021,6 +1114,42 @@ export function IconEditorToolPanel() {
   const zoomTrackLayoutWidth = Math.max(scrollportSize.w, stageSlotWidth);
   const zoomTrackLayoutHeight = Math.max(scrollportSize.h, stageSlotHeight);
 
+  const focusStageAnchorInScrollPort = useCallback(() => {
+    const element = stageScrollPortRef.current;
+    if (!element || isMiddlePanning) {
+      return;
+    }
+    const anchorX = stagePaintOffsetX + STAGE_ORIGIN_X;
+    const anchorY = stagePaintOffsetY + stageOriginY;
+    const maxLeft = Math.max(0, element.scrollWidth - element.clientWidth);
+    const maxTop = Math.max(0, element.scrollHeight - element.clientHeight);
+    element.scrollLeft = Math.max(0, Math.min(maxLeft, anchorX - element.clientWidth / 2));
+    element.scrollTop = Math.max(0, Math.min(maxTop, anchorY - element.clientHeight / 2));
+    clampScrollPortScroll();
+  }, [
+    clampScrollPortScroll,
+    isMiddlePanning,
+    stageOriginY,
+    stagePaintOffsetX,
+    stagePaintOffsetY,
+  ]);
+
+  const scheduleFocusStageAnchor = useCallback(() => {
+    if (focusStageAnchorRafRef.current !== null) {
+      return;
+    }
+    focusStageAnchorRafRef.current = window.requestAnimationFrame(() => {
+      focusStageAnchorRafRef.current = null;
+      focusStageAnchorInScrollPort();
+    });
+  }, [focusStageAnchorInScrollPort]);
+
+  const focusStageAnchorInScrollPortRef = useRef(focusStageAnchorInScrollPort);
+  focusStageAnchorInScrollPortRef.current = focusStageAnchorInScrollPort;
+
+  const scheduleFocusStageAnchorRef = useRef(scheduleFocusStageAnchor);
+  scheduleFocusStageAnchorRef.current = scheduleFocusStageAnchor;
+
   useLayoutEffect(() => {
     const element = stageScrollPortRef.current;
     if (!element) {
@@ -1029,55 +1158,46 @@ export function IconEditorToolPanel() {
     const update = (): void => {
       const w = Math.max(1, element.clientWidth);
       const h = Math.max(1, element.clientHeight);
-      setScrollportSize({ w, h });
-      setViewportCssHeight(h);
-      if (!hasAppliedInitialZoomRef.current) {
-        setZoom(computeAutoResolutionZoom(h));
-        hasAppliedInitialZoomRef.current = true;
+
+      setScrollportSize((previous) =>
+        previous.w === w && previous.h === h ? previous : { w, h },
+      );
+      setViewportCssHeight((previous) => (previous === h ? previous : h));
+
+      if (Math.abs(h - lastObservedScrollportHeightRef.current) > 0.5) {
+        lastObservedScrollportHeightRef.current = h;
+        const nextZoom = computeAutoResolutionZoom(h);
+        setZoom((current) =>
+          Math.abs(current - nextZoom) < 0.0001 ? current : nextZoom,
+        );
       }
-      queueMicrotask(() => {
-        clampScrollPortScroll();
-      });
     };
     update();
     const observer = new ResizeObserver(update);
     observer.observe(element);
-    return () => observer.disconnect();
-  }, [clampScrollPortScroll]);
+    return () => {
+      observer.disconnect();
+      if (focusStageAnchorRafRef.current !== null) {
+        window.cancelAnimationFrame(focusStageAnchorRafRef.current);
+        focusStageAnchorRafRef.current = null;
+      }
+    };
+  }, []);
 
   useLayoutEffect(() => {
-    clampScrollPortScroll();
-  }, [zoom, stageRenderWidth, clampScrollPortScroll]);
+    scheduleFocusStageAnchorRef.current();
+  }, [zoom]);
 
   useLayoutEffect(() => {
     if (viewportFocusGeneration === 0) {
       return;
     }
-    const element = stageScrollPortRef.current;
-    if (!element) {
-      return;
-    }
-    const apply = (): void => {
-      const anchorX = stagePaintOffsetX + STAGE_ORIGIN_X;
-      const anchorY = stagePaintOffsetY + stageOriginY;
-      const maxLeft = Math.max(0, element.scrollWidth - element.clientWidth);
-      const maxTop = Math.max(0, element.scrollHeight - element.clientHeight);
-      element.scrollLeft = Math.max(0, Math.min(maxLeft, anchorX - element.clientWidth / 2));
-      element.scrollTop = Math.max(0, Math.min(maxTop, anchorY - element.clientHeight / 2));
-      clampScrollPortScroll();
-    };
     requestAnimationFrame(() => {
-      requestAnimationFrame(apply);
+      requestAnimationFrame(() => {
+        focusStageAnchorInScrollPortRef.current();
+      });
     });
-  }, [
-    viewportFocusGeneration,
-    stagePaintOffsetX,
-    stagePaintOffsetY,
-    stageOriginY,
-    zoomTrackLayoutWidth,
-    zoomTrackLayoutHeight,
-    clampScrollPortScroll,
-  ]);
+  }, [viewportFocusGeneration]);
 
   const getEffectiveOffset = useCallback(
     (frameName: string): IconEditorPoint => {
@@ -1977,7 +2097,9 @@ export function IconEditorToolPanel() {
 
   const roleControls = roleOrder.map((role) => (
     <div
-      className={`tm-icon-editor-role-row ${inspectorRole === role ? "tm-icon-editor-role-row-active" : ""}`}
+      className={`tm-icon-editor-role-card tm-icon-editor-role-card-${role}${
+        inspectorRole === role ? " tm-icon-editor-role-card-active" : ""
+      }`}
       key={role}
       onClick={(event) => {
         const target = event.target as HTMLElement;
@@ -1988,13 +2110,14 @@ export function IconEditorToolPanel() {
         setInspectorFrameOverride(null);
       }}
     >
-      <label>
-        {role[0].toUpperCase()}
-        {role.slice(1)} frame
-        <div className="tm-folder-input tm-icon-editor-role-actions">
-          <div className="tm-select-wrap">
-            <select
-              className="tm-select"
+      <div className="tm-icon-editor-role-card-head">
+        <span className="tm-icon-editor-role-chip">{ROLE_LABELS[role]}</span>
+        <span className="tm-icon-editor-role-card-hint">Layer frame</span>
+      </div>
+      <div className="tm-icon-editor-role-actions">
+        <div className="tm-select-wrap">
+          <select
+            className="tm-select"
               value={
                 isRobotIcon
                   ? role === "extra" && selectedRobotPartId === "01"
@@ -2067,31 +2190,30 @@ export function IconEditorToolPanel() {
             onClick={() => importFrame(role)}
             disabled={!sheetInfo || isBusy}
           >
-            <Upload size={14} />
+            <Upload size={14} strokeWidth={2} aria-hidden />
+          </button>
+      </div>
+      {role === "extra" &&
+      (!(isRobotIcon || isSpiderIcon) ||
+        (isRobotIcon && selectedRobotPartId === "01") ||
+        (isSpiderIcon && selectedSpiderPartId === "01")) ? (
+        <div className="tm-icon-editor-role-extra-actions">
+          <button
+            type="button"
+            className="tm-primary-btn tm-icon-editor-remove-extra-btn"
+            title="Clear extra frame mapping"
+            disabled={!roleMap.extra.trim() || isBusy}
+            onClick={() => {
+              setRoleMap((previous) => ({ ...previous, extra: "" }));
+              setInspectorFrameOverride(null);
+              setInspectorRole((current) => (current === "extra" ? "primary" : current));
+            }}
+          >
+            <Trash2 size={14} />
+            Remove
           </button>
         </div>
-        {role === "extra" &&
-        (!(isRobotIcon || isSpiderIcon) ||
-          (isRobotIcon && selectedRobotPartId === "01") ||
-          (isSpiderIcon && selectedSpiderPartId === "01")) ? (
-          <div className="tm-icon-editor-role-extra-actions">
-            <button
-              type="button"
-              className="tm-primary-btn tm-icon-editor-remove-extra-btn"
-              title="Clear extra frame mapping"
-              disabled={!roleMap.extra.trim() || isBusy}
-              onClick={() => {
-                setRoleMap((previous) => ({ ...previous, extra: "" }));
-                setInspectorFrameOverride(null);
-                setInspectorRole((current) => (current === "extra" ? "primary" : current));
-              }}
-            >
-              <Trash2 size={14} />
-              Remove
-            </button>
-          </div>
-        ) : null}
-      </label>
+      ) : null}
     </div>
   ));
 
@@ -3005,7 +3127,13 @@ export function IconEditorToolPanel() {
               aria-label="Frame role mapping"
             >
               <div className="tm-icon-editor-side-panel-head">
-                <h3>Frames</h3>
+                <div className="tm-icon-editor-side-panel-head-copy">
+                  <h3>
+                    <Layers3 size={14} strokeWidth={2} aria-hidden />
+                    Frames
+                  </h3>
+                  <p className="tm-icon-editor-side-panel-subtitle">Assign frames to layers</p>
+                </div>
                 <button
                   type="button"
                   className="tm-icon-editor-side-panel-toggle"
@@ -3027,7 +3155,9 @@ export function IconEditorToolPanel() {
                     <button
                       key={partId}
                       type="button"
-                      className={selectedRobotPartId === partId ? "active" : ""}
+                      className={`tm-icon-editor-side-panel-tab${
+                        selectedRobotPartId === partId ? " active" : ""
+                      }`}
                       onClick={() => {
                         setSelectedRobotPartId(partId);
                         setInspectorFrameOverride(null);
@@ -3043,7 +3173,9 @@ export function IconEditorToolPanel() {
                     <button
                       key={partId}
                       type="button"
-                      className={selectedSpiderPartId === partId ? "active" : ""}
+                      className={`tm-icon-editor-side-panel-tab${
+                        selectedSpiderPartId === partId ? " active" : ""
+                      }`}
                       onClick={() => {
                         setSelectedSpiderPartId(partId);
                         setInspectorFrameOverride(null);
@@ -3067,7 +3199,13 @@ export function IconEditorToolPanel() {
               aria-label="Frame plist properties"
             >
               <div className="tm-icon-editor-side-panel-head">
-                <h3>Plist</h3>
+                <div className="tm-icon-editor-side-panel-head-copy">
+                  <h3>
+                    <FileCode2 size={14} strokeWidth={2} aria-hidden />
+                    Plist
+                  </h3>
+                  <p className="tm-icon-editor-side-panel-subtitle">Frame properties and offsets</p>
+                </div>
                 <button
                   type="button"
                   className="tm-icon-editor-side-panel-toggle"
@@ -3089,7 +3227,9 @@ export function IconEditorToolPanel() {
                     <button
                       key={partId}
                       type="button"
-                      className={selectedRobotPartId === partId ? "active" : ""}
+                      className={`tm-icon-editor-side-panel-tab${
+                        selectedRobotPartId === partId ? " active" : ""
+                      }`}
                       onClick={() => {
                         setSelectedRobotPartId(partId);
                         setInspectorFrameOverride(null);
@@ -3105,7 +3245,9 @@ export function IconEditorToolPanel() {
                     <button
                       key={partId}
                       type="button"
-                      className={selectedSpiderPartId === partId ? "active" : ""}
+                      className={`tm-icon-editor-side-panel-tab${
+                        selectedSpiderPartId === partId ? " active" : ""
+                      }`}
                       onClick={() => {
                         setSelectedSpiderPartId(partId);
                         setInspectorFrameOverride(null);
@@ -3116,164 +3258,115 @@ export function IconEditorToolPanel() {
                   ))}
                 </div>
               ) : null}
-              <div className="tm-icon-editor-plist-role-tabs">
+              <div className="tm-icon-editor-plist-role-tabs" role="tablist" aria-label="Plist role">
                 {roleOrder.map((role) => (
                   <button
                     key={role}
                     type="button"
-                    className={inspectorRole === role ? "active" : ""}
+                    role="tab"
+                    aria-selected={inspectorRole === role}
+                    className={`tm-icon-editor-side-panel-tab tm-icon-editor-side-panel-tab-${role}${
+                      inspectorRole === role ? " active" : ""
+                    }`}
                     onClick={() => {
                       setInspectorRole(role);
                       setInspectorFrameOverride(null);
                     }}
                   >
-                    {role[0].toUpperCase()}
-                    {role.slice(1)}
+                    {ROLE_LABELS[role]}
                   </button>
                 ))}
               </div>
               <div className="tm-icon-editor-plist-scroll">
                 {!effectiveInspectorFrameName ? (
-                  <p className="desc" style={{ margin: 0 }}>
-                    Map a frame for this role to inspect plist values.
-                  </p>
+                  <div className="tm-icon-editor-panel-empty">
+                    <FileCode2 size={20} strokeWidth={1.75} aria-hidden />
+                    <p className="tm-icon-editor-panel-empty-title">No frame selected</p>
+                    <p className="tm-icon-editor-panel-empty-hint">
+                      Choose a frame for this role to inspect plist values.
+                    </p>
+                  </div>
                 ) : !inspectorFrame || !inspectorEffectiveOffset || !inspectorTrim ? (
-                  <p className="desc" style={{ margin: 0 }}>
-                    Frame data is still loading or missing for <code>{effectiveInspectorFrameName}</code>.
-                  </p>
+                  <div className="tm-icon-editor-panel-empty tm-icon-editor-panel-empty-warning">
+                    <FileCode2 size={20} strokeWidth={1.75} aria-hidden />
+                    <p className="tm-icon-editor-panel-empty-title">Frame data unavailable</p>
+                    <p className="tm-icon-editor-panel-empty-hint">
+                      Could not load plist data for{" "}
+                      <code>{effectiveInspectorFrameName}</code>.
+                    </p>
+                  </div>
                 ) : (
-                  <>
-                    <dl style={{ margin: 0, display: "flex", flexDirection: "column", gap: "8px" }}>
-                      <div className="tm-icon-editor-plist-row">
-                        <dt>Frame</dt>
-                        <dd title={effectiveInspectorFrameName}>{effectiveInspectorFrameName}</dd>
+                  <div className="tm-icon-editor-plist-content">
+                    <div className="tm-icon-editor-plist-frame-head">
+                      <span className="tm-icon-editor-plist-section-label">Active frame</span>
+                      <code className="tm-icon-editor-plist-frame-name" title={effectiveInspectorFrameName}>
+                        {effectiveInspectorFrameName}
+                      </code>
+                    </div>
+
+                    <section className="tm-icon-editor-plist-section" aria-labelledby="plist-trim-title">
+                      <h4 id="plist-trim-title" className="tm-icon-editor-plist-section-title">
+                        Trim insets
+                      </h4>
+                      <div className="tm-icon-editor-plist-trim-grid">
+                        <div className="tm-icon-editor-plist-metric">
+                          <span className="tm-icon-editor-plist-metric-label">Left</span>
+                          <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.left}</span>
+                        </div>
+                        <div className="tm-icon-editor-plist-metric">
+                          <span className="tm-icon-editor-plist-metric-label">Top</span>
+                          <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.top}</span>
+                        </div>
+                        <div className="tm-icon-editor-plist-metric">
+                          <span className="tm-icon-editor-plist-metric-label">Right</span>
+                          <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.right}</span>
+                        </div>
+                        <div className="tm-icon-editor-plist-metric">
+                          <span className="tm-icon-editor-plist-metric-label">Bottom</span>
+                          <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.bottom}</span>
+                        </div>
                       </div>
-                      <div className="tm-icon-editor-plist-row">
-                        <dt>Trim insets (L,T,R,B)</dt>
-                        <dd>
-                          {inspectorTrim.left},{inspectorTrim.top},{inspectorTrim.right},
-                          {inspectorTrim.bottom}
-                        </dd>
+                    </section>
+
+                    <section className="tm-icon-editor-plist-section" aria-labelledby="plist-offset-title">
+                      <h4 id="plist-offset-title" className="tm-icon-editor-plist-section-title">
+                        Sprite offset
+                      </h4>
+                      <div className="tm-icon-editor-plist-offset-grid">
+                        <SpriteOffsetAxisControls
+                          axis="x"
+                          value={inspectorEffectiveOffset.x}
+                          frameName={effectiveInspectorFrameName}
+                          onBump={bumpSpriteOffset}
+                        />
+                        <SpriteOffsetAxisControls
+                          axis="y"
+                          value={inspectorEffectiveOffset.y}
+                          frameName={effectiveInspectorFrameName}
+                          onBump={bumpSpriteOffset}
+                        />
                       </div>
-                      <div className="tm-icon-editor-plist-row">
-                        <dt>spriteOffset (merge, null input)</dt>
-                        <dd title={"spriteOffset after merge when pre-merge offset is {0,0}"}>
-                          {mergeOffsetFromNullifiedInput
-                            ? formatPairF32(mergeOffsetFromNullifiedInput)
-                            : "—"}
-                        </dd>
-                      </div>
-                      <div className="tm-icon-editor-plist-block">
+                      <dl className="tm-icon-editor-plist-kv-list">
                         <div className="tm-icon-editor-plist-row">
-                          <dt>spriteOffset X</dt>
-                          <dd>
-                            <div className="tm-icon-editor-plist-offset-controls">
-                              <button
-                                type="button"
-                                aria-label="Decrease sprite offset X by 1"
-                                onClick={() =>
-                                  bumpSpriteOffset(
-                                    effectiveInspectorFrameName,
-                                    "x",
-                                    -1,
-                                    OFFSET_BUMP_COARSE,
-                                  )
-                                }
-                              >
-                                −1
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Decrease sprite offset X by 0.5"
-                                onClick={() => bumpSpriteOffset(effectiveInspectorFrameName, "x", -1)}
-                              >
-                                −0.5
-                              </button>
-                              <span className="tm-icon-editor-plist-offset-value">
-                                {inspectorEffectiveOffset.x.toFixed(1)}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label="Increase sprite offset X by 0.5"
-                                onClick={() => bumpSpriteOffset(effectiveInspectorFrameName, "x", 1)}
-                              >
-                                +0.5
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Increase sprite offset X by 1"
-                                onClick={() =>
-                                  bumpSpriteOffset(
-                                    effectiveInspectorFrameName,
-                                    "x",
-                                    1,
-                                    OFFSET_BUMP_COARSE,
-                                  )
-                                }
-                              >
-                                +1
-                              </button>
-                            </div>
+                          <dt>Merged offset</dt>
+                          <dd title="Offset after merge when pre-merge offset is {0,0}">
+                            {mergeOffsetFromNullifiedInput
+                              ? formatPairF32(mergeOffsetFromNullifiedInput)
+                              : "—"}
                           </dd>
                         </div>
                         <div className="tm-icon-editor-plist-row">
-                          <dt>spriteOffset Y</dt>
-                          <dd>
-                            <div className="tm-icon-editor-plist-offset-controls">
-                              <button
-                                type="button"
-                                aria-label="Decrease sprite offset Y by 1"
-                                onClick={() =>
-                                  bumpSpriteOffset(
-                                    effectiveInspectorFrameName,
-                                    "y",
-                                    -1,
-                                    OFFSET_BUMP_COARSE,
-                                  )
-                                }
-                              >
-                                −1
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Decrease sprite offset Y by 0.5"
-                                onClick={() => bumpSpriteOffset(effectiveInspectorFrameName, "y", -1)}
-                              >
-                                −0.5
-                              </button>
-                              <span className="tm-icon-editor-plist-offset-value">
-                                {inspectorEffectiveOffset.y.toFixed(1)}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label="Increase sprite offset Y by 0.5"
-                                onClick={() => bumpSpriteOffset(effectiveInspectorFrameName, "y", 1)}
-                              >
-                                +0.5
-                              </button>
-                              <button
-                                type="button"
-                                aria-label="Increase sprite offset Y by 1"
-                                onClick={() =>
-                                  bumpSpriteOffset(
-                                    effectiveInspectorFrameName,
-                                    "y",
-                                    1,
-                                    OFFSET_BUMP_COARSE,
-                                  )
-                                }
-                              >
-                                +1
-                              </button>
-                            </div>
-                          </dd>
-                        </div>
-                        <div className="tm-icon-editor-plist-row">
-                          <dt>spriteOffset (plist)</dt>
+                          <dt>Plist offset</dt>
                           <dd>{formatPairF32(inspectorEffectiveOffset)}</dd>
                         </div>
-                      </div>
-                      <div className="tm-icon-editor-plist-block">
+                      </dl>
+                    </section>
+
+                    <section className="tm-icon-editor-plist-section" aria-labelledby="plist-atlas-title">
+                      <h4 id="plist-atlas-title" className="tm-icon-editor-plist-section-title">
+                        Atlas
+                      </h4>
+                      <dl className="tm-icon-editor-plist-kv-list">
                         <div className="tm-icon-editor-plist-row">
                           <dt>spriteSize</dt>
                           <dd>
@@ -3293,9 +3386,9 @@ export function IconEditorToolPanel() {
                           <dt>textureRect</dt>
                           <dd>{formatTextureRect(inspectorFrame.textureRect)}</dd>
                         </div>
-                      </div>
-                    </dl>
-                  </>
+                      </dl>
+                    </section>
+                  </div>
                 )}
               </div>
                 </div>
