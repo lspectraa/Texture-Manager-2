@@ -1,6 +1,13 @@
-import { FolderOpen, GitBranch } from "lucide-react";
-import { GlassNumberInput } from "../inputs/GlassNumberInput";
+import { Settings2 } from "lucide-react";
 import { PickFolderFn } from "./types";
+import {
+  ToolCheckboxField,
+  ToolNumberField,
+  ToolPage,
+  ToolPageHeader,
+  ToolPathsSection,
+  ToolSection,
+} from "./layout";
 
 type PorterToolPanelProps = {
   inputDir: string;
@@ -26,78 +33,35 @@ export function PorterToolPanel({
   pickFolder,
 }: PorterToolPanelProps) {
   return (
-    <>
-      <h2 className="tm-tool-title">
-        <GitBranch size={19} />
-        Porter
-      </h2>
-      <p className="desc tm-explainer">
-        Rebuild sheets at scaled output tiers and copy standalone sprites when no plist pair
-        exists.
-      </p>
-      <div className="tm-info-chips">
-        <span className="chip">In-memory split/merge</span>
-        <span className="chip">Standalone png copy</span>
-      </div>
-      <div className="tm-form-row tm-form-row-2">
-        <label>
-          Input directory
-          <div className="tm-folder-input">
-            <input
-              value={inputDir}
-              onChange={(event) => onInputDirChange(event.target.value)}
-              placeholder="C:/path/to/texturepack"
-            />
-            <button
-              type="button"
-              onClick={() =>
-                pickFolder((path) => {
-                  onInputDirChange(path);
-                  if (!outputDir.trim()) {
-                    onOutputDirChange(path);
-                  }
-                })
-              }
-            >
-              <FolderOpen size={15} />
-              Browse
-            </button>
-          </div>
-        </label>
-        <label>
-          Output directory
-          <div className="tm-folder-input">
-            <input
-              value={outputDir}
-              onChange={(event) => onOutputDirChange(event.target.value)}
-              placeholder="C:/path/to/output"
-            />
-            <button type="button" onClick={() => pickFolder(onOutputDirChange)}>
-              <FolderOpen size={15} />
-              Browse
-            </button>
-          </div>
-        </label>
-      </div>
-      <div className="tm-form-row tm-form-row-2">
-        <label className="checkbox">
-          <input
-            type="checkbox"
-            checked={lowPort}
-            onChange={(event) => onLowPortChange(event.target.checked)}
-          />
-          Port to Low Graphics
-        </label>
-        <label className="tm-field-compact">
-          Concurrent gamesheets and textures (1-64)
-          <GlassNumberInput
-            value={sheetConcurrency}
-            min={1}
-            max={64}
-            onChange={onSheetConcurrencyChange}
-          />
-        </label>
-      </div>
-    </>
+    <ToolPage accent="sky">
+      <ToolPageHeader toolId="porter" />
+      <ToolPathsSection
+        inputDir={inputDir}
+        outputDir={outputDir}
+        onInputDirChange={onInputDirChange}
+        onOutputDirChange={onOutputDirChange}
+        pickFolder={pickFolder}
+      />
+      <ToolSection
+        title="Port Settings"
+        subtitle="Choose output tier and parallel processing limits"
+        icon={Settings2}
+        columns={2}
+      >
+        <ToolCheckboxField
+          label="Port to Low Graphics"
+          checked={lowPort}
+          onChange={onLowPortChange}
+        />
+        <ToolNumberField
+          label="Concurrent gamesheets and textures"
+          hint="1–64"
+          value={sheetConcurrency}
+          min={1}
+          max={64}
+          onChange={onSheetConcurrencyChange}
+        />
+      </ToolSection>
+    </ToolPage>
   );
 }

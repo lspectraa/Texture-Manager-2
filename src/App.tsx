@@ -1,19 +1,17 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { LucideIcon } from "lucide-react";
 import {
-  Box,
   Sparkles,
-  GitBranch,
-  Shuffle,
-  Scissors,
-  WandSparkles,
-  FileOutput,
-  RefreshCw,
   Activity,
   AlertCircle,
-  Image,
-  House,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronRight,
+  Clock3,
+  Copy,
+  Download,
+  Files,
+  FolderOutput,
 } from "lucide-react";
 import "./App.css";
 import {
@@ -36,6 +34,16 @@ import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVer
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
 import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
+import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
+import { HomeScreen } from "./components/HomeScreen";
+import { AppSidebar } from "./components/AppSidebar";
+import {
+  buildIssuesCsvFromReport,
+  copyTextToClipboard,
+  downloadTextFile,
+  groupReportIssues,
+  issuesCsvFileName,
+} from "./utils/reportIssuesCsv";
 import convertVersionMap from "./config/convertVersionMap.json";
 
 type PrimaryTool =
@@ -48,23 +56,6 @@ type PrimaryTool =
   | "convertToNewVersion"
   | "glowMaker"
   | "geodeButtons";
-
-type AppTool = Exclude<PrimaryTool, "home">;
-
-const TOOL_ENTRIES: ReadonlyArray<{
-  id: AppTool;
-  label: string;
-  icon: LucideIcon;
-}> = [
-  { id: "iconEditor", label: "Icon Editor", icon: Image },
-  { id: "splitter", label: "Splitter", icon: Scissors },
-  { id: "merger", label: "Merger", icon: FileOutput },
-  { id: "porter", label: "Porter", icon: GitBranch },
-  { id: "randomizer", label: "Randomizer", icon: Shuffle },
-  { id: "glowMaker", label: "Glow Maker", icon: WandSparkles },
-  { id: "convertToNewVersion", label: "Convert to New Version", icon: RefreshCw },
-  { id: "geodeButtons", label: "Create Geode Buttons", icon: Sparkles },
-];
 
 type Rgb = [number, number, number];
 
@@ -100,6 +91,16 @@ const rgbaCss = ([r, g, b]: Rgb, alpha: number): string =>
   `rgb(${r} ${g} ${b} / ${clamp01(alpha)})`;
 const CONVERT_VERSION_OPTIONS = Object.keys(convertVersionMap);
 const DEFAULT_SHEET_CONCURRENCY = 5;
+const NAV_COLLAPSED_STORAGE_KEY = "texture-manager-2.nav-collapsed";
+const REPORT_COLLAPSED_STORAGE_KEY = "texture-manager-2.report-collapsed";
+
+function readStoredCollapsed(key: string): boolean {
+  try {
+    return window.localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
 
 function App() {
   const [selectedTool, setSelectedTool] = useState<PrimaryTool>("home");
@@ -114,6 +115,30 @@ function App() {
   const [operationProgress, setOperationProgress] =
     useState<OperationProgress | null>(null);
   const [report, setReport] = useState<OperationReport | null>(null);
+  const [isNavCollapsed, setIsNavCollapsed] = useState(() =>
+    readStoredCollapsed(NAV_COLLAPSED_STORAGE_KEY),
+  );
+  const [isReportCollapsed, setIsReportCollapsed] = useState(() =>
+    readStoredCollapsed(REPORT_COLLAPSED_STORAGE_KEY),
+  );
+  const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
+  const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, String(isNavCollapsed));
+    } catch {
+      // Ignore storage failures in restricted environments.
+    }
+  }, [isNavCollapsed]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(REPORT_COLLAPSED_STORAGE_KEY, String(isReportCollapsed));
+    } catch {
+      // Ignore storage failures in restricted environments.
+    }
+  }, [isReportCollapsed]);
 
   const [splitterInputDir, setSplitterInputDir] = useState("");
   const [splitterOutputDir, setSplitterOutputDir] = useState("");
@@ -206,8 +231,6 @@ function App() {
       setLoadError(message);
     });
   }, []);
-
-  const runtimeLabel = isTauriRuntime() ? "Tauri Desktop Runtime" : "Browser";
 
   const pickFolder = async (assign: (path: string) => void): Promise<void> => {
     if (!isTauriRuntime()) {
@@ -439,30 +462,47 @@ function App() {
     if (!report) {
       return [];
     }
-    const groups = new Map<
-      string,
-      { level: string; sheet: string; message: string; count: number }
-    >();
-    for (const issue of report.issues) {
-      const fileName = issue.file
-        ?.split(/[/\\]/)
-        .pop()
-        ?.replace(/\.(plist|png)$/i, "");
-      const sheet = fileName && fileName.trim().length > 0 ? fileName : "global";
-      const key = `${issue.level}|${sheet}|${issue.message}`;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.count += 1;
-        continue;
+    return groupReportIssues(report.issues);
+  }, [report]);
+
+  const [issuesCsvCopied, setIssuesCsvCopied] = useState(false);
+  const issuesCsvCopiedTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (issuesCsvCopiedTimerRef.current !== null) {
+        window.clearTimeout(issuesCsvCopiedTimerRef.current);
       }
-      groups.set(key, {
-        level: issue.level,
-        sheet,
-        message: issue.message,
-        count: 1,
-      });
+    };
+  }, []);
+
+  const handleCopyIssuesCsv = useCallback(async (): Promise<void> => {
+    if (!report || report.issues.length === 0) {
+      return;
     }
-    return Array.from(groups.values());
+    try {
+      await copyTextToClipboard(buildIssuesCsvFromReport(report));
+      setIssuesCsvCopied(true);
+      if (issuesCsvCopiedTimerRef.current !== null) {
+        window.clearTimeout(issuesCsvCopiedTimerRef.current);
+      }
+      issuesCsvCopiedTimerRef.current = window.setTimeout(() => {
+        setIssuesCsvCopied(false);
+        issuesCsvCopiedTimerRef.current = null;
+      }, 2000);
+    } catch {
+      setIssuesCsvCopied(false);
+    }
+  }, [report]);
+
+  const handleDownloadIssuesCsv = useCallback((): void => {
+    if (!report || report.issues.length === 0) {
+      return;
+    }
+    downloadTextFile(
+      buildIssuesCsvFromReport(report),
+      issuesCsvFileName(report.operation),
+    );
   }, [report]);
 
   const reportState: "running" | "error" | "warning" | "success" | "idle" = isRunning
@@ -476,43 +516,35 @@ function App() {
             ? "warning"
             : "success"
         : "idle";
+  const reportStatusLabel =
+    reportState === "running"
+      ? "Running"
+      : reportState === "success"
+        ? "Complete"
+        : reportState === "warning"
+          ? "Warnings"
+          : reportState === "error"
+            ? runError
+              ? "Run failed"
+              : "Errors found"
+            : "Ready";
   const isIconEditor = selectedTool === "iconEditor";
   const isHome = selectedTool === "home";
   const isGeodeButtons = selectedTool === "geodeButtons";
-  const showRunAction = !isIconEditor && !isHome;
+  const isToolPanel = !isIconEditor && !isHome;
+  const showRunAction = isToolPanel;
   const showOperationAndReport = !isIconEditor && !isHome && !isGeodeButtons;
 
   const toolPanel = (() => {
     switch (selectedTool) {
-      case "home": {
+      case "home":
         return (
-          <div className="tm-home">
-            <h2>Texture Manager</h2>
-            <p className="desc tm-home-subtitle">Choose a tool to get started.</p>
-            <div className="tm-home-grid" role="list">
-              {TOOL_ENTRIES.map((entry) => {
-                const ToolIcon = entry.icon;
-                return (
-                  <button
-                    key={entry.id}
-                    type="button"
-                    className="tm-home-tile"
-                    onClick={() => {
-                      setSelectedTool(entry.id);
-                    }}
-                    role="listitem"
-                  >
-                    <span className="tm-home-tile-icon" aria-hidden>
-                      <ToolIcon size={28} strokeWidth={1.75} />
-                    </span>
-                    <span className="tm-home-tile-label">{entry.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <HomeScreen
+            onSelectTool={(toolId) => {
+              setSelectedTool(toolId);
+            }}
+          />
         );
-      }
       case "iconEditor":
         return <IconEditorToolPanel />;
       case "splitter":
@@ -709,73 +741,42 @@ function App() {
         </div>
       ) : null}
 
-      <header className="tm-header">
-        <h1 className="tm-title">
-          <Sparkles size={22} />
-          Texture Manager 2
-        </h1>
-        <div className="tm-meta">
-          <span className="chip">
-            <Box size={13} />
-            Rust + Tauri + React
-          </span>
-          <span className="chip">
-            <Activity size={13} />
-            {runtimeLabel}
-          </span>
-        </div>
-      </header>
-
       <section
         className={`tm-layout ${
           isIconEditor || isHome || isGeodeButtons ? "tm-layout-icon-editor" : ""
+        }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
+          showOperationAndReport && isReportCollapsed ? " tm-layout-report-collapsed" : ""
+        }${
+          navPanelTransition.animating || reportPanelTransition.animating
+            ? " tm-layout--animating"
+            : ""
         }`}
       >
-        <aside className="tm-sidebar tm-glass-card">
-          <h3 className="tm-section-title">Tools</h3>
-          <button
-            className={`menu-btn ${selectedTool === "home" ? "active" : ""}`}
-            onClick={() => {
-              setSelectedTool("home");
-            }}
-            type="button"
-          >
-            <House size={16} />
-            Home
-          </button>
-          {TOOL_ENTRIES.map((entry) => {
-            const ToolIcon = entry.icon;
-            return (
-              <Fragment key={entry.id}>
-                {entry.id === "splitter" ? (
-                  <div className="tm-tool-divider" role="separator" aria-hidden="true" />
-                ) : null}
-                <button
-                  className={`menu-btn ${selectedTool === entry.id ? "active" : ""}`}
-                  onClick={() => {
-                    setSelectedTool(entry.id);
-                  }}
-                  type="button"
-                >
-                  <ToolIcon size={16} />
-                  {entry.label}
-                </button>
-                {entry.id === "porter" ? (
-                  <div className="tm-tool-divider" role="separator" aria-hidden="true" />
-                ) : null}
-              </Fragment>
-            );
-          })}
-        </aside>
+        <AppSidebar
+          selectedTool={selectedTool}
+          collapsed={isNavCollapsed}
+          animating={navPanelTransition.animating}
+          onExpand={navPanelTransition.expand}
+          onCollapse={navPanelTransition.collapse}
+          onNavigate={(tool) => {
+            setSelectedTool(tool);
+          }}
+        />
 
-        <section className={`tm-panel tm-glass-card${isIconEditor ? " tm-panel-icon-editor" : ""}`}>
-          {toolPanel}
+        <section
+          className={`tm-panel tm-glass-card${
+            isIconEditor ? " tm-panel-icon-editor" : ""
+          }${isHome ? " tm-panel-home" : ""}${isToolPanel ? " tm-panel-tool" : ""}${
+            isGeodeButtons ? " tm-panel-geode" : ""
+          }`}
+        >
+          <div className="tm-panel-body">{toolPanel}</div>
 
           {showRunAction ? (
-            <div className="actions">
+            <div className="tm-tool-actions">
               <button
                 type="button"
-                className="tm-primary-btn"
+                className="tm-tool-run-btn"
                 onClick={executeSelectedOperation}
                 disabled={isRunning}
               >
@@ -787,62 +788,201 @@ function App() {
         </section>
 
         {showOperationAndReport ? (
-          <section className={`tm-report tm-glass-card tm-report-state-${reportState}`}>
-            <h3 className="tm-tool-title">
-              <Activity size={18} />
-              Run Output
-            </h3>
+          <section
+            className={`tm-report tm-glass-card tm-report-state-${reportState}${
+              isReportCollapsed ? " tm-report--collapsed" : ""
+            }${reportPanelTransition.animating ? " tm-report--animating" : ""}`}
+          >
+            <button
+              type="button"
+              className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${
+                isReportCollapsed && !reportPanelTransition.animating
+                  ? " tm-report-rail-btn"
+                  : ""
+              }`}
+              onClick={
+                reportPanelTransition.animating
+                  ? undefined
+                  : isReportCollapsed
+                    ? reportPanelTransition.expand
+                    : reportPanelTransition.collapse
+              }
+              aria-expanded={!isReportCollapsed}
+              aria-label={
+                isReportCollapsed
+                  ? "Expand run output panel"
+                  : "Collapse run output panel"
+              }
+              title={
+                isReportCollapsed ? "Show run output" : "Hide run output"
+              }
+              disabled={reportPanelTransition.animating}
+            >
+              <span className="tm-nav-btn-icon" aria-hidden>
+                <Activity size={16} strokeWidth={1.85} />
+              </span>
+              <span className="tm-nav-btn-copy">
+                <span className="tm-nav-btn-label">Run Output</span>
+              </span>
+              <span className="tm-shell-panel-title-chevron" aria-hidden>
+                <ChevronRight size={15} />
+              </span>
+            </button>
+            <div className="tm-report-body" aria-hidden={isReportCollapsed}>
+            <div className="tm-report-body-inner">
             {loadError ? (
-              <p className="error">
-                <AlertCircle size={15} />
-                Defaults load error: {loadError}
-              </p>
+              <div className="tm-report-alert tm-report-alert-error" role="alert">
+                <AlertCircle size={15} strokeWidth={2} />
+                <div className="tm-report-alert-copy">
+                  <span className="tm-report-alert-title">Defaults load error</span>
+                  <span className="tm-report-alert-message">{loadError}</span>
+                </div>
+              </div>
             ) : null}
             {runError ? (
-              <p className="error">
-                <AlertCircle size={15} />
-                Run error: {runError}
-              </p>
+              <div className="tm-report-alert tm-report-alert-error" role="alert">
+                <AlertCircle size={15} strokeWidth={2} />
+                <div className="tm-report-alert-copy">
+                  <span className="tm-report-alert-title">Run error</span>
+                  <span className="tm-report-alert-message">{runError}</span>
+                </div>
+              </div>
             ) : null}
-            {!report ? <p>No operation has run yet.</p> : null}
+            {!report ? (
+              <div className="tm-report-empty">
+                <span className="tm-report-empty-icon" aria-hidden>
+                  <Activity size={22} strokeWidth={1.75} />
+                </span>
+                <p className="tm-report-empty-title">No operation has run yet</p>
+                <p className="tm-report-empty-hint">
+                  Run a tool to see results, timing, and issues here.
+                </p>
+              </div>
+            ) : null}
             {report ? (
               <>
-                <p>
-                  <strong>Operation:</strong> {report.operation}
-                </p>
-                <p>
-                  <strong>Output:</strong> {report.outputDir}
-                </p>
-                <p>
-                  <strong>Processed:</strong> {report.filesProcessed} /{" "}
-                  {report.filesSeen}
-                </p>
-                <p>
-                  <strong>Elapsed:</strong> {(report.elapsedMs / 1000).toFixed(2)} s
-                </p>
-                <h4>Issues</h4>
-                {report.issues.length === 0 ? <p>None</p> : null}
-                {report.issues.length > 0 ? (
-                  <div className="tm-issues-list">
-                    {groupedIssues.map((issue, index) => (
-                      <div
-                        className={`tm-issue-row tm-issue-row-${issue.level}`}
-                        key={`${issue.level}-${issue.sheet}-${index}`}
-                      >
-                        <span className={`tm-issue-chip tm-issue-chip-${issue.level}`}>
-                          [{issue.level}]
-                        </span>
-                        <span className="tm-issue-sheet">{issue.sheet}</span>
-                        <span className="tm-issue-message">{issue.message}</span>
-                        {issue.count > 1 ? (
-                          <span className="chip tm-issue-count">x{issue.count}</span>
-                        ) : null}
-                      </div>
-                    ))}
+                <div className={`tm-report-summary tm-report-summary-${reportState}`}>
+                  <div className="tm-report-summary-head">
+                    <span className={`tm-report-status tm-report-status-${reportState}`}>
+                      {reportState === "success" ? (
+                        <CheckCircle2 size={13} strokeWidth={2.2} />
+                      ) : reportState === "warning" ? (
+                        <AlertTriangle size={13} strokeWidth={2.2} />
+                      ) : reportState === "error" ? (
+                        <AlertCircle size={13} strokeWidth={2.2} />
+                      ) : (
+                        <Activity size={13} strokeWidth={2.2} />
+                      )}
+                      {reportStatusLabel}
+                    </span>
+                    <span className="tm-report-summary-operation">{report.operation}</span>
                   </div>
-                ) : null}
+
+                  <div className="tm-report-stats">
+                    <div className="tm-report-stat">
+                      <span className="tm-report-stat-icon" aria-hidden>
+                        <Files size={14} strokeWidth={1.9} />
+                      </span>
+                      <span className="tm-report-stat-copy">
+                        <span className="tm-report-stat-label">Processed</span>
+                        <span className="tm-report-stat-value">
+                          {report.filesProcessed}
+                          <span className="tm-report-stat-value-dim">
+                            {" "}
+                            / {report.filesSeen}
+                          </span>
+                        </span>
+                      </span>
+                    </div>
+                    <div className="tm-report-stat">
+                      <span className="tm-report-stat-icon" aria-hidden>
+                        <Clock3 size={14} strokeWidth={1.9} />
+                      </span>
+                      <span className="tm-report-stat-copy">
+                        <span className="tm-report-stat-label">Elapsed</span>
+                        <span className="tm-report-stat-value">
+                          {(report.elapsedMs / 1000).toFixed(2)} s
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="tm-report-output-path" title={report.outputDir}>
+                    <span className="tm-report-output-path-icon" aria-hidden>
+                      <FolderOutput size={14} strokeWidth={1.9} />
+                    </span>
+                    <span className="tm-report-output-path-copy">
+                      <span className="tm-report-output-path-label">Output</span>
+                      <span className="tm-report-output-path-value">{report.outputDir}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <section className="tm-report-issues" aria-labelledby="tm-report-issues-title">
+                  <div className="tm-report-issues-head">
+                    <div className="tm-report-issues-head-main">
+                      <h4 id="tm-report-issues-title">Issues</h4>
+                      <span className="tm-report-issues-count">{report.issues.length}</span>
+                    </div>
+                    {report.issues.length > 0 ? (
+                      <div className="tm-report-issues-actions">
+                        <button
+                          type="button"
+                          className="tm-report-issues-action-btn"
+                          onClick={() => {
+                            handleCopyIssuesCsv().catch(() => {
+                              setIssuesCsvCopied(false);
+                            });
+                          }}
+                          title="Copy issues as CSV"
+                          aria-label="Copy issues as CSV"
+                        >
+                          <Copy size={13} strokeWidth={2} />
+                          <span>{issuesCsvCopied ? "Copied" : "Copy CSV"}</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="tm-report-issues-action-btn"
+                          onClick={handleDownloadIssuesCsv}
+                          title="Download issues as CSV"
+                          aria-label="Download issues as CSV"
+                        >
+                          <Download size={13} strokeWidth={2} />
+                          <span>Download</span>
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {report.issues.length === 0 ? (
+                    <div className="tm-report-issues-empty">
+                      <CheckCircle2 size={15} strokeWidth={2} />
+                      <span>No issues reported</span>
+                    </div>
+                  ) : null}
+                  {report.issues.length > 0 ? (
+                    <div className="tm-issues-list">
+                      {groupedIssues.map((issue, index) => (
+                        <div
+                          className={`tm-issue-row tm-issue-row-${issue.level}`}
+                          key={`${issue.level}-${issue.sheet}-${index}`}
+                        >
+                          <span className={`tm-issue-chip tm-issue-chip-${issue.level}`}>
+                            {issue.level}
+                          </span>
+                          <span className="tm-issue-sheet">{issue.sheet}</span>
+                          <span className="tm-issue-message">{issue.message}</span>
+                          {issue.count > 1 ? (
+                            <span className="chip tm-issue-count">x{issue.count}</span>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </section>
               </>
             ) : null}
+            </div>
+            </div>
           </section>
         ) : null}
       </section>

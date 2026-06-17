@@ -24,6 +24,8 @@ import {
   RefreshCw,
   Palette,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { isTauriRuntime } from "../../services/tauriOperations";
@@ -851,9 +853,12 @@ export function IconEditorToolPanel() {
   const [isErrorDetailOpen, setIsErrorDetailOpen] = useState(false);
   const [renameConflict, setRenameConflict] = useState<{ targetStem: string } | null>(null);
   const [isMiddlePanning, setIsMiddlePanning] = useState(false);
+  const [framesPanelCollapsed, setFramesPanelCollapsed] = useState(false);
+  const [plistPanelCollapsed, setPlistPanelCollapsed] = useState(false);
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
+  const hasAppliedInitialZoomRef = useRef(false);
   const stageScrollPortRef = useRef<HTMLDivElement | null>(null);
   const stageElementRef = useRef<HTMLDivElement | null>(null);
   const scrollPanRef = useRef<{
@@ -863,17 +868,6 @@ export function IconEditorToolPanel() {
     startScrollLeft: number;
     startScrollTop: number;
   } | null>(null);
-
-  useEffect(() => {
-    const onResize = () => {
-      const h = window.innerHeight;
-      setViewportCssHeight(h);
-      setZoom(computeAutoResolutionZoom(h));
-    };
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
 
   const frameMap = useMemo(() => {
     const map = new Map<string, IconEditorFrameInfo>();
@@ -1033,10 +1027,14 @@ export function IconEditorToolPanel() {
       return;
     }
     const update = (): void => {
-      setScrollportSize({
-        w: Math.max(1, element.clientWidth),
-        h: Math.max(1, element.clientHeight),
-      });
+      const w = Math.max(1, element.clientWidth);
+      const h = Math.max(1, element.clientHeight);
+      setScrollportSize({ w, h });
+      setViewportCssHeight(h);
+      if (!hasAppliedInitialZoomRef.current) {
+        setZoom(computeAutoResolutionZoom(h));
+        hasAppliedInitialZoomRef.current = true;
+      }
       queueMicrotask(() => {
         clampScrollPortScroll();
       });
@@ -2099,64 +2097,117 @@ export function IconEditorToolPanel() {
 
   return (
     <div className="tm-icon-editor">
-      <h2 className="tm-tool-title">
-        <Palette size={19} />
-        Icon Editor
-      </h2>
-      <div className="tm-icon-editor-toolbar">
-        <button
-          className="tm-icon-editor-toolbar-btn"
-          type="button"
-          title="Reload the current gamesheet from disk"
-          onClick={() => reloadSheet().catch(() => {})}
-          disabled={!sheetInfo || isBusy}
-        >
-          <RefreshCw size={15} />
-          Reload
-        </button>
-        <button
-          className="tm-icon-editor-toolbar-btn"
-          type="button"
-          onClick={() => openSheet().catch(() => {})}
-          disabled={isBusy}
-        >
-          <FolderOpen size={15} />
-          Open Sheet
-        </button>
-        <div className="tm-icon-editor-rename">
-          <label>
-            <div className="tm-folder-input">
-              <input
-                value={renameValue}
-                onChange={(event) => setRenameValue(event.target.value)}
-                placeholder="icons-hd"
-              />
-              <button type="button" onClick={() => renameSheet().catch(() => {})} disabled={!sheetInfo || isBusy}>
-                <PencilLine size={14} />
-                Rename
-              </button>
-              <button
-                type="button"
-                onClick={() => saveCopy().catch(() => {})}
-                disabled={!canSaveCopy || isBusy}
-                title="Save a copy with the new name and current settings"
-              >
-                <Copy size={14} />
-                Save Copy
-              </button>
-            </div>
+      <header className="tm-icon-editor-top-bar">
+        <div className="tm-icon-editor-top-bar-brand">
+          <Palette size={18} strokeWidth={1.75} />
+          <span>Icon Editor</span>
+        </div>
+        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+        <div className="tm-icon-editor-toolbar-group tm-icon-editor-toolbar-group--file">
+          <button
+            className="tm-icon-editor-toolbar-btn"
+            type="button"
+            title="Reload the current gamesheet from disk"
+            onClick={() => reloadSheet().catch(() => {})}
+            disabled={!sheetInfo || isBusy}
+          >
+            <RefreshCw size={15} />
+            Reload
+          </button>
+          <button
+            className="tm-icon-editor-toolbar-btn"
+            type="button"
+            onClick={() => openSheet().catch(() => {})}
+            disabled={isBusy}
+          >
+            <FolderOpen size={15} />
+            Open Sheet
+          </button>
+          <div className="tm-icon-editor-rename">
+            <label>
+              <div className="tm-folder-input">
+                <input
+                  value={renameValue}
+                  onChange={(event) => setRenameValue(event.target.value)}
+                  placeholder="icons-hd"
+                />
+                <button type="button" onClick={() => renameSheet().catch(() => {})} disabled={!sheetInfo || isBusy}>
+                  <PencilLine size={14} />
+                  Rename
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveCopy().catch(() => {})}
+                  disabled={!canSaveCopy || isBusy}
+                  title="Save a copy with the new name and current settings"
+                >
+                  <Copy size={14} />
+                  Save Copy
+                </button>
+              </div>
+            </label>
+          </div>
+          <button
+            className="tm-icon-editor-toolbar-btn"
+            type="button"
+            onClick={() => downloadCurrentIconPng().catch(() => {})}
+            disabled={!sheetInfo || isBusy}
+          >
+            <Download size={15} />
+            Download PNG
+          </button>
+        </div>
+        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+        <div className="tm-icon-editor-toolbar-group">
+          <button
+            type="button"
+            className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
+            onClick={() => saveOffsets().catch(() => {})}
+            disabled={!sheetInfo || isBusy}
+          >
+            <Save size={15} />
+            {isBusy ? "Saving..." : saveStatusLabel}
+          </button>
+        </div>
+        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+        <div className="tm-icon-editor-toolbar-group">
+          <div className="tm-icon-editor-zoom-row">
+            <button type="button" onClick={() => setZoom((value) => clampZoom(value - 0.1))}>
+              <ZoomOut size={15} />
+            </button>
+            <span className="chip">{Math.round(zoom * 100)}%</span>
+            <button type="button" onClick={() => setZoom((value) => clampZoom(value + 0.1))}>
+              <ZoomIn size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={() => setZoom(autoResolutionZoom)}
+              title={`Reset zoom to display default (${Math.round(autoResolutionZoom * 100)}% at this viewport height)`}
+            >
+              <RotateCcw size={15} />
+            </button>
+          </div>
+        </div>
+        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+        <div className="tm-icon-editor-toolbar-group">
+          <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
+            <input
+              type="checkbox"
+              checked={hideGlow}
+              onChange={(event) => setHideGlow(event.target.checked)}
+            />
+            Hide glow
+          </label>
+          <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
+            <input
+              type="checkbox"
+              checked={hideLayerBorders}
+              onChange={(event) => setHideLayerBorders(event.target.checked)}
+            />
+            Hide border
           </label>
         </div>
-        <button
-          className="tm-icon-editor-toolbar-btn"
-          type="button"
-          onClick={() => downloadCurrentIconPng().catch(() => {})}
-          disabled={!sheetInfo || isBusy}
-        >
-          <Download size={15} />
-          Download PNG
-        </button>
-      </div>
+      </header>
       {toolbarError ? (
         <p className="error">
           <Search size={14} />
@@ -2947,9 +2998,29 @@ export function IconEditorToolPanel() {
                   </div>
                 </div>
               </div>
-            </div>
-            <aside className="tm-icon-editor-roles-overlay" aria-label="Frame role mapping">
-              <h3>Frames</h3>
+            <aside
+              className={`tm-icon-editor-roles-overlay${
+                framesPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
+              }`}
+              aria-label="Frame role mapping"
+            >
+              <div className="tm-icon-editor-side-panel-head">
+                <h3>Frames</h3>
+                <button
+                  type="button"
+                  className="tm-icon-editor-side-panel-toggle"
+                  onClick={() => setFramesPanelCollapsed((value) => !value)}
+                  aria-expanded={!framesPanelCollapsed}
+                  aria-label={framesPanelCollapsed ? "Expand frames panel" : "Collapse frames panel"}
+                  title={framesPanelCollapsed ? "Show frames" : "Hide frames"}
+                >
+                  <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
+                    <ChevronLeft size={15} />
+                  </span>
+                </button>
+              </div>
+              <div className="tm-icon-editor-side-panel-body" aria-hidden={framesPanelCollapsed}>
+                <div className="tm-icon-editor-side-panel-body-inner">
               {isRobotIcon ? (
                 <div className="tm-icon-editor-part-tabs" aria-label="Visual frame selector">
                   {ROBOT_PART_DRAW_ORDER.map((partId) => (
@@ -2986,59 +3057,32 @@ export function IconEditorToolPanel() {
               <div className="tm-icon-editor-roles-scroll">
                 <div className="tm-icon-editor-role-grid">{roleControls}</div>
               </div>
-            </aside>
-            <div className="tm-icon-editor-viewport-chrome">
-              <div className="tm-icon-editor-viewport-hud">
-                <button
-                  type="button"
-                  className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
-                  onClick={() => saveOffsets().catch(() => {})}
-                  disabled={!sheetInfo || isBusy}
-                >
-                  <Save size={15} />
-                  {isBusy ? "Saving..." : saveStatusLabel}
-                </button>
-                <div className="tm-icon-editor-hud-divider" aria-hidden />
-                <div className="tm-icon-editor-viewport-hud-actions">
-                  <div className="tm-icon-editor-zoom-row">
-                    <button type="button" onClick={() => setZoom((value) => clampZoom(value - 0.1))}>
-                      <ZoomOut size={15} />
-                    </button>
-                    <span className="chip">{Math.round(zoom * 100)}%</span>
-                    <button type="button" onClick={() => setZoom((value) => clampZoom(value + 0.1))}>
-                      <ZoomIn size={15} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setZoom(autoResolutionZoom)}
-                      title={`Reset zoom to display default (${Math.round(autoResolutionZoom * 100)}% at this viewport height)`}
-                    >
-                      <RotateCcw size={15} />
-                    </button>
-                  </div>
-                  <div className="tm-icon-editor-hud-divider" aria-hidden />
-                  <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
-                    <input
-                      type="checkbox"
-                      checked={hideGlow}
-                      onChange={(event) => setHideGlow(event.target.checked)}
-                    />
-                    Hide glow
-                  </label>
-                  <div className="tm-icon-editor-hud-divider" aria-hidden />
-                  <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
-                    <input
-                      type="checkbox"
-                      checked={hideLayerBorders}
-                      onChange={(event) => setHideLayerBorders(event.target.checked)}
-                    />
-                    Hide border
-                  </label>
                 </div>
               </div>
-            </div>
-            <aside className="tm-icon-editor-plist-overlay" aria-label="Frame plist properties">
-              <h3>Plist (frame)</h3>
+            </aside>
+            <aside
+              className={`tm-icon-editor-plist-overlay${
+                plistPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
+              }`}
+              aria-label="Frame plist properties"
+            >
+              <div className="tm-icon-editor-side-panel-head">
+                <h3>Plist</h3>
+                <button
+                  type="button"
+                  className="tm-icon-editor-side-panel-toggle"
+                  onClick={() => setPlistPanelCollapsed((value) => !value)}
+                  aria-expanded={!plistPanelCollapsed}
+                  aria-label={plistPanelCollapsed ? "Expand plist panel" : "Collapse plist panel"}
+                  title={plistPanelCollapsed ? "Show plist" : "Hide plist"}
+                >
+                  <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
+                    <ChevronRight size={15} />
+                  </span>
+                </button>
+              </div>
+              <div className="tm-icon-editor-side-panel-body" aria-hidden={plistPanelCollapsed}>
+                <div className="tm-icon-editor-side-panel-body-inner">
               {isRobotIcon ? (
                 <div className="tm-icon-editor-part-tabs" aria-label="Visual frame selector">
                   {ROBOT_PART_DRAW_ORDER.map((partId) => (
@@ -3254,14 +3298,17 @@ export function IconEditorToolPanel() {
                   </>
                 )}
               </div>
+                </div>
+              </div>
             </aside>
+            </div>
           </div>
         </div>
       </div>
       <div className="tm-icon-editor-bottom-bar">
         <div className="tm-icon-editor-tint-column">
           <div className="tm-icon-editor-tint-row">
-            <div className="tm-icon-editor-tint-targets-vertical">
+            <div className="tm-icon-editor-tint-targets">
               {TINT_TARGETS.map((target) => (
                 <button
                   key={target}

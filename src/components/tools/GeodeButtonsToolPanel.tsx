@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, FileImage, FolderOpen, Palette } from "lucide-react";
+import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type {
@@ -17,6 +17,14 @@ import {
   GeodeButtonsTargetGroup,
 } from "../../services/tauriGeodeButtons";
 import { PickFolderFn } from "./types";
+import {
+  FolderPathField,
+  ToolField,
+  ToolFilePathField,
+  ToolPage,
+  ToolPageHeader,
+  ToolSection,
+} from "./layout";
 
 type GeodeButtonsToolPanelProps = {
   inputDir: string;
@@ -711,43 +719,50 @@ export function GeodeButtonsToolPanel({
     [onOptionsChange, options],
   );
 
+  const selectedVariantLabel = selectedVariant
+    ? VARIANTS.find((variant) => variant.id === selectedVariant)?.label ?? selectedVariant
+    : "N/A";
+
   return (
-    <>
-      <h2 className="tm-tool-title">
-        <Palette size={19} />
-        Create Geode Buttons
-      </h2>
-      <p className="desc tm-explainer">
-        Upload base templates, tune HSV rules, and regenerate the Geode BlankSheet variants in one
-        go.
-      </p>
-      <div className="tm-info-chips">
-        <span className="chip">HSV variants</span>
-        <span className="chip">In-memory split</span>
-        <span className="chip">Re-merge sheet</span>
-      </div>
+    <ToolPage accent="violet" wide>
+      <ToolPageHeader toolId="geodeButtons" />
 
-      <div className="tm-form-row">
-        <label>
-          Output directory
-          <div className="tm-folder-input">
-            <input
-              value={outputDir}
-              onChange={(event) => onOutputDirChange(event.target.value)}
-              placeholder="C:/path/to/output"
-            />
-            <button type="button" onClick={() => pickFolder(onOutputDirChange)}>
-              <FolderOpen size={15} />
-              Browse
-            </button>
-          </div>
-        </label>
-      </div>
+      <ToolSection
+        title="Source & Output"
+        subtitle="Input is auto-detected from game files; choose where variants are written"
+        icon={FolderInput}
+        columns={2}
+      >
+        <ToolField label="Input directory">
+          <input
+            className="tm-tool-text-input"
+            value={inputDir}
+            readOnly
+            placeholder="Resolving game files directory…"
+          />
+        </ToolField>
+        <FolderPathField
+          label="Output directory"
+          value={outputDir}
+          onChange={onOutputDirChange}
+          pickFolder={pickFolder}
+          placeholder="C:/path/to/output"
+        />
+        {plistPath.trim() ? (
+          <p className="tm-tool-section-note">
+            Active plist: <code>{plistPath}</code>
+          </p>
+        ) : null}
+      </ToolSection>
 
-      {targetsError ? <p className="tm-inline-error">{targetsError}</p> : null}
+      {targetsError ? <p className="tm-tool-inline-error">{targetsError}</p> : null}
 
-      <div className="tm-geode-layout">
-        <div className="tm-geode-grid">
+      <div className="tm-geode-workspace">
+        <ToolSection
+          title="Button Families"
+          subtitle="Select a family to preview templates and tune HSV deltas"
+          icon={Grid3x3}
+        >
           {groupedTargets.map((section) => (
             <div key={section.id} className="tm-geode-family-section">
               <div className="tm-geode-family-section-title">{section.label}</div>
@@ -760,12 +775,16 @@ export function GeodeButtonsToolPanel({
                     <button
                       key={group.id}
                       type="button"
-                      className={`tm-geode-family-card ${isSelected ? "selected" : ""}`}
+                      className={`tm-geode-family-card${isSelected ? " selected" : ""}`}
                       onClick={() => setSelectedFamilyId(group.id)}
                     >
                       <div className="tm-geode-family-preview">
                         {previewSrc ? (
-                          <img className="tm-geode-family-thumb" src={previewSrc} alt={`${group.label} preview`} />
+                          <img
+                            className="tm-geode-family-thumb"
+                            src={previewSrc}
+                            alt={`${group.label} preview`}
+                          />
                         ) : (
                           <span className="tm-geode-cell-missing">No preview</span>
                         )}
@@ -785,44 +804,32 @@ export function GeodeButtonsToolPanel({
           ))}
           {targets === null ? (
             <div className="tm-geode-grid-empty">
-              {plistPath.trim() ? "Loading targets…" : "Pick input directory to load previews."}
+              {plistPath.trim() ? "Loading targets…" : "Waiting for input directory to load previews."}
             </div>
           ) : null}
-        </div>
+        </ToolSection>
 
-        <div className="tm-geode-panel">
-          <h3 className="tm-geode-panel-title">Adjust</h3>
-          <div className="tm-geode-panel-sub">
-            <div>
-              <strong>Family</strong>: {selectedFamily?.label ?? "—"}
-            </div>
-            <div>
-              <strong>Variant</strong>:{" "}
-              {selectedVariant
-                ? VARIANTS.find((v) => v.id === selectedVariant)?.label ?? selectedVariant
-                : "N/A"}
-            </div>
-          </div>
+        <ToolSection
+          className="tm-geode-adjust-panel"
+          title="Adjust"
+          subtitle={`${selectedFamily?.label ?? "No family selected"} • Variant ${selectedVariantLabel}`}
+          icon={SlidersHorizontal}
+        >
+          <ToolFilePathField
+            label="Template PNG"
+            hint="Per family"
+            value={currentTemplatePath}
+            placeholder="Select template png"
+            browseIcon={FileImage}
+            disabled={!selectedFamilyId}
+            onBrowse={() => {
+              const familyId = selectedFamilyId ?? "";
+              if (!familyId) return;
+              pickTemplate((path) => setFamilyTemplatePath(familyId, path));
+            }}
+          />
 
-          <div className="tm-geode-panel-block">
-            <div className="tm-geode-block-title">Template</div>
-            <div className="tm-folder-input">
-              <input value={currentTemplatePath} readOnly placeholder="Select template png" />
-              <button
-                type="button"
-                onClick={() => {
-                  const familyId = selectedFamilyId ?? "";
-                  if (!familyId) return;
-                  pickTemplate((path) => setFamilyTemplatePath(familyId, path));
-                }}
-              >
-                <FileImage size={15} />
-                Browse
-              </button>
-            </div>
-          </div>
-
-          <div className="tm-geode-panel-block">
+          <div className="tm-geode-hsv-block">
             <div className="tm-geode-block-title">HSV (delta)</div>
 
             <div className="tm-geode-hsv-row">
@@ -836,7 +843,9 @@ export function GeodeButtonsToolPanel({
                   step={1}
                   value={selectedHsv.hueDeg}
                   onChange={(e) => setHsvField({ hueDeg: Number(e.target.value) })}
-                  onInput={(e) => setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })}
+                  onInput={(e) =>
+                    setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
+                  }
                   onDoubleClick={() => setHsvField({ hueDeg: 0 })}
                 />
               </label>
@@ -862,7 +871,9 @@ export function GeodeButtonsToolPanel({
                   step={0.01}
                   value={selectedHsv.satDelta}
                   onChange={(e) => setHsvField({ satDelta: Number(e.target.value) })}
-                  onInput={(e) => setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })}
+                  onInput={(e) =>
+                    setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
+                  }
                   onDoubleClick={() => setHsvField({ satDelta: 0 })}
                 />
               </label>
@@ -888,7 +899,9 @@ export function GeodeButtonsToolPanel({
                   step={0.01}
                   value={selectedHsv.valDelta}
                   onChange={(e) => setHsvField({ valDelta: Number(e.target.value) })}
-                  onInput={(e) => setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })}
+                  onInput={(e) =>
+                    setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })
+                  }
                   onDoubleClick={() => setHsvField({ valDelta: 0 })}
                 />
               </label>
@@ -903,14 +916,14 @@ export function GeodeButtonsToolPanel({
               </div>
             </div>
 
-            <div className="tm-geode-panel-note">
+            <p className="tm-tool-section-note">
               These deltas apply when regenerating frames whose color suffix maps to the selected
-              variant.
-            </div>
+              variant. Double-click a slider to reset it.
+            </p>
           </div>
-        </div>
+        </ToolSection>
       </div>
-    </>
+    </ToolPage>
   );
 }
 
