@@ -1,5 +1,5 @@
-import { ArrowRight, Sparkles } from "lucide-react";
-import { AppToolId, TOOL_COUNT, TOOL_NAV_SECTIONS } from "../config/toolNavigation";
+import { ArrowRight, Clock3, Sparkles } from "lucide-react";
+import { AppToolId, TOOL_COUNT, TOOL_NAV_SECTIONS, UPCOMING_TOOL_COUNT } from "../config/toolNavigation";
 
 type HomeScreenProps = {
   onSelectTool: (toolId: AppToolId) => void;
@@ -23,6 +23,11 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
         <div className="tm-home-hero-stats" aria-label={`${TOOL_COUNT} tools available`}>
           <span className="tm-home-stat-value">{TOOL_COUNT}</span>
           <span className="tm-home-stat-label">tools ready</span>
+          {UPCOMING_TOOL_COUNT > 0 ? (
+            <span className="tm-home-stat-upcoming">
+              +{UPCOMING_TOOL_COUNT} coming soon
+            </span>
+          ) : null}
         </div>
       </header>
 
@@ -57,16 +62,26 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
               >
                 {section.tools.map((tool) => {
                   const ToolIcon = tool.icon;
+                  const isUpcoming = tool.upcoming === true;
                   return (
                     <button
                       key={tool.id}
                       type="button"
-                      className={`tm-home-card tm-home-card-${tool.accent}${
+                      className={`tm-home-card tm-home-card-${section.accent}${
                         tool.featured ? " tm-home-card-featured" : ""
-                      }`}
-                      onClick={() => onSelectTool(tool.id)}
+                      }${isUpcoming ? " tm-home-card-upcoming" : ""}`}
+                      onClick={() => {
+                        if (!isUpcoming) {
+                          onSelectTool(tool.id);
+                        }
+                      }}
+                      disabled={isUpcoming}
+                      aria-disabled={isUpcoming || undefined}
                       role="listitem"
                     >
+                      {isUpcoming ? (
+                        <span className="tm-home-card-badge">Coming soon</span>
+                      ) : null}
                       <span className="tm-home-card-icon" aria-hidden>
                         <ToolIcon size={tool.featured ? 30 : 22} strokeWidth={1.75} />
                       </span>
@@ -75,7 +90,11 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
                         <span className="tm-home-card-desc">{tool.description}</span>
                       </span>
                       <span className="tm-home-card-action" aria-hidden>
-                        <ArrowRight size={18} strokeWidth={2} />
+                        {isUpcoming ? (
+                          <Clock3 size={18} strokeWidth={2} />
+                        ) : (
+                          <ArrowRight size={18} strokeWidth={2} />
+                        )}
                       </span>
                     </button>
                   );

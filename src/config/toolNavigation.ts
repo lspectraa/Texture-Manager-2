@@ -4,12 +4,14 @@ import {
   GitBranch,
   Image,
   Layers,
+  PackageOpen,
   RefreshCw,
   Scissors,
   Shuffle,
   Sparkles,
   Wand2,
   WandSparkles,
+  Wind,
 } from "lucide-react";
 
 export type AppToolId =
@@ -20,7 +22,9 @@ export type AppToolId =
   | "randomizer"
   | "glowMaker"
   | "convertToNewVersion"
-  | "geodeButtons";
+  | "geodeButtons"
+  | "texturePackInstaller"
+  | "trailEditor";
 
 export type ToolAccent = "sky" | "violet" | "mint" | "amber" | "rose" | "cyan";
 
@@ -30,8 +34,8 @@ export type ToolNavEntry = {
   shortLabel?: string;
   description: string;
   icon: LucideIcon;
-  accent: ToolAccent;
   featured?: boolean;
+  upcoming?: boolean;
 };
 
 export type ToolNavSection = {
@@ -56,7 +60,6 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         label: "Icon Editor",
         description: "Edit icons and see your changes live.",
         icon: Image,
-        accent: "cyan",
         featured: true,
       },
       {
@@ -64,7 +67,6 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         label: "Glow Maker",
         description: "Add glow effects around your icons.",
         icon: WandSparkles,
-        accent: "mint",
       },
       {
         id: "geodeButtons",
@@ -72,7 +74,13 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         shortLabel: "Geode Buttons",
         description: "Build Geode-style buttons from your images.",
         icon: Sparkles,
-        accent: "violet",
+      },
+      {
+        id: "trailEditor",
+        label: "Trail Editor",
+        description: "Create and edit player trail effects.",
+        icon: Wind,
+        upcoming: true,
       },
     ],
   },
@@ -88,21 +96,18 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         label: "Splitter",
         description: "Split texture sheets into separate files.",
         icon: Scissors,
-        accent: "sky",
       },
       {
         id: "merger",
         label: "Merger",
         description: "Combine separate files back into texture sheets.",
         icon: FileOutput,
-        accent: "sky",
       },
       {
         id: "porter",
         label: "Porter",
         description: "Resize texture sheets for different sizes.",
         icon: GitBranch,
-        accent: "sky",
       },
     ],
   },
@@ -118,7 +123,6 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         label: "Randomizer",
         description: "Shuffle icons with a seed you can reuse.",
         icon: Shuffle,
-        accent: "amber",
       },
       {
         id: "convertToNewVersion",
@@ -126,16 +130,38 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         shortLabel: "New Version",
         description: "Update sheets for the newest game version.",
         icon: RefreshCw,
-        accent: "rose",
+      },
+      {
+        id: "texturePackInstaller",
+        label: "Texture Pack Installer",
+        shortLabel: "Pack Installer",
+        description: "Install texture packs into your game folder.",
+        icon: PackageOpen,
+        upcoming: true,
       },
     ],
   },
 ];
 
 export const TOOL_COUNT = TOOL_NAV_SECTIONS.reduce(
-  (count, section) => count + section.tools.length,
+  (count, section) => count + section.tools.filter((tool) => !tool.upcoming).length,
   0,
 );
+
+export const UPCOMING_TOOL_COUNT = TOOL_NAV_SECTIONS.reduce(
+  (count, section) => count + section.tools.filter((tool) => tool.upcoming).length,
+  0,
+);
+
+export function getToolSection(toolId: AppToolId): ToolNavSection | undefined {
+  return TOOL_NAV_SECTIONS.find((section) =>
+    section.tools.some((entry) => entry.id === toolId),
+  );
+}
+
+export function getToolAccent(toolId: AppToolId): ToolAccent {
+  return getToolSection(toolId)?.accent ?? "sky";
+}
 
 export function getToolMeta(toolId: AppToolId): ToolNavEntry | undefined {
   for (const section of TOOL_NAV_SECTIONS) {
@@ -145,4 +171,8 @@ export function getToolMeta(toolId: AppToolId): ToolNavEntry | undefined {
     }
   }
   return undefined;
+}
+
+export function isUpcomingTool(toolId: AppToolId): boolean {
+  return getToolMeta(toolId)?.upcoming === true;
 }

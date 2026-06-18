@@ -41,7 +41,7 @@ export function GlowMakerToolPanel({
   pickFolder,
 }: GlowMakerToolPanelProps) {
   return (
-    <ToolPage accent="mint">
+    <ToolPage accent="cyan">
       <ToolPageHeader toolId="glowMaker" />
       <ToolPathsSection
         inputDir={inputDir}

@@ -38,6 +38,7 @@ import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
 import { CopyrightDialog } from "./components/CopyrightDialog";
+import { isUpcomingTool } from "./config/toolNavigation";
 import {
   buildIssuesCsvFromReport,
   copyTextToClipboard,
@@ -56,7 +57,9 @@ type PrimaryTool =
   | "randomizer"
   | "convertToNewVersion"
   | "glowMaker"
-  | "geodeButtons";
+  | "geodeButtons"
+  | "texturePackInstaller"
+  | "trailEditor";
 
 type Rgb = [number, number, number];
 
@@ -543,6 +546,9 @@ function App() {
         return (
           <HomeScreen
             onSelectTool={(toolId) => {
+              if (isUpcomingTool(toolId)) {
+                return;
+              }
               setSelectedTool(toolId);
             }}
           />
@@ -646,6 +652,9 @@ function App() {
             pickFolder={pickFolder}
           />
         );
+      case "texturePackInstaller":
+      case "trailEditor":
+        return null;
       default: {
         const neverTool: never = selectedTool;
         throw new Error(`Unhandled tool selection: ${neverTool}`);
@@ -761,6 +770,9 @@ function App() {
           onExpand={navPanelTransition.expand}
           onCollapse={navPanelTransition.collapse}
           onNavigate={(tool) => {
+            if (tool !== "home" && isUpcomingTool(tool)) {
+              return;
+            }
             setSelectedTool(tool);
           }}
           onCopyrightClick={() => setIsCopyrightOpen(true)}

@@ -35,7 +35,7 @@ export function ConvertToNewVersionToolPanel({
   pickFolder,
 }: ConvertToNewVersionToolPanelProps) {
   return (
-    <ToolPage accent="rose">
+    <ToolPage accent="amber">
       <ToolPageHeader toolId="convertToNewVersion" />
       <ToolPathsSection
         inputDir={inputDir}

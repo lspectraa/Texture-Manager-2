@@ -724,7 +724,7 @@ export function GeodeButtonsToolPanel({
     : "N/A";
 
   return (
-    <ToolPage accent="violet" wide>
+    <ToolPage accent="cyan" wide>
       <ToolPageHeader toolId="geodeButtons" />
 
       <ToolSection

@@ -87,17 +87,28 @@ export function AppSidebar({
               {section.tools.map((tool) => {
                 const ToolIcon = tool.icon;
                 const isActive = selectedTool === tool.id;
+                const isUpcoming = tool.upcoming === true;
                 return (
                   <button
                     key={tool.id}
                     type="button"
-                    className={`tm-nav-btn tm-nav-btn-${tool.accent}${
+                    className={`tm-nav-btn tm-nav-btn-${section.accent}${
                       isActive ? " active" : ""
-                    }${tool.featured ? " tm-nav-btn-featured" : ""}`}
-                    onClick={() => onNavigate(tool.id)}
+                    }${tool.featured ? " tm-nav-btn-featured" : ""}${
+                      isUpcoming ? " tm-nav-btn-upcoming" : ""
+                    }`}
+                    onClick={() => {
+                      if (!isUpcoming) {
+                        onNavigate(tool.id);
+                      }
+                    }}
+                    disabled={isUpcoming}
+                    aria-disabled={isUpcoming || undefined}
                     role="listitem"
                     aria-current={isActive ? "page" : undefined}
-                    title={tool.label}
+                    title={
+                      isUpcoming ? `${tool.label} — coming soon` : tool.label
+                    }
                   >
                     <span className="tm-nav-btn-icon" aria-hidden>
                       <ToolIcon size={16} strokeWidth={1.85} />
@@ -105,6 +116,11 @@ export function AppSidebar({
                     <span className="tm-nav-btn-label">
                       {tool.shortLabel ?? tool.label}
                     </span>
+                    {isUpcoming ? (
+                      <span className="tm-nav-btn-upcoming-badge" aria-hidden>
+                        Soon
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
