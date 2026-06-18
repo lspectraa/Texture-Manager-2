@@ -8,6 +8,7 @@ type AppSidebarProps = {
   onExpand: () => void;
   onCollapse: () => void;
   onNavigate: (tool: "home" | AppToolId) => void;
+  onCopyrightClick: () => void;
 };
 
 export function AppSidebar({
@@ -17,6 +18,7 @@ export function AppSidebar({
   onExpand,
   onCollapse,
   onNavigate,
+  onCopyrightClick,
 }: AppSidebarProps) {
   return (
     <aside
@@ -115,7 +117,9 @@ export function AppSidebar({
         type="button"
         className="tm-nav-btn tm-nav-btn-sky tm-sidebar-copyright"
         title="© Spectra 2026"
-        aria-label="Copyright Spectra 2026"
+        aria-label="Copyright and about"
+        aria-haspopup="dialog"
+        onClick={onCopyrightClick}
       >
         <span className="tm-nav-btn-icon" aria-hidden>
           <span className="tm-sidebar-copyright-glyph">©</span>

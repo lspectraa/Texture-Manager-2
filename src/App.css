@@ -70,6 +70,208 @@ body {
   overflow: hidden;
 }
 
+.tm-app-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(7, 10, 23, 0.68);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.tm-copyright-dialog {
+  width: min(440px, 100%);
+  border-radius: 16px;
+  border: 1px solid rgba(157, 207, 255, 0.42);
+  background:
+    linear-gradient(165deg, rgba(20, 34, 62, 0.94), rgba(12, 20, 40, 0.96)),
+    rgba(8, 14, 28, 0.92);
+  box-shadow:
+    0 28px 56px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(222, 240, 255, 0.12);
+  padding: 18px;
+}
+
+.tm-copyright-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.tm-copyright-dialog-title-wrap {
+  min-width: 0;
+}
+
+.tm-copyright-dialog-eyebrow {
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(186, 214, 244, 0.72);
+}
+
+.tm-copyright-dialog-title {
+  margin: 0;
+  font-size: 1.28rem;
+  font-weight: 700;
+  color: #f4f8ff;
+}
+
+.tm-copyright-dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid rgba(161, 211, 255, 0.35);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #eef6ff;
+  cursor: pointer;
+  transition:
+    border-color var(--tm-fast) ease,
+    background var(--tm-fast) ease,
+    transform var(--tm-fast) ease;
+}
+
+.tm-copyright-dialog-close:hover {
+  border-color: rgba(177, 223, 255, 0.62);
+  background: rgba(98, 165, 255, 0.18);
+}
+
+.tm-copyright-dialog-close:active {
+  transform: scale(0.96);
+}
+
+.tm-copyright-dialog-notice {
+  margin: 0 0 8px;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: #eef6ff;
+}
+
+.tm-copyright-dialog-copy {
+  margin: 0 0 16px;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: rgba(198, 214, 236, 0.82);
+}
+
+.tm-copyright-dialog-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.tm-copyright-dialog-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(155, 204, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f2f7ff;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--tm-fast) ease,
+    background var(--tm-fast) ease,
+    transform var(--tm-fast) ease;
+}
+
+.tm-copyright-dialog-link:hover {
+  border-color: rgba(161, 211, 255, 0.52);
+  background: linear-gradient(130deg, rgba(114, 172, 255, 0.16), rgba(139, 123, 255, 0.1));
+  transform: translateY(-1px);
+}
+
+.tm-copyright-dialog-link:active {
+  transform: translateY(1px) scale(0.99);
+}
+
+.tm-copyright-dialog-link-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(161, 211, 255, 0.28);
+  background: rgba(98, 165, 255, 0.12);
+  color: #e8f4ff;
+}
+
+.tm-copyright-dialog-link-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tm-copyright-dialog-link-label {
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: #f2f8ff;
+}
+
+.tm-copyright-dialog-link-hint {
+  font-size: 0.74rem;
+  color: rgba(198, 214, 236, 0.72);
+}
+
+.tm-copyright-dialog-link-external {
+  color: rgba(186, 214, 244, 0.72);
+  flex-shrink: 0;
+}
+
+.tm-copyright-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(120, 168, 220, 0.22);
+}
+
+.tm-copyright-dialog-version-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(186, 214, 244, 0.68);
+}
+
+.tm-copyright-dialog-version-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #f2f8ff;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(161, 211, 255, 0.35);
+  background: rgba(98, 165, 255, 0.12);
+}
+
+.tm-copyright-dialog-close:focus-visible,
+.tm-copyright-dialog-link:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(111, 180, 255, 0.22),
+    0 0 0 1px rgba(166, 220, 255, 0.8);
+}
+
 .tm-bg {
   position: absolute;
   inset: -20vh -20vw;

@@ -37,6 +37,7 @@ import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel"
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
+import { CopyrightDialog } from "./components/CopyrightDialog";
 import {
   buildIssuesCsvFromReport,
   copyTextToClipboard,
@@ -121,6 +122,7 @@ function App() {
   const [isReportCollapsed, setIsReportCollapsed] = useState(() =>
     readStoredCollapsed(REPORT_COLLAPSED_STORAGE_KEY),
   );
+  const [isCopyrightOpen, setIsCopyrightOpen] = useState(false);
   const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
   const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
 
@@ -761,6 +763,7 @@ function App() {
           onNavigate={(tool) => {
             setSelectedTool(tool);
           }}
+          onCopyrightClick={() => setIsCopyrightOpen(true)}
         />
 
         <section
@@ -986,6 +989,11 @@ function App() {
           </section>
         ) : null}
       </section>
+
+      <CopyrightDialog
+        open={isCopyrightOpen}
+        onClose={() => setIsCopyrightOpen(false)}
+      />
     </main>
   );
 }
