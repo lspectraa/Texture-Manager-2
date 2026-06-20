@@ -14,7 +14,7 @@ use crate::core::errors::AppError;
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::merger::merge_plist_from_memory;
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct IconEditorSize {
     pub width: u32,
@@ -62,6 +62,19 @@ pub struct IconEditorSheetInfo {
 pub struct IconEditorFrameUpdate {
     pub name: String,
     pub sprite_offset: IconEditorPoint,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IconEditorFrameTextureUpdate {
+    pub name: String,
+    pub png_data_url: String,
+    pub sprite_size: IconEditorSize,
+    pub sprite_source_size: IconEditorSize,
+    pub sprite_offset: IconEditorPoint,
+    pub texture_rotated: bool,
+    #[serde(default)]
+    pub is_new_frame: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -115,7 +128,8 @@ pub fn icon_editor_sheet_info(plist_path: &Path) -> Result<IconEditorSheetInfo, 
             .get("textureRotated")
             .and_then(Value::as_boolean)
             .unwrap_or(false);
-        let texture_rect = texture_rect_for_read(&texture_rect_raw, texture_rotated);
+        let texture_rect =
+            atlas_crop_rect_for_frame(&texture_rect_raw, sprite_size, texture_rotated);
 
         frames.push(IconEditorFrameInfo {
             name: name.clone(),
@@ -147,6 +161,7 @@ pub fn icon_editor_save_plist(
     plist_path: &Path,
     updates: &[IconEditorFrameUpdate],
     removed_frame_names: &[String],
+    frame_texture_updates: &[IconEditorFrameTextureUpdate],
 ) -> Result<(), AppError> {
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
@@ -193,53 +208,13 @@ pub fn icon_editor_save_plist(
             .get("textureRotated")
             .and_then(Value::as_boolean)
             .unwrap_or(false);
-        let read_texture_rect = texture_rect_for_read(&texture_rect, texture_rotated);
-
-        let (resolved_texture_rect, used_swapped_size) = resolve_texture_rect_for_atlas(
-            &frame_name,
-            read_texture_rect,
-            atlas_rgba.width(),
-            atlas_rgba.height(),
-        )?;
-
-        let sprite = if resolved_texture_rect.width == 0 || resolved_texture_rect.height == 0 {
-            transparent_1x1_sprite()
-        } else {
-            let raw_crop = image::imageops::crop_imm(
-                &atlas_rgba,
-                resolved_texture_rect.x,
-                resolved_texture_rect.y,
-                resolved_texture_rect.width,
-                resolved_texture_rect.height,
-            )
-            .to_image();
-            if texture_rotated {
-                image::imageops::rotate270(&raw_crop)
-            } else {
-                raw_crop
-            }
-        };
+        let atlas_crop =
+            atlas_crop_rect_for_frame(&texture_rect, sprite_size, texture_rotated);
         let final_sprite =
-            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-                let mut resized = RgbaImage::from_pixel(
-                    sprite_size.width.max(1),
-                    sprite_size.height.max(1),
-                    image::Rgba([0, 0, 0, 0]),
-                );
-                let copy_w = sprite.width().min(resized.width());
-                let copy_h = sprite.height().min(resized.height());
-                for y in 0..copy_h {
-                    for x in 0..copy_w {
-                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
-                    }
-                }
-                resized
-            } else {
-                sprite
-            };
+            extract_frame_sprite_from_atlas(&atlas_rgba, &texture_rect, sprite_size, texture_rotated)?;
 
-        if used_swapped_size {
-            corrected_texture_rects.insert(frame_name.clone(), resolved_texture_rect.clone());
+        if texture_rect.width != atlas_crop.width || texture_rect.height != atlas_crop.height {
+            corrected_texture_rects.insert(frame_name.clone(), atlas_crop);
         }
         trim_by_name.insert(frame_name.clone(), trim_transparent_insets(&final_sprite));
         sprites.insert(frame_name, final_sprite);
@@ -260,6 +235,10 @@ pub fn icon_editor_save_plist(
                 Value::String(format_texture_rect(&corrected)),
             );
         }
+    }
+
+    if !frame_texture_updates.is_empty() {
+        apply_frame_texture_updates(frames_mut, &mut sprites, &mut trim_by_name, frame_texture_updates)?;
     }
 
     for update in updates {
@@ -290,22 +269,38 @@ pub fn icon_editor_save_plist(
         );
     }
 
-    let merger_options = MergerOptions {
-        include_outside_plist_files: false,
-        dimensions: None,
-        sheet_concurrency: 1,
-    };
-    let sheet_label = plist_path.to_string_lossy().to_string();
-    let mut on_sprite_loaded = |_label: String| {};
-    let (merged_atlas, _w, _h, _count, _issues) = merge_plist_from_memory(
-        &mut plist_root,
-        &sprites,
-        sheet_label.as_str(),
-        &merger_options,
-        &mut on_sprite_loaded,
-    )?;
+    if frame_texture_updates.is_empty() {
+        let merger_options = MergerOptions {
+            include_outside_plist_files: false,
+            dimensions: None,
+            sheet_concurrency: 1,
+        };
+        let sheet_label = plist_path.to_string_lossy().to_string();
+        let mut on_sprite_loaded = |_label: String| {};
+        let (merged_atlas, _w, _h, _count, _issues) = merge_plist_from_memory(
+            &mut plist_root,
+            &sprites,
+            sheet_label.as_str(),
+            &merger_options,
+            &mut on_sprite_loaded,
+        )?;
+        save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    } else {
+        let texture_rotated_snapshot = {
+            let root_dict = plist_root
+                .as_dictionary()
+                .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+            let frames = frames_dictionary(root_dict)?;
+            snapshot_texture_rotated_flags(frames)
+        };
+        finalize_merged_atlas_preserving_texture_rotated(
+            plist_path,
+            &mut plist_root,
+            &sprites,
+            &texture_rotated_snapshot,
+        )?;
+    }
 
-    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
     write_plist_atomically(plist_path, &plist_root)
 }
 
@@ -335,6 +330,104 @@ pub fn icon_editor_import_frame(
     sprites.insert(actual_frame_key, imported);
 
     remerge_and_write_sheet(plist_path, &mut plist_root, &sprites)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum IconEditorRotateDirection {
+    Clockwise,
+    CounterClockwise,
+}
+
+fn parse_rotate_direction(value: &str) -> Result<IconEditorRotateDirection, AppError> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "clockwise" | "cw" => Ok(IconEditorRotateDirection::Clockwise),
+        "counterclockwise" | "counter-clockwise" | "counter_clockwise" | "ccw" => {
+            Ok(IconEditorRotateDirection::CounterClockwise)
+        }
+        _ => Err(AppError::ParseError(format!(
+            "unsupported rotate direction `{value}`"
+        ))),
+    }
+}
+
+/// Rotates a frame 90° and remerges the atlas. Updates sprite size/offset metadata while
+/// preserving each frame's existing `textureRotated` flag.
+pub fn icon_editor_rotate_frame(
+    plist_path: &Path,
+    frame_name: &str,
+    direction: &str,
+) -> Result<(), AppError> {
+    let direction = parse_rotate_direction(direction)?;
+    let mut plist_root = Value::from_file(plist_path)
+        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let frames = frames_dictionary(root_dict)?;
+    let actual_frame_key = find_frame_key(frames, frame_name).ok_or_else(|| {
+        AppError::ParseError(format!("frame `{frame_name}` not found in plist"))
+    })?;
+    let texture_rotated_snapshot = snapshot_texture_rotated_flags(frames);
+
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+    let atlas_rgba = image::open(&atlas_path)
+        .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?
+        .to_rgba8();
+    let mut sprites = collect_sheet_sprites_for_remerge(&plist_root, &atlas_rgba)?;
+
+    let Some(sprite) = sprites.get(&actual_frame_key).cloned() else {
+        return Err(AppError::ParseError(format!(
+            "sprite `{actual_frame_key}` missing from atlas"
+        )));
+    };
+    sprites.insert(
+        actual_frame_key.clone(),
+        rotate_sprite_image(sprite, direction),
+    );
+
+    {
+        let root_dict_mut = plist_root
+            .as_dictionary_mut()
+            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+        let frames_mut = frames_dictionary_mut(root_dict_mut)?;
+        let frame_dict = frames_mut
+            .get_mut(&actual_frame_key)
+            .and_then(Value::as_dictionary_mut)
+            .ok_or_else(|| {
+                AppError::ParseError(format!("frame `{actual_frame_key}` is not a dictionary"))
+            })?;
+        apply_rotation_metadata_to_frame(frame_dict, direction)?;
+    }
+
+    merge_sheet_to_atlas(plist_path, &mut plist_root, &sprites)?;
+
+    {
+        let root_dict_mut = plist_root
+            .as_dictionary_mut()
+            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+        let frames_mut = frames_dictionary_mut(root_dict_mut)?;
+        restore_texture_rotated_flags(frames_mut, &texture_rotated_snapshot);
+    }
+
+    let mut merged_atlas = image::open(&atlas_path)
+        .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?
+        .to_rgba8();
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let frames = frames_dictionary(root_dict)?;
+    for (frame_key, texture_rotated) in &texture_rotated_snapshot {
+        if !texture_rotated {
+            continue;
+        }
+        let Some(frame_dict) = frames.get(frame_key).and_then(Value::as_dictionary) else {
+            continue;
+        };
+        reencode_texture_rotated_frame_in_atlas(&mut merged_atlas, frame_dict)?;
+    }
+
+    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    write_plist_atomically(plist_path, &plist_root)
 }
 
 pub fn icon_editor_add_frame(
@@ -439,52 +532,8 @@ pub fn icon_editor_extract_frames(
             .get("textureRotated")
             .and_then(Value::as_boolean)
             .unwrap_or(false);
-        let read_texture_rect = texture_rect_for_read(&texture_rect, texture_rotated);
-
-        let (resolved_texture_rect, _used_swapped_size) = resolve_texture_rect_for_atlas(
-            &frame_name,
-            read_texture_rect,
-            atlas_rgba.width(),
-            atlas_rgba.height(),
-        )?;
-
-        let sprite = if resolved_texture_rect.width == 0 || resolved_texture_rect.height == 0 {
-            transparent_1x1_sprite()
-        } else {
-            let raw_crop = image::imageops::crop_imm(
-                &atlas_rgba,
-                resolved_texture_rect.x,
-                resolved_texture_rect.y,
-                resolved_texture_rect.width,
-                resolved_texture_rect.height,
-            )
-            .to_image();
-
-            if texture_rotated {
-                image::imageops::rotate270(&raw_crop)
-            } else {
-                raw_crop
-            }
-        };
-
         let final_sprite =
-            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-                let mut resized = RgbaImage::from_pixel(
-                    sprite_size.width.max(1),
-                    sprite_size.height.max(1),
-                    image::Rgba([0, 0, 0, 0]),
-                );
-                let copy_w = sprite.width().min(resized.width());
-                let copy_h = sprite.height().min(resized.height());
-                for y in 0..copy_h {
-                    for x in 0..copy_w {
-                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
-                    }
-                }
-                resized
-            } else {
-                sprite
-            };
+            extract_frame_sprite_from_atlas(&atlas_rgba, &texture_rect, sprite_size, texture_rotated)?;
 
         let mut cursor = Cursor::new(Vec::<u8>::new());
         DynamicImage::ImageRgba8(final_sprite)
@@ -498,6 +547,16 @@ pub fn icon_editor_extract_frames(
     }
 
     Ok(extracted)
+}
+
+/// PNG data URL for webview previews of user-picked files outside the asset protocol scope.
+pub fn icon_editor_png_data_url(texture_path: &Path) -> Result<String, AppError> {
+    if !texture_path.exists() {
+        return Err(AppError::InvalidPath("texture file does not exist"));
+    }
+    let bytes = fs::read(texture_path)?;
+    let encoded = BASE64_STANDARD.encode(bytes);
+    Ok(format!("data:image/png;base64,{encoded}"))
 }
 
 fn validate_sheet_stem(new_stem: &str) -> Result<(), AppError> {
@@ -717,6 +776,7 @@ pub fn icon_editor_copy_sheet(
     new_stem: &str,
     updates: &[IconEditorFrameUpdate],
     removed_frame_names: &[String],
+    frame_texture_updates: &[IconEditorFrameTextureUpdate],
 ) -> Result<IconEditorRenameResult, AppError> {
     if new_stem.trim().is_empty() {
         return Err(AppError::InvalidOperation("new sheet name cannot be empty"));
@@ -783,53 +843,13 @@ pub fn icon_editor_copy_sheet(
             .get("textureRotated")
             .and_then(Value::as_boolean)
             .unwrap_or(false);
-        let read_texture_rect = texture_rect_for_read(&texture_rect, texture_rotated);
-
-        let (resolved_texture_rect, used_swapped_size) = resolve_texture_rect_for_atlas(
-            &frame_name,
-            read_texture_rect,
-            atlas_rgba.width(),
-            atlas_rgba.height(),
-        )?;
-
-        let sprite = if resolved_texture_rect.width == 0 || resolved_texture_rect.height == 0 {
-            transparent_1x1_sprite()
-        } else {
-            let raw_crop = image::imageops::crop_imm(
-                &atlas_rgba,
-                resolved_texture_rect.x,
-                resolved_texture_rect.y,
-                resolved_texture_rect.width,
-                resolved_texture_rect.height,
-            )
-            .to_image();
-            if texture_rotated {
-                image::imageops::rotate270(&raw_crop)
-            } else {
-                raw_crop
-            }
-        };
+        let atlas_crop =
+            atlas_crop_rect_for_frame(&texture_rect, sprite_size, texture_rotated);
         let final_sprite =
-            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-                let mut resized = RgbaImage::from_pixel(
-                    sprite_size.width.max(1),
-                    sprite_size.height.max(1),
-                    image::Rgba([0, 0, 0, 0]),
-                );
-                let copy_w = sprite.width().min(resized.width());
-                let copy_h = sprite.height().min(resized.height());
-                for y in 0..copy_h {
-                    for x in 0..copy_w {
-                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
-                    }
-                }
-                resized
-            } else {
-                sprite
-            };
+            extract_frame_sprite_from_atlas(&atlas_rgba, &texture_rect, sprite_size, texture_rotated)?;
 
-        if used_swapped_size {
-            corrected_texture_rects.insert(frame_name.clone(), resolved_texture_rect.clone());
+        if texture_rect.width != atlas_crop.width || texture_rect.height != atlas_crop.height {
+            corrected_texture_rects.insert(frame_name.clone(), atlas_crop);
         }
         trim_by_name.insert(frame_name.clone(), trim_transparent_insets(&final_sprite));
         sprites.insert(frame_name, final_sprite);
@@ -850,6 +870,10 @@ pub fn icon_editor_copy_sheet(
                 Value::String(format_texture_rect(&corrected)),
             );
         }
+    }
+
+    if !frame_texture_updates.is_empty() {
+        apply_frame_texture_updates(frames_mut, &mut sprites, &mut trim_by_name, frame_texture_updates)?;
     }
 
     for update in updates {
@@ -931,22 +955,42 @@ pub fn icon_editor_copy_sheet(
         );
     }
 
-    let remerge_sprites = collect_sheet_sprites_for_remerge(&plist_root, &atlas_rgba)?;
-    let merger_options = MergerOptions {
-        include_outside_plist_files: false,
-        dimensions: None,
-        sheet_concurrency: 1,
+    let remerge_sprites = if frame_texture_updates.is_empty() {
+        collect_sheet_sprites_for_remerge(&plist_root, &atlas_rgba)?
+    } else {
+        sprites
     };
-    let sheet_label = copied_plist_path.to_string_lossy().to_string();
-    let mut on_sprite_loaded = |_label: String| {};
-    let (merged_atlas, _w, _h, _count, _issues) = merge_plist_from_memory(
-        &mut plist_root,
-        &remerge_sprites,
-        sheet_label.as_str(),
-        &merger_options,
-        &mut on_sprite_loaded,
-    )?;
-    save_dynamic_png_fast(&copied_atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    if !frame_texture_updates.is_empty() {
+        let texture_rotated_snapshot = {
+            let root_dict = plist_root
+                .as_dictionary()
+                .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+            let frames = frames_dictionary(root_dict)?;
+            snapshot_texture_rotated_flags(frames)
+        };
+        finalize_merged_atlas_preserving_texture_rotated(
+            &copied_plist_path,
+            &mut plist_root,
+            &remerge_sprites,
+            &texture_rotated_snapshot,
+        )?;
+    } else {
+        let merger_options = MergerOptions {
+            include_outside_plist_files: false,
+            dimensions: None,
+            sheet_concurrency: 1,
+        };
+        let sheet_label = copied_plist_path.to_string_lossy().to_string();
+        let mut on_sprite_loaded = |_label: String| {};
+        let (merged_atlas, _w, _h, _count, _issues) = merge_plist_from_memory(
+            &mut plist_root,
+            &remerge_sprites,
+            sheet_label.as_str(),
+            &merger_options,
+            &mut on_sprite_loaded,
+        )?;
+        save_dynamic_png_fast(&copied_atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
+    }
     write_plist_atomically(&copied_plist_path, &plist_root)?;
 
     Ok(IconEditorRenameResult {
@@ -1106,49 +1150,111 @@ fn parse_texture_rect(raw: &str) -> Result<IconEditorRect, AppError> {
     })
 }
 
-fn texture_rect_for_read(rect: &IconEditorRect, texture_rotated: bool) -> IconEditorRect {
-    if !texture_rotated {
-        return rect.clone();
-    }
-    IconEditorRect {
-        x: rect.x,
-        y: rect.y,
-        width: rect.height,
-        height: rect.width,
-    }
-}
-
-fn rect_fits_atlas_bounds(rect: &IconEditorRect, atlas_width: u32, atlas_height: u32) -> bool {
-    rect.x.saturating_add(rect.width) <= atlas_width
-        && rect.y.saturating_add(rect.height) <= atlas_height
-}
-
-fn resolve_texture_rect_for_atlas(
-    frame_name: &str,
-    rect: IconEditorRect,
-    atlas_width: u32,
-    atlas_height: u32,
-) -> Result<(IconEditorRect, bool), AppError> {
-    if rect_fits_atlas_bounds(&rect, atlas_width, atlas_height) {
-        return Ok((rect, false));
-    }
-
-    let swapped = IconEditorRect {
-        x: rect.x,
-        y: rect.y,
-        width: rect.height,
-        height: rect.width,
+/// Atlas crop rectangle for a frame, matching splitter `extract_frame_image` logic:
+/// origin from `textureRect`, dimensions from `spriteSize` (swapped when rotated).
+fn atlas_crop_rect_for_frame(
+    texture_rect: &IconEditorRect,
+    sprite_size: IconEditorSize,
+    texture_rotated: bool,
+) -> IconEditorRect {
+    let crop_width = sprite_size.width.max(1);
+    let crop_height = sprite_size.height.max(1);
+    let (width, height) = if texture_rotated {
+        (crop_height, crop_width)
+    } else {
+        (crop_width, crop_height)
     };
-    if rect_fits_atlas_bounds(&swapped, atlas_width, atlas_height) {
-        return Ok((swapped, true));
+    IconEditorRect {
+        x: texture_rect.x,
+        y: texture_rect.y,
+        width,
+        height,
+    }
+}
+
+fn fit_sprite_to_size(sprite: RgbaImage, sprite_size: IconEditorSize) -> RgbaImage {
+    if sprite.width() == sprite_size.width && sprite.height() == sprite_size.height {
+        return sprite;
+    }
+    let mut resized = RgbaImage::from_pixel(
+        sprite_size.width.max(1),
+        sprite_size.height.max(1),
+        image::Rgba([0, 0, 0, 0]),
+    );
+    let copy_w = sprite.width().min(resized.width());
+    let copy_h = sprite.height().min(resized.height());
+    for y in 0..copy_h {
+        for x in 0..copy_w {
+            resized.put_pixel(x, y, *sprite.get_pixel(x, y));
+        }
+    }
+    resized
+}
+
+fn extract_frame_sprite_from_atlas(
+    atlas_rgba: &RgbaImage,
+    texture_rect: &IconEditorRect,
+    sprite_size: IconEditorSize,
+    texture_rotated: bool,
+) -> Result<RgbaImage, AppError> {
+    let crop_rect = atlas_crop_rect_for_frame(texture_rect, sprite_size, texture_rotated);
+    let atlas_width = atlas_rgba.width();
+    let atlas_height = atlas_rgba.height();
+
+    if crop_rect.x >= atlas_width || crop_rect.y >= atlas_height {
+        return Ok(transparent_1x1_sprite());
     }
 
-    Err(AppError::ParseError(format!(
-        "frame `{frame_name}` textureRect is outside atlas bounds"
-    )))
+    let safe_width = crop_rect
+        .width
+        .min(atlas_width.saturating_sub(crop_rect.x))
+        .max(1);
+    let safe_height = crop_rect
+        .height
+        .min(atlas_height.saturating_sub(crop_rect.y))
+        .max(1);
+
+    let raw_crop = image::imageops::crop_imm(
+        atlas_rgba,
+        crop_rect.x,
+        crop_rect.y,
+        safe_width,
+        safe_height,
+    )
+    .to_image();
+
+    let sprite = if texture_rotated {
+        image::imageops::rotate270(&raw_crop)
+    } else {
+        raw_crop
+    };
+
+    Ok(fit_sprite_to_size(sprite, sprite_size))
+}
+
+fn clear_atlas_rect(atlas: &mut RgbaImage, rect: &IconEditorRect) {
+    if rect.width == 0 || rect.height == 0 {
+        return;
+    }
+    let max_x = rect.x.saturating_add(rect.width).min(atlas.width());
+    let max_y = rect.y.saturating_add(rect.height).min(atlas.height());
+    for y in rect.y..max_y {
+        for x in rect.x..max_x {
+            atlas.put_pixel(x, y, image::Rgba([0, 0, 0, 0]));
+        }
+    }
 }
 
 fn remerge_and_write_sheet(
+    plist_path: &Path,
+    plist_root: &mut Value,
+    sprites: &BTreeMap<String, RgbaImage>,
+) -> Result<(), AppError> {
+    merge_sheet_to_atlas(plist_path, plist_root, sprites)?;
+    write_plist_atomically(plist_path, plist_root)
+}
+
+fn merge_sheet_to_atlas(
     plist_path: &Path,
     plist_root: &mut Value,
     sprites: &BTreeMap<String, RgbaImage>,
@@ -1171,8 +1277,259 @@ fn remerge_and_write_sheet(
         &merger_options,
         &mut on_sprite_loaded,
     )?;
-    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))?;
-    write_plist_atomically(plist_path, plist_root)
+    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))
+}
+
+fn rotate_sprite_image(sprite: RgbaImage, direction: IconEditorRotateDirection) -> RgbaImage {
+    match direction {
+        IconEditorRotateDirection::Clockwise => image::imageops::rotate90(&sprite),
+        IconEditorRotateDirection::CounterClockwise => image::imageops::rotate270(&sprite),
+    }
+}
+
+fn swap_icon_editor_size(size: IconEditorSize) -> IconEditorSize {
+    IconEditorSize {
+        width: size.height,
+        height: size.width,
+    }
+}
+
+fn rotate_sprite_offset(
+    offset: IconEditorPoint,
+    direction: IconEditorRotateDirection,
+) -> IconEditorPoint {
+    match direction {
+        IconEditorRotateDirection::Clockwise => IconEditorPoint {
+            x: offset.y,
+            y: -offset.x,
+        },
+        IconEditorRotateDirection::CounterClockwise => IconEditorPoint {
+            x: -offset.y,
+            y: offset.x,
+        },
+    }
+}
+
+fn snapshot_texture_rotated_flags(frames: &Dictionary) -> BTreeMap<String, bool> {
+    frames
+        .iter()
+        .map(|(name, value)| {
+            let rotated = value
+                .as_dictionary()
+                .and_then(|dict| dict.get("textureRotated"))
+                .and_then(Value::as_boolean)
+                .unwrap_or(false);
+            (name.clone(), rotated)
+        })
+        .collect()
+}
+
+fn restore_texture_rotated_flags(frames: &mut Dictionary, snapshot: &BTreeMap<String, bool>) {
+    for (name, rotated) in snapshot {
+        if let Some(frame_dict) = frames.get_mut(name).and_then(Value::as_dictionary_mut) {
+            frame_dict.insert("textureRotated".to_string(), Value::Boolean(*rotated));
+        }
+    }
+}
+
+fn decode_png_data_url(png_data_url: &str) -> Result<RgbaImage, AppError> {
+    let encoded = png_data_url
+        .split_once(',')
+        .map(|(_, data)| data)
+        .ok_or_else(|| AppError::ParseError("invalid png data url".to_string()))?;
+    let bytes = BASE64_STANDARD
+        .decode(encoded)
+        .map_err(|err| AppError::ParseError(format!("failed to decode png data: {err}")))?;
+    image::load_from_memory(&bytes)
+        .map_err(|err| AppError::ParseError(format!("failed to decode png image: {err}")))
+        .map(|image| image.to_rgba8())
+}
+
+fn write_frame_texture_metadata(
+    frame_dict: &mut Dictionary,
+    update: &IconEditorFrameTextureUpdate,
+) -> Result<(), AppError> {
+    let size_text = format!(
+        "{{{},{} }}",
+        update.sprite_size.width, update.sprite_size.height
+    )
+    .replace(" ", "");
+    let source_text = format!(
+        "{{{},{} }}",
+        update.sprite_source_size.width, update.sprite_source_size.height
+    )
+    .replace(" ", "");
+    frame_dict.insert("spriteSize".to_string(), Value::String(size_text));
+    frame_dict.insert("spriteSourceSize".to_string(), Value::String(source_text));
+    frame_dict.insert(
+        "spriteOffset".to_string(),
+        Value::String(format_pair_f32(&update.sprite_offset)),
+    );
+    frame_dict.insert(
+        "textureRotated".to_string(),
+        Value::Boolean(update.texture_rotated),
+    );
+    if update.is_new_frame {
+        frame_dict.insert("aliases".to_string(), Value::Array(Vec::new()));
+        frame_dict.insert(
+            "textureRect".to_string(),
+            Value::String(format_texture_rect(&IconEditorRect {
+                x: 0,
+                y: 0,
+                width: update.sprite_size.width,
+                height: update.sprite_size.height,
+            })),
+        );
+    }
+    Ok(())
+}
+
+fn apply_frame_texture_updates(
+    frames_mut: &mut Dictionary,
+    sprites: &mut BTreeMap<String, RgbaImage>,
+    trim_by_name: &mut BTreeMap<String, TrimInsets>,
+    updates: &[IconEditorFrameTextureUpdate],
+) -> Result<(), AppError> {
+    for update in updates {
+        let rgba = decode_png_data_url(&update.png_data_url)?;
+        let plist_key = if update.is_new_frame {
+            let plist_key = ensure_png_frame_key(&update.name);
+            if find_frame_key(frames_mut, &plist_key).is_some() {
+                return Err(AppError::InvalidOperation(
+                    "frame already exists in gamesheet plist",
+                ));
+            }
+            let mut frame_dict = Dictionary::new();
+            write_frame_texture_metadata(&mut frame_dict, update)?;
+            frames_mut.insert(plist_key.clone(), Value::Dictionary(frame_dict));
+            plist_key
+        } else {
+            let key = find_frame_key(frames_mut, &update.name).ok_or_else(|| {
+                AppError::ParseError(format!("frame `{}` not found in plist", update.name))
+            })?;
+            let frame_dict = frames_mut
+                .get_mut(&key)
+                .and_then(Value::as_dictionary_mut)
+                .ok_or_else(|| {
+                    AppError::ParseError(format!("frame `{key}` is not a dictionary"))
+                })?;
+            write_frame_texture_metadata(frame_dict, update)?;
+            key
+        };
+        trim_by_name.insert(plist_key.clone(), trim_transparent_insets(&rgba));
+        sprites.insert(plist_key, rgba);
+    }
+    Ok(())
+}
+
+fn finalize_merged_atlas_preserving_texture_rotated(
+    plist_path: &Path,
+    plist_root: &mut Value,
+    sprites: &BTreeMap<String, RgbaImage>,
+    texture_rotated_snapshot: &BTreeMap<String, bool>,
+) -> Result<(), AppError> {
+    merge_sheet_to_atlas(plist_path, plist_root, sprites)?;
+
+    {
+        let root_dict_mut = plist_root
+            .as_dictionary_mut()
+            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+        let frames_mut = frames_dictionary_mut(root_dict_mut)?;
+        restore_texture_rotated_flags(frames_mut, texture_rotated_snapshot);
+    }
+
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+    let mut merged_atlas = image::open(&atlas_path)
+        .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?
+        .to_rgba8();
+    let frames = frames_dictionary(root_dict)?;
+    for (frame_key, texture_rotated) in texture_rotated_snapshot {
+        if !texture_rotated {
+            continue;
+        }
+        let Some(frame_dict) = frames.get(frame_key).and_then(Value::as_dictionary) else {
+            continue;
+        };
+        reencode_texture_rotated_frame_in_atlas(&mut merged_atlas, frame_dict)?;
+    }
+
+    save_dynamic_png_fast(&atlas_path, &DynamicImage::ImageRgba8(merged_atlas))
+}
+
+fn apply_rotation_metadata_to_frame(
+    frame_dict: &mut Dictionary,
+    direction: IconEditorRotateDirection,
+) -> Result<(), AppError> {
+    let sprite_size = parse_pair_u32(get_required_string(frame_dict, "spriteSize")?)?;
+    let new_size = swap_icon_editor_size(sprite_size);
+    let size_text = format!("{{{},{} }}", new_size.width, new_size.height).replace(" ", "");
+    frame_dict.insert("spriteSize".to_string(), Value::String(size_text.clone()));
+
+    if get_optional_string(frame_dict, "spriteSourceSize").is_some() {
+        let source_size = parse_pair_u32(get_required_string(frame_dict, "spriteSourceSize")?)?;
+        let new_source = swap_icon_editor_size(source_size);
+        frame_dict.insert(
+            "spriteSourceSize".to_string(),
+            Value::String(
+                format!("{{{},{} }}", new_source.width, new_source.height).replace(" ", ""),
+            ),
+        );
+    } else {
+        frame_dict.insert("spriteSourceSize".to_string(), Value::String(size_text));
+    }
+
+    let offset = parse_pair_f32(
+        get_optional_string(frame_dict, "spriteOffset").unwrap_or("{0,0}"),
+    )?;
+    let rotated_offset = rotate_sprite_offset(offset, direction);
+    frame_dict.insert(
+        "spriteOffset".to_string(),
+        Value::String(format_pair_f32(&rotated_offset)),
+    );
+
+    Ok(())
+}
+
+fn reencode_texture_rotated_frame_in_atlas(
+    atlas: &mut RgbaImage,
+    frame_dict: &Dictionary,
+) -> Result<(), AppError> {
+    let texture_rect = parse_texture_rect(get_required_string(frame_dict, "textureRect")?)?;
+    let sprite_size = parse_pair_u32(get_required_string(frame_dict, "spriteSize")?)?;
+
+    if texture_rect.x >= atlas.width() || texture_rect.y >= atlas.height() {
+        return Ok(());
+    }
+
+    let safe_width = sprite_size
+        .width
+        .min(atlas.width().saturating_sub(texture_rect.x))
+        .max(1);
+    let safe_height = sprite_size
+        .height
+        .min(atlas.height().saturating_sub(texture_rect.y))
+        .max(1);
+    let upright = image::imageops::crop_imm(
+        atlas,
+        texture_rect.x,
+        texture_rect.y,
+        safe_width,
+        safe_height,
+    )
+    .to_image();
+    let stored = image::imageops::rotate270(&upright);
+    let atlas_crop = atlas_crop_rect_for_frame(&texture_rect, sprite_size, true);
+    clear_atlas_rect(atlas, &atlas_crop);
+    image::imageops::overlay(
+        atlas,
+        &stored,
+        i64::from(atlas_crop.x),
+        i64::from(atlas_crop.y),
+    );
+    Ok(())
 }
 
 fn number_to_u32(value: f32) -> Result<u32, AppError> {
@@ -1296,51 +1653,8 @@ fn collect_sheet_sprites_for_remerge(
             .get("textureRotated")
             .and_then(Value::as_boolean)
             .unwrap_or(false);
-        let read_texture_rect = texture_rect_for_read(&texture_rect, texture_rotated);
-
-        let (resolved_texture_rect, _used_swapped_size) = resolve_texture_rect_for_atlas(
-            &frame_name,
-            read_texture_rect,
-            atlas_rgba.width(),
-            atlas_rgba.height(),
-        )?;
-
-        let sprite = if resolved_texture_rect.width == 0 || resolved_texture_rect.height == 0 {
-            transparent_1x1_sprite()
-        } else {
-            let raw_crop = image::imageops::crop_imm(
-                atlas_rgba,
-                resolved_texture_rect.x,
-                resolved_texture_rect.y,
-                resolved_texture_rect.width,
-                resolved_texture_rect.height,
-            )
-            .to_image();
-            if texture_rotated {
-                image::imageops::rotate270(&raw_crop)
-            } else {
-                raw_crop
-            }
-        };
-
         let final_sprite =
-            if sprite.width() != sprite_size.width || sprite.height() != sprite_size.height {
-                let mut resized = RgbaImage::from_pixel(
-                    sprite_size.width.max(1),
-                    sprite_size.height.max(1),
-                    image::Rgba([0, 0, 0, 0]),
-                );
-                let copy_w = sprite.width().min(resized.width());
-                let copy_h = sprite.height().min(resized.height());
-                for y in 0..copy_h {
-                    for x in 0..copy_w {
-                        resized.put_pixel(x, y, *sprite.get_pixel(x, y));
-                    }
-                }
-                resized
-            } else {
-                sprite
-            };
+            extract_frame_sprite_from_atlas(&atlas_rgba, &texture_rect, sprite_size, texture_rotated)?;
 
         sprites.insert(frame_name, final_sprite);
     }

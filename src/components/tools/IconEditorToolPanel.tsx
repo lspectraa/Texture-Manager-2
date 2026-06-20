@@ -6,7 +6,9 @@ import {
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import html2canvas from "html2canvas";
@@ -21,6 +23,7 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  RotateCw,
   RefreshCw,
   Palette,
   Trash2,
@@ -30,24 +33,42 @@ import {
   ChevronDown,
   FileCode2,
   Layers3,
+  Undo2,
+  Redo2,
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import {
-  addIconEditorFrameTexture,
   extractIconEditorFrames,
+  getIconEditorPngDataUrl,
   getIconEditorSheetInfo,
-  importIconEditorFrameTexture,
+  type IconEditorRotateDirection,
   IconEditorExtractedFrame,
   IconEditorFrameInfo,
+  IconEditorFrameTextureUpdate,
   IconEditorPoint,
   IconEditorSheetInfo,
+  IconEditorSize,
   copyIconEditorSheet,
   isIconEditorRenameTargetConflict,
   renameIconEditorSheet,
   saveIconEditorPlist,
   swapRenameIconEditorSheet,
 } from "../../services/tauriIconEditor";
+import {
+  clearIconEditorHistory,
+  cloneIconEditorEditSnapshot,
+  commitIconEditorHistory,
+  emptyIconEditorEditSnapshot,
+  iconEditorEditSnapshotsEqual,
+  loadIconEditorHistory,
+  redoIconEditorHistory,
+  saveIconEditorHistory,
+  undoIconEditorHistory,
+  type IconEditorEditSnapshot,
+  type IconEditorHistoryState,
+  type IconEditorSerializedTextureEdit,
+} from "../../services/iconEditorHistory";
 
 type IconLayerRole = "primary" | "secondary" | "extra" | "glow" | "capsule";
 type TintTarget = "primary" | "secondary" | "glow";
@@ -74,6 +95,7 @@ type DragState = {
   startClientX: number;
   startClientY: number;
   startOffset: IconEditorPoint;
+  historyStartSnapshot: IconEditorEditSnapshot;
 };
 
 const BASE_ROLES: IconLayerRole[] = ["glow", "secondary", "primary", "extra"];
@@ -651,22 +673,133 @@ const buildCanvasFromDataUrl = async (pngDataUrl: string): Promise<HTMLCanvasEle
   return canvas;
 };
 
+const buildCanvasFromImagePath = async (imagePath: string): Promise<HTMLCanvasElement> => {
+  const pngDataUrl = isTauriRuntime()
+    ? await getIconEditorPngDataUrl(imagePath)
+    : imagePath;
+  return buildCanvasFromDataUrl(pngDataUrl);
+};
+
+const canvasToPngDataUrl = (canvas: HTMLCanvasElement): string => canvas.toDataURL("image/png");
+
+const swapIconEditorSize = (size: IconEditorSize): IconEditorSize => ({
+  width: size.height,
+  height: size.width,
+});
+
+const rotateSpriteOffset = (
+  offset: IconEditorPoint,
+  direction: IconEditorRotateDirection,
+): IconEditorPoint => {
+  if (direction === "clockwise") {
+    return { x: offset.y, y: -offset.x };
+  }
+  return { x: -offset.y, y: offset.x };
+};
+
+const rotateCanvas90 = (
+  canvas: HTMLCanvasElement,
+  direction: IconEditorRotateDirection,
+): HTMLCanvasElement => {
+  const out = document.createElement("canvas");
+  out.width = canvas.height;
+  out.height = canvas.width;
+  const context = out.getContext("2d");
+  if (!context) {
+    return canvas;
+  }
+  context.imageSmoothingEnabled = false;
+  if (direction === "clockwise") {
+    context.translate(out.width, 0);
+    context.rotate(Math.PI / 2);
+  } else {
+    context.translate(0, out.height);
+    context.rotate(-Math.PI / 2);
+  }
+  context.drawImage(canvas, 0, 0);
+  return out;
+};
+
+type PendingFrameTextureEdit = {
+  sourceCanvas: HTMLCanvasElement;
+  spriteSize: IconEditorSize;
+  spriteSourceSize: IconEditorSize;
+  spriteOffset: IconEditorPoint;
+  textureRotated: boolean;
+  isNewFrame: boolean;
+};
+
+const serializeTextureEdits = (
+  edits: Record<string, PendingFrameTextureEdit>,
+): Record<string, IconEditorSerializedTextureEdit> =>
+  Object.fromEntries(
+    Object.entries(edits).map(([name, edit]) => [
+      name,
+      {
+        pngDataUrl: canvasToPngDataUrl(edit.sourceCanvas),
+        spriteSize: { ...edit.spriteSize },
+        spriteSourceSize: { ...edit.spriteSourceSize },
+        spriteOffset: { ...edit.spriteOffset },
+        textureRotated: edit.textureRotated,
+        isNewFrame: edit.isNewFrame,
+      },
+    ]),
+  );
+
+const deserializeTextureEdits = async (
+  edits: Record<string, IconEditorSerializedTextureEdit>,
+): Promise<Record<string, PendingFrameTextureEdit>> => {
+  const entries = await Promise.all(
+    Object.entries(edits).map(async ([name, edit]) => {
+      const sourceCanvas = await buildCanvasFromDataUrl(edit.pngDataUrl);
+      return [
+        name,
+        {
+          sourceCanvas,
+          spriteSize: { ...edit.spriteSize },
+          spriteSourceSize: { ...edit.spriteSourceSize },
+          spriteOffset: { ...edit.spriteOffset },
+          textureRotated: edit.textureRotated,
+          isNewFrame: edit.isNewFrame,
+        },
+      ] as const;
+    }),
+  );
+  return Object.fromEntries(entries);
+};
+
+const buildFrameTextureUpdates = (
+  pendingTextureEdits: Record<string, PendingFrameTextureEdit>,
+): IconEditorFrameTextureUpdate[] =>
+  Object.entries(pendingTextureEdits).map(([name, edit]) => ({
+    name,
+    pngDataUrl: canvasToPngDataUrl(edit.sourceCanvas),
+    spriteSize: edit.spriteSize,
+    spriteSourceSize: edit.spriteSourceSize,
+    spriteOffset: edit.spriteOffset,
+    textureRotated: edit.textureRotated,
+    isNewFrame: edit.isNewFrame,
+  }));
+
 type SplitCanvasBuildResult = {
   canvases: Record<string, HTMLCanvasElement>;
+  fullCanvases: Record<string, HTMLCanvasElement>;
   /** Alpha trim on the raw extracted image (before crop); used for merge-style offset math. */
   trimByFrameName: Record<string, TrimInsets>;
 };
 
 const buildSplitCanvasMap = async (frames: IconEditorExtractedFrame[]): Promise<SplitCanvasBuildResult> => {
   const canvases: Record<string, HTMLCanvasElement> = {};
+  const fullCanvases: Record<string, HTMLCanvasElement> = {};
   const trimByFrameName: Record<string, TrimInsets> = {};
   for (const frame of frames) {
     const full = await buildCanvasFromDataUrl(frame.pngDataUrl);
+    fullCanvases[frame.name] = full;
     const trim = trimTransparentEdgesFromCanvas(full);
     trimByFrameName[frame.name] = trim;
     canvases[frame.name] = cropCanvasByTrimInsets(full, trim);
   }
-  return { canvases, trimByFrameName };
+  return { canvases, fullCanvases, trimByFrameName };
 };
 
 const suggestRoleMap = (frames: IconEditorFrameInfo[]): Record<IconLayerRole, string> => {
@@ -826,11 +959,93 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
   return <canvas ref={canvasRef} className="tm-icon-editor-layer-canvas" />;
 }
 
+type IconEditorToolbarTipProps = {
+  label: string;
+  children: ReactNode;
+  className?: string;
+};
+
+function IconEditorToolbarTip({ label, children, className }: IconEditorToolbarTipProps) {
+  const anchorRef = useRef<HTMLSpanElement>(null);
+  const [visible, setVisible] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+
+  const updatePosition = useCallback(() => {
+    const anchor = anchorRef.current;
+    if (!anchor) {
+      return;
+    }
+    const rect = anchor.getBoundingClientRect();
+    setPosition({
+      top: rect.bottom + 10,
+      left: rect.left + rect.width / 2,
+    });
+  }, []);
+
+  const showTip = useCallback(() => {
+    updatePosition();
+    setVisible(true);
+  }, [updatePosition]);
+
+  const hideTip = useCallback(() => {
+    setVisible(false);
+  }, []);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+    const syncPosition = (): void => {
+      updatePosition();
+    };
+    window.addEventListener("scroll", syncPosition, true);
+    window.addEventListener("resize", syncPosition);
+    return () => {
+      window.removeEventListener("scroll", syncPosition, true);
+      window.removeEventListener("resize", syncPosition);
+    };
+  }, [updatePosition, visible]);
+
+  return (
+    <>
+      <span
+        ref={anchorRef}
+        className={`tm-icon-editor-toolbar-tip${className ? ` ${className}` : ""}`}
+        onMouseEnter={showTip}
+        onMouseLeave={hideTip}
+        onFocusCapture={showTip}
+        onBlurCapture={(event) => {
+          const nextTarget = event.relatedTarget;
+          if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+            return;
+          }
+          hideTip();
+        }}
+      >
+        {children}
+      </span>
+      {visible &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <span
+            className="tm-icon-editor-toolbar-tip-popup"
+            role="tooltip"
+            style={{ top: position.top, left: position.left }}
+          >
+            {label}
+          </span>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 type SpriteOffsetAxisControlsProps = {
   axis: "x" | "y";
   value: number;
   frameName: string;
   onBump: (frameName: string, axis: "x" | "y", sign: number, step?: number) => void;
+  onSetAxis: (frameName: string, axis: "x" | "y", value: number) => void;
 };
 
 function SpriteOffsetAxisControls({
@@ -838,11 +1053,39 @@ function SpriteOffsetAxisControls({
   value,
   frameName,
   onBump,
+  onSetAxis,
 }: SpriteOffsetAxisControlsProps) {
   const isX = axis === "x";
-  const DecreaseIcon = isX ? ChevronLeft : ChevronUp;
-  const IncreaseIcon = isX ? ChevronRight : ChevronDown;
+  const DecreaseIcon = isX ? ChevronLeft : ChevronDown;
+  const IncreaseIcon = isX ? ChevronRight : ChevronUp;
   const axisLabel = axis.toUpperCase();
+  const [draft, setDraft] = useState(() => value.toFixed(1));
+  const [isEditing, setIsEditing] = useState(false);
+
+  useEffect(() => {
+    if (!isEditing) {
+      setDraft(value.toFixed(1));
+    }
+  }, [isEditing, value]);
+
+  useEffect(() => {
+    setIsEditing(false);
+    setDraft(value.toFixed(1));
+  }, [frameName, value]);
+
+  const commitDraft = () => {
+    setIsEditing(false);
+    const parsed = Number.parseFloat(draft.trim());
+    if (!Number.isFinite(parsed)) {
+      setDraft(value.toFixed(1));
+      return;
+    }
+    const quantized = quantizeOffset(parsed);
+    setDraft(quantized.toFixed(1));
+    if (quantized !== value) {
+      onSetAxis(frameName, axis, quantized);
+    }
+  };
 
   return (
     <div className={`tm-icon-editor-plist-offset-card tm-icon-editor-plist-offset-card-${axis}`}>
@@ -872,9 +1115,27 @@ function SpriteOffsetAxisControls({
             <span className="tm-icon-editor-plist-offset-btn-step">½</span>
           </button>
         </div>
-        <div className="tm-icon-editor-plist-offset-value" aria-label={`Sprite offset ${axisLabel}`}>
-          {value.toFixed(1)}
-        </div>
+        <input
+          type="text"
+          inputMode="decimal"
+          className="tm-icon-editor-plist-offset-value"
+          aria-label={`Sprite offset ${axisLabel}`}
+          value={draft}
+          onFocus={() => setIsEditing(true)}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitDraft}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+              return;
+            }
+            if (event.key === "Escape") {
+              setDraft(value.toFixed(1));
+              setIsEditing(false);
+              event.currentTarget.blur();
+            }
+          }}
+        />
         <div className="tm-icon-editor-plist-offset-step-group">
           <button
             type="button"
@@ -909,6 +1170,12 @@ export function IconEditorToolPanel() {
   const [splitFrameCanvases, setSplitFrameCanvases] = useState<
     Record<string, HTMLCanvasElement>
   >({});
+  const [fullFrameCanvases, setFullFrameCanvases] = useState<Record<string, HTMLCanvasElement>>({});
+  const [pendingTextureEdits, setPendingTextureEdits] = useState<
+    Record<string, PendingFrameTextureEdit>
+  >({});
+  const pendingTextureEditsRef = useRef(pendingTextureEdits);
+  pendingTextureEditsRef.current = pendingTextureEdits;
   const [trimByFrameName, setTrimByFrameName] = useState<Record<string, TrimInsets>>({});
   const [viewportCssHeight, setViewportCssHeight] = useState(() =>
     typeof window !== "undefined" ? window.innerHeight : ZOOM_AUTO_VIEWPORT_HEIGHT_BASE,
@@ -927,6 +1194,18 @@ export function IconEditorToolPanel() {
   /** `roleMap.extra` after last successful load/save; used for Save / Unsaved when extra mapping changes only. */
   const [extraMappingBaseline, setExtraMappingBaseline] = useState("");
   const [offsetEdits, setOffsetEdits] = useState<Record<string, IconEditorPoint>>({});
+  const [editHistory, setEditHistory] = useState<IconEditorHistoryState>(() => ({
+    past: [],
+    present: emptyIconEditorEditSnapshot(),
+    future: [],
+  }));
+  const offsetEditsRef = useRef(offsetEdits);
+  offsetEditsRef.current = offsetEdits;
+  const roleMapExtraRef = useRef(roleMap.extra);
+  roleMapExtraRef.current = roleMap.extra;
+  const editHistoryRef = useRef(editHistory);
+  editHistoryRef.current = editHistory;
+  const activePlistPathRef = useRef<string | null>(null);
   const [dragState, setDragState] = useState<DragState | null>(null);
   const [activeTintTarget, setActiveTintTarget] = useState<TintTarget>("primary");
   const [tintByTarget, setTintByTarget] = useState<Record<TintTarget, string>>(() => ({
@@ -967,8 +1246,41 @@ export function IconEditorToolPanel() {
     for (const frame of sheetInfo?.frames ?? []) {
       map.set(frame.name, frame);
     }
+    for (const [name, edit] of Object.entries(pendingTextureEdits)) {
+      const existing = map.get(name);
+      map.set(name, {
+        name,
+        textureRect: existing?.textureRect ?? {
+          x: 0,
+          y: 0,
+          width: edit.spriteSize.width,
+          height: edit.spriteSize.height,
+        },
+        spriteSize: edit.spriteSize,
+        spriteSourceSize: edit.spriteSourceSize,
+        spriteOffset: edit.spriteOffset,
+        textureRotated: edit.textureRotated,
+      });
+    }
     return map;
-  }, [sheetInfo]);
+  }, [pendingTextureEdits, sheetInfo]);
+
+  const effectiveTrimByFrameName = useMemo(() => {
+    const out = { ...trimByFrameName };
+    for (const [name, edit] of Object.entries(pendingTextureEdits)) {
+      out[name] = trimTransparentEdgesFromCanvas(edit.sourceCanvas);
+    }
+    return out;
+  }, [pendingTextureEdits, trimByFrameName]);
+
+  const displayFrameCanvases = useMemo(() => {
+    const out = { ...splitFrameCanvases };
+    for (const [name, edit] of Object.entries(pendingTextureEdits)) {
+      const trim = trimTransparentEdgesFromCanvas(edit.sourceCanvas);
+      out[name] = cropCanvasByTrimInsets(edit.sourceCanvas, trim);
+    }
+    return out;
+  }, [pendingTextureEdits, splitFrameCanvases]);
 
   /** Vertical anchor from floor + primary plist geometry (base offset only; ignores unsaved drag edits). */
   const stageOriginY = useMemo(() => {
@@ -987,9 +1299,9 @@ export function IconEditorToolPanel() {
           if (!frame) {
             return null;
           }
-          const trim = trimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
+          const trim = effectiveTrimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
           const effectiveOffset = mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
-          const displayCanvas = splitFrameCanvases[frameName];
+          const displayCanvas = displayFrameCanvases[frameName];
           const displayHeight = displayCanvas
             ? Math.max(1, displayCanvas.height)
             : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
@@ -1029,37 +1341,139 @@ export function IconEditorToolPanel() {
     if (!frame) {
       return FALLBACK_STAGE_ORIGIN_Y;
     }
-    const footCanvas = splitFrameCanvases[anchorFrameName];
-    const trimBottom = footCanvas ? 0 : (trimByFrameName[anchorFrameName]?.bottom ?? 0);
+    const footCanvas = displayFrameCanvases[anchorFrameName];
+    const trimBottom = footCanvas ? 0 : (effectiveTrimByFrameName[anchorFrameName]?.bottom ?? 0);
     const h = footCanvas
       ? Math.max(1, footCanvas.height)
       : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
     const oy = frame.spriteOffset.y;
     return floorTop + oy * OFFSET_SCALE - h / 2 + trimBottom;
-  }, [sheetInfo, roleMap.primary, frameMap, trimByFrameName, splitFrameCanvases]);
+  }, [sheetInfo, roleMap.primary, frameMap, effectiveTrimByFrameName, displayFrameCanvases]);
+
+  const buildEditSnapshot = useCallback(
+    (
+      offsetEditsValue: Record<string, IconEditorPoint>,
+      roleMapExtraValue: string,
+      textureEditsValue: Record<string, PendingFrameTextureEdit>,
+    ): IconEditorEditSnapshot =>
+      cloneIconEditorEditSnapshot({
+        offsetEdits: offsetEditsValue,
+        roleMapExtra: roleMapExtraValue,
+        textureEdits: serializeTextureEdits(textureEditsValue),
+      }),
+    [],
+  );
+
+  const resolveDefaultOffset = useCallback(
+    (frameName: string): IconEditorPoint => {
+      const frame = frameMap.get(frameName);
+      if (!frame) {
+        return { x: 0, y: 0 };
+      }
+      const trim = effectiveTrimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      return mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
+    },
+    [effectiveTrimByFrameName, frameMap],
+  );
+
+  const applyEditSnapshot = useCallback((snapshot: IconEditorEditSnapshot) => {
+    const next = cloneIconEditorEditSnapshot(snapshot);
+    setOffsetEdits(next.offsetEdits);
+    setRoleMap((previous) => ({ ...previous, extra: next.roleMapExtra }));
+    void deserializeTextureEdits(next.textureEdits).then(setPendingTextureEdits);
+  }, []);
+
+  const commitEditSnapshot = useCallback(
+    (nextPresent: IconEditorEditSnapshot) => {
+      const plistPath = activePlistPathRef.current;
+      if (!plistPath) {
+        applyEditSnapshot(nextPresent);
+        return;
+      }
+      const present = cloneIconEditorEditSnapshot(nextPresent);
+      setEditHistory((previous) => {
+        const nextHistory = commitIconEditorHistory(previous, present);
+        if (nextHistory === previous) {
+          return previous;
+        }
+        saveIconEditorHistory(plistPath, nextHistory);
+        return nextHistory;
+      });
+      applyEditSnapshot(present);
+    },
+    [applyEditSnapshot],
+  );
+
+  const canUndoEdits = editHistory.past.length > 0;
+  const canRedoEdits = editHistory.future.length > 0;
+
+  const undoEdits = useCallback(() => {
+    const plistPath = activePlistPathRef.current;
+    if (!plistPath) {
+      return;
+    }
+    setEditHistory((previous) => {
+      const nextHistory = undoIconEditorHistory(previous);
+      if (!nextHistory) {
+        return previous;
+      }
+      saveIconEditorHistory(plistPath, nextHistory);
+      applyEditSnapshot(nextHistory.present);
+      return nextHistory;
+    });
+  }, [applyEditSnapshot]);
+
+  const redoEdits = useCallback(() => {
+    const plistPath = activePlistPathRef.current;
+    if (!plistPath) {
+      return;
+    }
+    setEditHistory((previous) => {
+      const nextHistory = redoIconEditorHistory(previous);
+      if (!nextHistory) {
+        return previous;
+      }
+      saveIconEditorHistory(plistPath, nextHistory);
+      applyEditSnapshot(nextHistory.present);
+      return nextHistory;
+    });
+  }, [applyEditSnapshot]);
 
   const bumpSpriteOffset = useCallback(
     (frameName: string, axis: "x" | "y", sign: number, step: number = OFFSET_STEP) => {
-      setOffsetEdits((previous) => {
-        const current =
-          previous[frameName] ??
-          (() => {
-            const frame = frameMap.get(frameName);
-            if (!frame) {
-              return { x: 0, y: 0 };
-            }
-            const trim = trimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
-            return mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
-          })();
-        const delta = sign * step;
-        const next =
-          axis === "x"
-            ? { ...current, x: quantizeOffset(current.x + delta) }
-            : { ...current, y: quantizeOffset(current.y + delta) };
-        return { ...previous, [frameName]: next };
-      });
+      const previous = offsetEditsRef.current;
+      const current = previous[frameName] ?? resolveDefaultOffset(frameName);
+      const delta = sign * step;
+      const nextPoint =
+        axis === "x"
+          ? { ...current, x: quantizeOffset(current.x + delta) }
+          : { ...current, y: quantizeOffset(current.y + delta) };
+      commitEditSnapshot(
+        buildEditSnapshot(
+          { ...previous, [frameName]: nextPoint },
+          roleMapExtraRef.current,
+          pendingTextureEditsRef.current,
+        ),
+      );
     },
-    [frameMap, trimByFrameName],
+    [buildEditSnapshot, commitEditSnapshot, resolveDefaultOffset],
+  );
+
+  const setSpriteOffsetAxis = useCallback(
+    (frameName: string, axis: "x" | "y", nextValue: number) => {
+      const previous = offsetEditsRef.current;
+      const current = previous[frameName] ?? resolveDefaultOffset(frameName);
+      const nextPoint =
+        axis === "x" ? { ...current, x: nextValue } : { ...current, y: nextValue };
+      commitEditSnapshot(
+        buildEditSnapshot(
+          { ...previous, [frameName]: nextPoint },
+          roleMapExtraRef.current,
+          pendingTextureEditsRef.current,
+        ),
+      );
+    },
+    [buildEditSnapshot, commitEditSnapshot, resolveDefaultOffset],
   );
 
   const backgroundLayerEntries = useMemo(
@@ -1209,18 +1623,31 @@ export function IconEditorToolPanel() {
       if (!frame) {
         return { x: 0, y: 0 };
       }
-      const trim = trimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
+      const trim = effectiveTrimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
       // Match merge behavior: start from plist spriteOffset and add trim-derived reduction adjustment.
       return mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
     },
-    [frameMap, offsetEdits, trimByFrameName],
+    [effectiveTrimByFrameName, frameMap, offsetEdits],
   );
 
   const offsetDirty = Object.keys(offsetEdits).length > 0;
+  const textureDirty = Object.keys(pendingTextureEdits).length > 0;
   const extraMappingDirty =
     sheetInfo !== null && roleMap.extra.trim() !== extraMappingBaseline.trim();
-  const dirty = offsetDirty || extraMappingDirty;
+  const dirty = offsetDirty || extraMappingDirty || textureDirty;
   const saveStatusLabel = !sheetInfo ? "Save" : dirty ? "Unsaved" : "Saved";
+  const saveTooltip = useMemo(() => {
+    if (!sheetInfo) {
+      return "Save plist offset changes";
+    }
+    if (isBusy) {
+      return "Saving changes to plist…";
+    }
+    if (dirty) {
+      return "Save unsaved changes (Ctrl+S)";
+    }
+    return "All changes saved";
+  }, [dirty, isBusy, sheetInfo]);
   const saveStatusClass = !sheetInfo
     ? "tm-icon-editor-viewport-hud-save--idle"
     : dirty
@@ -1228,11 +1655,12 @@ export function IconEditorToolPanel() {
       : "tm-icon-editor-viewport-hud-save--saved";
 
   const loadSheet = useCallback(
-    async (plistPath: string, options?: { omitBusy?: boolean }) => {
+    async (plistPath: string, options?: { omitBusy?: boolean; resetHistory?: boolean }) => {
       if (!plistPath.trim()) {
         return;
       }
       const omitBusy = options?.omitBusy === true;
+      const resetHistory = options?.resetHistory === true;
       if (!omitBusy) {
         setIsBusy(true);
       }
@@ -1240,20 +1668,50 @@ export function IconEditorToolPanel() {
       setToolbarErrorDetail(null);
       setIsErrorDetailOpen(false);
       try {
+        if (resetHistory) {
+          clearIconEditorHistory(plistPath);
+        }
         const info = await getIconEditorSheetInfo(plistPath);
         const extracted = await extractIconEditorFrames(plistPath);
-        const { canvases, trimByFrameName: trims } = await buildSplitCanvasMap(extracted);
+        const { canvases, fullCanvases, trimByFrameName: trims } = await buildSplitCanvasMap(extracted);
+        const nextRoleMap = suggestRoleMap(info.frames);
+        const persistedHistory = resetHistory ? null : loadIconEditorHistory(plistPath);
+        const restoredSnapshot = persistedHistory?.present ?? emptyIconEditorEditSnapshot();
+        const nextHistory: IconEditorHistoryState = resetHistory
+          ? {
+              past: [],
+              present: emptyIconEditorEditSnapshot(),
+              future: [],
+            }
+          : persistedHistory ?? {
+              past: [],
+              present: cloneIconEditorEditSnapshot(restoredSnapshot),
+              future: [],
+            };
+
+        if (persistedHistory) {
+          nextRoleMap.extra = restoredSnapshot.roleMapExtra;
+        }
+
+        activePlistPathRef.current = plistPath;
         setSheetInfo(info);
         setRenameValue(
           info.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") ?? "",
         );
-        const nextRoleMap = suggestRoleMap(info.frames);
         setRoleMap(nextRoleMap);
         setExtraMappingBaseline(nextRoleMap.extra.trim());
-        setOffsetEdits({});
+        const restoredClone = cloneIconEditorEditSnapshot(restoredSnapshot);
+        setOffsetEdits(restoredClone.offsetEdits);
+        setEditHistory(nextHistory);
         setInspectorRole("primary");
         setTrimByFrameName(trims);
         setSplitFrameCanvases(canvases);
+        setFullFrameCanvases(fullCanvases);
+        if (resetHistory) {
+          setPendingTextureEdits({});
+        } else {
+          void deserializeTextureEdits(restoredClone.textureEdits).then(setPendingTextureEdits);
+        }
         setAtlasVersion((value) => value + 1);
         setViewportFocusGeneration((generation) => generation + 1);
       } catch (error) {
@@ -1291,7 +1749,7 @@ export function IconEditorToolPanel() {
     if (!sheetInfo?.plistPath?.trim()) {
       return;
     }
-    await loadSheet(sheetInfo.plistPath, { omitBusy: true });
+    await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
   }, [loadSheet, sheetInfo?.plistPath]);
 
   const saveOffsets = useCallback(async () => {
@@ -1311,8 +1769,15 @@ export function IconEditorToolPanel() {
       if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
         removedFrameNames.push(extraMappingBaseline.trim());
       }
-      await saveIconEditorPlist(sheetInfo.plistPath, updates, removedFrameNames);
-      await loadSheet(sheetInfo.plistPath, { omitBusy: true });
+      const frameTextureUpdates = buildFrameTextureUpdates(pendingTextureEdits);
+      await saveIconEditorPlist(
+        sheetInfo.plistPath,
+        updates,
+        removedFrameNames,
+        frameTextureUpdates,
+      );
+      clearIconEditorHistory(sheetInfo.plistPath);
+      await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(error, "Failed to save plist changes.");
       setToolbarError(parsed.message);
@@ -1320,7 +1785,7 @@ export function IconEditorToolPanel() {
     } finally {
       setIsBusy(false);
     }
-  }, [dirty, extraMappingBaseline, loadSheet, offsetEdits, roleMap.extra, sheetInfo]);
+  }, [dirty, extraMappingBaseline, loadSheet, offsetEdits, pendingTextureEdits, roleMap.extra, sheetInfo]);
 
   const renameSheet = useCallback(async () => {
     if (!sheetInfo || !renameValue.trim()) {
@@ -1395,11 +1860,13 @@ export function IconEditorToolPanel() {
       if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
         removedFrameNames.push(extraMappingBaseline.trim());
       }
+      const frameTextureUpdates = buildFrameTextureUpdates(pendingTextureEdits);
       const copied = await copyIconEditorSheet(
         sheetInfo.plistPath,
         renameValue.trim(),
         updates,
         removedFrameNames,
+        frameTextureUpdates,
       );
       await loadSheet(copied.plistPath, { omitBusy: true });
     } catch (error) {
@@ -1415,6 +1882,7 @@ export function IconEditorToolPanel() {
     loadSheet,
     offsetEdits,
     renameValue,
+    pendingTextureEdits,
     roleMap.extra,
     sheetInfo,
   ]);
@@ -1494,50 +1962,78 @@ export function IconEditorToolPanel() {
           : buildIconFrameNameForRole(stem, role);
       const existingPlistName = resolveFrameNameFromPlist(sheetInfo.frames, targetFrameName);
       const frameExists = existingPlistName !== null;
-      setIsBusy(true);
       setToolbarError(null);
       setToolbarErrorDetail(null);
       setIsErrorDetailOpen(false);
       try {
         const plistFrameKey = existingPlistName ?? targetFrameName;
-        if (frameExists) {
-          await importIconEditorFrameTexture(
-            sheetInfo.plistPath,
-            plistFrameKey,
-            selectedTexturePath,
-          );
-        } else {
-          await addIconEditorFrameTexture(
-            sheetInfo.plistPath,
-            plistFrameKey,
-            selectedTexturePath,
-          );
-        }
-        await loadSheet(sheetInfo.plistPath, { omitBusy: true });
+        const sourceCanvas = await buildCanvasFromImagePath(selectedTexturePath);
+        const spriteWidth = Math.max(1, sourceCanvas.width);
+        const spriteHeight = Math.max(1, sourceCanvas.height);
+        const existingFrame = existingPlistName ? frameMap.get(existingPlistName) : undefined;
+        const previousPending = pendingTextureEditsRef.current;
+        const pendingExisting = previousPending[plistFrameKey];
+        const nextPending: Record<string, PendingFrameTextureEdit> = {
+          ...previousPending,
+          [plistFrameKey]: {
+            sourceCanvas,
+            spriteSize: { width: spriteWidth, height: spriteHeight },
+            spriteSourceSize: { width: spriteWidth, height: spriteHeight },
+            spriteOffset:
+              pendingExisting?.spriteOffset ?? existingFrame?.spriteOffset ?? { x: 0, y: 0 },
+            textureRotated:
+              pendingExisting?.textureRotated ?? existingFrame?.textureRotated ?? false,
+            isNewFrame: !frameExists,
+          },
+        };
+        const nextOffsets = { ...offsetEditsRef.current };
+        delete nextOffsets[plistFrameKey];
+        commitEditSnapshot(
+          buildEditSnapshot(nextOffsets, roleMapExtraRef.current, nextPending),
+        );
         setRoleMap((previous) => ({ ...previous, [role]: plistFrameKey }));
       } catch (error) {
         const parsed = toIconEditorErrorInfo(error, "Failed to import texture.");
         setToolbarError(parsed.message);
         setToolbarErrorDetail(parsed.detail);
-      } finally {
-        setIsBusy(false);
       }
     },
-    [loadSheet, roleMap.primary, selectedRobotPartId, selectedSpiderPartId, sheetInfo],
+    [buildEditSnapshot, commitEditSnapshot, frameMap, roleMap.primary, selectedRobotPartId, selectedSpiderPartId, sheetInfo],
   );
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      if (!(event.ctrlKey || event.metaKey)) {
+        return;
+      }
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest('input, textarea, select, [contenteditable="true"]')
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      if (key === "s") {
         event.preventDefault();
         saveOffsets().catch(() => {
           // Save handler already updates toolbar error state.
         });
+        return;
+      }
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undoEdits();
+        return;
+      }
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        redoEdits();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [saveOffsets]);
+  }, [redoEdits, saveOffsets, undoEdits]);
 
   const inspectorFrameName = roleMap[inspectorRole];
 
@@ -1626,13 +2122,58 @@ export function IconEditorToolPanel() {
     (isRobotIcon ? robotInspectorFrameName : isSpiderIcon ? spiderInspectorFrameName : inspectorFrameName);
   const inspectorFrame = effectiveInspectorFrameName ? frameMap.get(effectiveInspectorFrameName) ?? null : null;
   const inspectorTrim: TrimInsets | null = effectiveInspectorFrameName
-    ? trimByFrameName[effectiveInspectorFrameName] ?? { left: 0, top: 0, right: 0, bottom: 0 }
+    ? effectiveTrimByFrameName[effectiveInspectorFrameName] ?? { left: 0, top: 0, right: 0, bottom: 0 }
     : null;
   const mergeOffsetFromNullifiedInput =
     inspectorTrim !== null ? mergeAdjustedSpriteOffset({ x: 0, y: 0 }, inspectorTrim) : null;
   const inspectorEffectiveOffset = effectiveInspectorFrameName
     ? getEffectiveOffset(effectiveInspectorFrameName)
     : null;
+
+  const rotateFrame = useCallback(
+    (direction: IconEditorRotateDirection) => {
+      if (!effectiveInspectorFrameName) {
+        return;
+      }
+      const frameName = effectiveInspectorFrameName;
+      const frame = frameMap.get(frameName);
+      if (!frame) {
+        return;
+      }
+      setToolbarError(null);
+      setToolbarErrorDetail(null);
+      setIsErrorDetailOpen(false);
+      const pending = pendingTextureEditsRef.current[frameName];
+      const sourceCanvas = pending?.sourceCanvas ?? fullFrameCanvases[frameName];
+      if (!sourceCanvas) {
+        return;
+      }
+      const baseMeta = pending ?? {
+        spriteSize: frame.spriteSize,
+        spriteSourceSize: frame.spriteSourceSize,
+        spriteOffset: frame.spriteOffset,
+        textureRotated: frame.textureRotated,
+        isNewFrame: false,
+      };
+      const nextPending: Record<string, PendingFrameTextureEdit> = {
+        ...pendingTextureEditsRef.current,
+        [frameName]: {
+          ...baseMeta,
+          sourceCanvas: rotateCanvas90(sourceCanvas, direction),
+          spriteSize: swapIconEditorSize(baseMeta.spriteSize),
+          spriteSourceSize: swapIconEditorSize(baseMeta.spriteSourceSize),
+          spriteOffset: rotateSpriteOffset(baseMeta.spriteOffset, direction),
+          textureRotated: baseMeta.textureRotated,
+        },
+      };
+      const nextOffsets = { ...offsetEditsRef.current };
+      delete nextOffsets[frameName];
+      commitEditSnapshot(
+        buildEditSnapshot(nextOffsets, roleMapExtraRef.current, nextPending),
+      );
+    },
+    [buildEditSnapshot, commitEditSnapshot, effectiveInspectorFrameName, frameMap, fullFrameCanvases],
+  );
 
   useEffect(() => {
     if (!isBirdOrUfoIcon && inspectorRole === "capsule") {
@@ -2002,12 +2543,18 @@ export function IconEditorToolPanel() {
       return;
     }
     const startOffset = getEffectiveOffset(dragFrameName);
+    const historyStartSnapshot = buildEditSnapshot(
+      offsetEditsRef.current,
+      roleMapExtraRef.current,
+      pendingTextureEditsRef.current,
+    );
     setDragState({
       role,
       pointerId: event.pointerId,
       startClientX: event.clientX,
       startClientY: event.clientY,
       startOffset,
+      historyStartSnapshot,
     });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
@@ -2033,6 +2580,18 @@ export function IconEditorToolPanel() {
 
   const onLayerPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (dragState && event.pointerId === dragState.pointerId) {
+      const frameName =
+        (event.currentTarget.dataset.frameName ?? "") || roleMap[dragState.role];
+      if (frameName) {
+        const nextSnapshot = buildEditSnapshot(
+          offsetEditsRef.current,
+          roleMapExtraRef.current,
+          pendingTextureEditsRef.current,
+        );
+        if (!iconEditorEditSnapshotsEqual(nextSnapshot, dragState.historyStartSnapshot)) {
+          commitEditSnapshot(nextSnapshot);
+        }
+      }
       setDragState(null);
     }
   };
@@ -2095,6 +2654,15 @@ export function IconEditorToolPanel() {
     }
   };
 
+  const commitRoleMapExtra = useCallback(
+    (nextExtra: string) => {
+      commitEditSnapshot(
+        buildEditSnapshot(offsetEditsRef.current, nextExtra, pendingTextureEditsRef.current),
+      );
+    },
+    [buildEditSnapshot, commitEditSnapshot],
+  );
+
   const roleControls = roleOrder.map((role) => (
     <div
       className={`tm-icon-editor-role-card tm-icon-editor-role-card-${role}${
@@ -2133,7 +2701,7 @@ export function IconEditorToolPanel() {
                 const nextFrame = event.target.value;
                 if (isRobotIcon) {
                   if (role === "extra" && selectedRobotPartId === "01") {
-                    setRoleMap((previous) => ({ ...previous, extra: nextFrame }));
+                    commitRoleMapExtra(nextFrame);
                     setInspectorFrameOverride(nextFrame || null);
                     setInspectorRole(role);
                     return;
@@ -2144,13 +2712,17 @@ export function IconEditorToolPanel() {
                 }
                 if (isSpiderIcon) {
                   if (role === "extra" && selectedSpiderPartId === "01") {
-                    setRoleMap((previous) => ({ ...previous, extra: nextFrame }));
+                    commitRoleMapExtra(nextFrame);
                     setInspectorFrameOverride(nextFrame || null);
                     setInspectorRole(role);
                     return;
                   }
                   setInspectorFrameOverride(nextFrame || null);
                   setInspectorRole(role);
+                  return;
+                }
+                if (role === "extra") {
+                  commitRoleMapExtra(nextFrame);
                   return;
                 }
                 setRoleMap((previous) => ({ ...previous, [role]: nextFrame }));
@@ -2204,7 +2776,7 @@ export function IconEditorToolPanel() {
             title="Clear extra frame mapping"
             disabled={!roleMap.extra.trim() || isBusy}
             onClick={() => {
-              setRoleMap((previous) => ({ ...previous, extra: "" }));
+              commitRoleMapExtra("");
               setInspectorFrameOverride(null);
               setInspectorRole((current) => (current === "extra" ? "primary" : current));
             }}
@@ -2220,31 +2792,35 @@ export function IconEditorToolPanel() {
   return (
     <div className="tm-icon-editor">
       <header className="tm-icon-editor-top-bar">
+        <div className="tm-icon-editor-top-bar-track">
         <div className="tm-icon-editor-top-bar-brand">
           <Palette size={18} strokeWidth={1.75} />
           <span>Icon Editor</span>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group tm-icon-editor-toolbar-group--file">
-          <button
-            className="tm-icon-editor-toolbar-btn"
-            type="button"
-            title="Reload the current gamesheet from disk"
-            onClick={() => reloadSheet().catch(() => {})}
-            disabled={!sheetInfo || isBusy}
-          >
-            <RefreshCw size={15} />
-            Reload
-          </button>
-          <button
-            className="tm-icon-editor-toolbar-btn"
-            type="button"
-            onClick={() => openSheet().catch(() => {})}
-            disabled={isBusy}
-          >
-            <FolderOpen size={15} />
-            Open Sheet
-          </button>
+          <IconEditorToolbarTip label="Reload the current gamesheet from disk">
+            <button
+              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+              type="button"
+              aria-label="Reload sheet"
+              onClick={() => reloadSheet().catch(() => {})}
+              disabled={!sheetInfo || isBusy}
+            >
+              <RefreshCw size={15} aria-hidden />
+            </button>
+          </IconEditorToolbarTip>
+          <IconEditorToolbarTip label="Open plist sheet">
+            <button
+              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+              type="button"
+              aria-label="Open sheet"
+              onClick={() => openSheet().catch(() => {})}
+              disabled={isBusy}
+            >
+              <FolderOpen size={15} aria-hidden />
+            </button>
+          </IconEditorToolbarTip>
           <div className="tm-icon-editor-rename">
             <label>
               <div className="tm-folder-input">
@@ -2253,81 +2829,147 @@ export function IconEditorToolPanel() {
                   onChange={(event) => setRenameValue(event.target.value)}
                   placeholder="icons-hd"
                 />
-                <button type="button" onClick={() => renameSheet().catch(() => {})} disabled={!sheetInfo || isBusy}>
-                  <PencilLine size={14} />
-                  Rename
-                </button>
-                <button
-                  type="button"
-                  onClick={() => saveCopy().catch(() => {})}
-                  disabled={!canSaveCopy || isBusy}
-                  title="Save a copy with the new name and current settings"
-                >
-                  <Copy size={14} />
-                  Save Copy
-                </button>
+                <IconEditorToolbarTip label="Rename plist and atlas files">
+                  <button
+                    type="button"
+                    className="tm-icon-editor-toolbar-btn"
+                    aria-label="Rename sheet"
+                    onClick={() => renameSheet().catch(() => {})}
+                    disabled={!sheetInfo || isBusy}
+                  >
+                    <PencilLine size={14} aria-hidden />
+                    Rename
+                  </button>
+                </IconEditorToolbarTip>
+                <IconEditorToolbarTip label="Save a copy with the new name and current settings">
+                  <button
+                    type="button"
+                    className="tm-icon-editor-toolbar-btn"
+                    aria-label="Save copy"
+                    onClick={() => saveCopy().catch(() => {})}
+                    disabled={!canSaveCopy || isBusy}
+                  >
+                    <Copy size={14} aria-hidden />
+                    Save Copy
+                  </button>
+                </IconEditorToolbarTip>
               </div>
             </label>
           </div>
-          <button
-            className="tm-icon-editor-toolbar-btn"
-            type="button"
-            onClick={() => downloadCurrentIconPng().catch(() => {})}
-            disabled={!sheetInfo || isBusy}
-          >
-            <Download size={15} />
-            Download PNG
-          </button>
+          <IconEditorToolbarTip label="Download current icon preview as PNG">
+            <button
+              className="tm-icon-editor-toolbar-btn"
+              type="button"
+              aria-label="Download PNG"
+              onClick={() => downloadCurrentIconPng().catch(() => {})}
+              disabled={!sheetInfo || isBusy}
+            >
+              <Download size={15} aria-hidden />
+              Download PNG
+            </button>
+          </IconEditorToolbarTip>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
-          <button
-            type="button"
-            className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
-            onClick={() => saveOffsets().catch(() => {})}
-            disabled={!sheetInfo || isBusy}
-          >
-            <Save size={15} />
-            {isBusy ? "Saving..." : saveStatusLabel}
-          </button>
+          <IconEditorToolbarTip label="Undo (Ctrl+Z)">
+            <button
+              type="button"
+              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+              aria-label="Undo"
+              onClick={undoEdits}
+              disabled={!sheetInfo || isBusy || !canUndoEdits}
+            >
+              <Undo2 size={15} aria-hidden />
+            </button>
+          </IconEditorToolbarTip>
+          <IconEditorToolbarTip label="Redo (Ctrl+Shift+Z)">
+            <button
+              type="button"
+              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+              aria-label="Redo"
+              onClick={redoEdits}
+              disabled={!sheetInfo || isBusy || !canRedoEdits}
+            >
+              <Redo2 size={15} aria-hidden />
+            </button>
+          </IconEditorToolbarTip>
+        </div>
+        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+        <div className="tm-icon-editor-toolbar-group">
+          <IconEditorToolbarTip label={saveTooltip}>
+            <button
+              type="button"
+              className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
+              aria-label={saveTooltip}
+              onClick={() => saveOffsets().catch(() => {})}
+              disabled={!sheetInfo || isBusy}
+            >
+              <Save size={15} aria-hidden />
+              {isBusy ? "Saving..." : saveStatusLabel}
+            </button>
+          </IconEditorToolbarTip>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
           <div className="tm-icon-editor-zoom-row">
-            <button type="button" onClick={() => setZoom((value) => clampZoom(value - 0.1))}>
-              <ZoomOut size={15} />
-            </button>
+            <IconEditorToolbarTip label="Zoom out">
+              <button
+                type="button"
+                className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                aria-label="Zoom out"
+                onClick={() => setZoom((value) => clampZoom(value - 0.1))}
+              >
+                <ZoomOut size={15} aria-hidden />
+              </button>
+            </IconEditorToolbarTip>
             <span className="chip">{Math.round(zoom * 100)}%</span>
-            <button type="button" onClick={() => setZoom((value) => clampZoom(value + 0.1))}>
-              <ZoomIn size={15} />
-            </button>
-            <button
-              type="button"
-              onClick={() => setZoom(autoResolutionZoom)}
-              title={`Reset zoom to display default (${Math.round(autoResolutionZoom * 100)}% at this viewport height)`}
+            <IconEditorToolbarTip label="Zoom in">
+              <button
+                type="button"
+                className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                aria-label="Zoom in"
+                onClick={() => setZoom((value) => clampZoom(value + 0.1))}
+              >
+                <ZoomIn size={15} aria-hidden />
+              </button>
+            </IconEditorToolbarTip>
+            <IconEditorToolbarTip
+              label={`Reset zoom to display default (${Math.round(autoResolutionZoom * 100)}% at this viewport height)`}
             >
-              <RotateCcw size={15} />
-            </button>
+              <button
+                type="button"
+                className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                aria-label="Reset zoom"
+                onClick={() => setZoom(autoResolutionZoom)}
+              >
+                <RotateCcw size={15} aria-hidden />
+              </button>
+            </IconEditorToolbarTip>
           </div>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
-          <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
-            <input
-              type="checkbox"
-              checked={hideGlow}
-              onChange={(event) => setHideGlow(event.target.checked)}
-            />
-            Hide glow
-          </label>
-          <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
-            <input
-              type="checkbox"
-              checked={hideLayerBorders}
-              onChange={(event) => setHideLayerBorders(event.target.checked)}
-            />
-            Hide border
-          </label>
+          <IconEditorToolbarTip label="Hide glow layers in the icon preview">
+            <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
+              <input
+                type="checkbox"
+                checked={hideGlow}
+                onChange={(event) => setHideGlow(event.target.checked)}
+              />
+              Hide glow
+            </label>
+          </IconEditorToolbarTip>
+          <IconEditorToolbarTip label="Hide selection borders on icon layers">
+            <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
+              <input
+                type="checkbox"
+                checked={hideLayerBorders}
+                onChange={(event) => setHideLayerBorders(event.target.checked)}
+              />
+              Hide border
+            </label>
+          </IconEditorToolbarTip>
+        </div>
         </div>
       </header>
       {toolbarError ? (
@@ -2548,7 +3190,7 @@ export function IconEditorToolPanel() {
                           const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
                           const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                           const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                          const displayCanvas = splitFrameCanvases[glowLayer.frameName];
+                          const displayCanvas = displayFrameCanvases[glowLayer.frameName];
                           const displayW = displayCanvas
                             ? Math.max(1, displayCanvas.width)
                             : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2584,7 +3226,7 @@ export function IconEditorToolPanel() {
                                 onPointerCancel={onLayerPointerUp}
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[glowLayer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
                                 />
                               </div>
@@ -2612,7 +3254,7 @@ export function IconEditorToolPanel() {
                           );
                           const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                           const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                          const displayCanvas = splitFrameCanvases[glowLayer.frameName];
+                          const displayCanvas = displayFrameCanvases[glowLayer.frameName];
                           const displayW = displayCanvas
                             ? Math.max(1, displayCanvas.width)
                             : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2644,7 +3286,7 @@ export function IconEditorToolPanel() {
                                 aria-hidden
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[glowLayer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
                                 />
                               </div>
@@ -2693,7 +3335,7 @@ export function IconEditorToolPanel() {
                                     : 0;
                             const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                             const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                            const displayCanvas = splitFrameCanvases[layer.frameName];
+                            const displayCanvas = displayFrameCanvases[layer.frameName];
                             const displayW = displayCanvas
                               ? Math.max(1, displayCanvas.width)
                               : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2716,7 +3358,7 @@ export function IconEditorToolPanel() {
                                 aria-hidden
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[layer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
                                 />
                               </div>
@@ -2762,7 +3404,7 @@ export function IconEditorToolPanel() {
                                     : 0;
                             const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                             const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                            const displayCanvas = splitFrameCanvases[layer.frameName];
+                            const displayCanvas = displayFrameCanvases[layer.frameName];
                             const displayW = displayCanvas
                               ? Math.max(1, displayCanvas.width)
                               : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2790,7 +3432,7 @@ export function IconEditorToolPanel() {
                                 onPointerCancel={onLayerPointerUp}
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[layer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
                                 />
                               </div>
@@ -2823,7 +3465,7 @@ export function IconEditorToolPanel() {
                           const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
                           const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                           const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                          const displayCanvas = splitFrameCanvases[glowLayer.frameName];
+                          const displayCanvas = displayFrameCanvases[glowLayer.frameName];
                           const displayW = displayCanvas
                             ? Math.max(1, displayCanvas.width)
                             : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2859,7 +3501,7 @@ export function IconEditorToolPanel() {
                                 onPointerCancel={onLayerPointerUp}
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[glowLayer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
                                 />
                               </div>
@@ -2885,7 +3527,7 @@ export function IconEditorToolPanel() {
                           );
                           const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                           const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                          const displayCanvas = splitFrameCanvases[glowLayer.frameName];
+                          const displayCanvas = displayFrameCanvases[glowLayer.frameName];
                           const displayW = displayCanvas
                             ? Math.max(1, displayCanvas.width)
                             : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2917,7 +3559,7 @@ export function IconEditorToolPanel() {
                                 aria-hidden
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[glowLayer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
                                 />
                               </div>
@@ -2970,7 +3612,7 @@ export function IconEditorToolPanel() {
                                     : 0;
                             const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                             const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                            const displayCanvas = splitFrameCanvases[layer.frameName];
+                            const displayCanvas = displayFrameCanvases[layer.frameName];
                             const displayW = displayCanvas
                               ? Math.max(1, displayCanvas.width)
                               : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -2993,7 +3635,7 @@ export function IconEditorToolPanel() {
                                 aria-hidden
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[layer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
                                 />
                               </div>
@@ -3039,7 +3681,7 @@ export function IconEditorToolPanel() {
                                     : 0;
                             const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
                             const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
-                            const displayCanvas = splitFrameCanvases[layer.frameName];
+                            const displayCanvas = displayFrameCanvases[layer.frameName];
                             const displayW = displayCanvas
                               ? Math.max(1, displayCanvas.width)
                               : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -3067,7 +3709,7 @@ export function IconEditorToolPanel() {
                                 onPointerCancel={onLayerPointerUp}
                               >
                                 <LayerCanvas
-                                  sourceCanvas={splitFrameCanvases[layer.frameName] ?? null}
+                                  sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
                                 />
                               </div>
@@ -3083,7 +3725,7 @@ export function IconEditorToolPanel() {
                       const anchorCenterX = STAGE_ORIGIN_X + layer.offset.x * OFFSET_SCALE;
                       const anchorCenterY =
                         stageOriginY - layer.offset.y * OFFSET_SCALE + capsuleViewYOffset;
-                      const displayCanvas = splitFrameCanvases[layer.frameName];
+                      const displayCanvas = displayFrameCanvases[layer.frameName];
                       const displayW = displayCanvas
                         ? Math.max(1, displayCanvas.width)
                         : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
@@ -3110,7 +3752,7 @@ export function IconEditorToolPanel() {
                           onPointerCancel={onLayerPointerUp}
                         >
                           <LayerCanvas
-                            sourceCanvas={splitFrameCanvases[layer.frameName] ?? null}
+                            sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                             tint={layer.tint}
                           />
                         </div>
@@ -3299,9 +3941,33 @@ export function IconEditorToolPanel() {
                   <div className="tm-icon-editor-plist-content">
                     <div className="tm-icon-editor-plist-frame-head">
                       <span className="tm-icon-editor-plist-section-label">Active frame</span>
-                      <code className="tm-icon-editor-plist-frame-name" title={effectiveInspectorFrameName}>
-                        {effectiveInspectorFrameName}
-                      </code>
+                      <div className="tm-icon-editor-plist-frame-row">
+                        <code className="tm-icon-editor-plist-frame-name" title={effectiveInspectorFrameName}>
+                          {effectiveInspectorFrameName}
+                        </code>
+                        <div className="tm-icon-editor-plist-rotate-actions">
+                          <button
+                            type="button"
+                            className="tm-icon-editor-plist-rotate-btn"
+                            aria-label="Rotate sprite 90 degrees counter-clockwise"
+                            title="Rotate 90° counter-clockwise"
+                            onClick={() => rotateFrame("counterClockwise")}
+                            disabled={isBusy}
+                          >
+                            <RotateCcw size={15} strokeWidth={2} aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            className="tm-icon-editor-plist-rotate-btn"
+                            aria-label="Rotate sprite 90 degrees clockwise"
+                            title="Rotate 90° clockwise"
+                            onClick={() => rotateFrame("clockwise")}
+                            disabled={isBusy}
+                          >
+                            <RotateCw size={15} strokeWidth={2} aria-hidden />
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     <section className="tm-icon-editor-plist-section" aria-labelledby="plist-trim-title">
@@ -3338,12 +4004,14 @@ export function IconEditorToolPanel() {
                           value={inspectorEffectiveOffset.x}
                           frameName={effectiveInspectorFrameName}
                           onBump={bumpSpriteOffset}
+                          onSetAxis={setSpriteOffsetAxis}
                         />
                         <SpriteOffsetAxisControls
                           axis="y"
                           value={inspectorEffectiveOffset.y}
                           frameName={effectiveInspectorFrameName}
                           onBump={bumpSpriteOffset}
+                          onSetAxis={setSpriteOffsetAxis}
                         />
                       </div>
                       <dl className="tm-icon-editor-plist-kv-list">

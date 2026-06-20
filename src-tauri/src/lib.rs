@@ -18,12 +18,14 @@ use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
     icon_editor_extract_frames as icon_editor_extract_frames_core,
     icon_editor_import_frame as icon_editor_import_frame_core,
+    icon_editor_png_data_url as icon_editor_png_data_url_core,
+    icon_editor_rotate_frame as icon_editor_rotate_frame_core,
     icon_editor_copy_sheet as icon_editor_copy_sheet_core,
     icon_editor_rename_sheet as icon_editor_rename_sheet_core,
     icon_editor_swap_rename_sheet as icon_editor_swap_rename_sheet_core,
     icon_editor_save_plist as icon_editor_save_plist_core,
     icon_editor_sheet_info as icon_editor_sheet_info_core, IconEditorExtractedFrame,
-    IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
+    IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
 };
 use crate::core::operations::build_operation_plan;
 use crate::core::pipeline::{alpha_trim_bounds, normalize_rotation, nullify_offset};
@@ -150,12 +152,15 @@ fn icon_editor_save_plist(
     plist_path: String,
     updates: Vec<IconEditorFrameUpdate>,
     removed_frame_names: Option<Vec<String>>,
+    frame_texture_updates: Option<Vec<IconEditorFrameTextureUpdate>>,
 ) -> Result<(), String> {
     let removed = removed_frame_names.unwrap_or_default();
+    let texture_updates = frame_texture_updates.unwrap_or_default();
     icon_editor_save_plist_core(
         std::path::Path::new(&plist_path),
         &updates,
         removed.as_slice(),
+        texture_updates.as_slice(),
     )
     .map_err(|err| err.to_string())
 }
@@ -170,6 +175,20 @@ fn icon_editor_import_frame(
         std::path::Path::new(&plist_path),
         frame_name.as_str(),
         std::path::Path::new(&texture_path),
+    )
+    .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn icon_editor_rotate_frame(
+    plist_path: String,
+    frame_name: String,
+    direction: String,
+) -> Result<(), String> {
+    icon_editor_rotate_frame_core(
+        std::path::Path::new(&plist_path),
+        frame_name.as_str(),
+        direction.as_str(),
     )
     .map_err(|err| err.to_string())
 }
@@ -218,15 +237,23 @@ fn icon_editor_copy_sheet(
     new_stem: String,
     updates: Vec<IconEditorFrameUpdate>,
     removed_frame_names: Option<Vec<String>>,
+    frame_texture_updates: Option<Vec<IconEditorFrameTextureUpdate>>,
 ) -> Result<IconEditorRenameResult, String> {
     let removed = removed_frame_names.unwrap_or_default();
+    let texture_updates = frame_texture_updates.unwrap_or_default();
     icon_editor_copy_sheet_core(
         std::path::Path::new(&plist_path),
         new_stem.as_str(),
         &updates,
         removed.as_slice(),
+        texture_updates.as_slice(),
     )
     .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn icon_editor_png_data_url(texture_path: String) -> Result<String, String> {
+    icon_editor_png_data_url_core(std::path::Path::new(&texture_path)).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -295,11 +322,13 @@ pub fn run() {
             icon_editor_sheet_info,
             icon_editor_save_plist,
             icon_editor_import_frame,
+            icon_editor_rotate_frame,
             icon_editor_add_frame,
             icon_editor_extract_frames,
             icon_editor_rename_sheet,
             icon_editor_swap_rename_sheet,
             icon_editor_copy_sheet,
+            icon_editor_png_data_url,
             icon_editor_save_png_data_url
         ])
         .run(tauri::generate_context!())

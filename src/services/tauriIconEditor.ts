@@ -38,6 +38,16 @@ export type IconEditorFrameUpdate = {
   spriteOffset: IconEditorPoint;
 };
 
+export type IconEditorFrameTextureUpdate = {
+  name: string;
+  pngDataUrl: string;
+  spriteSize: IconEditorSize;
+  spriteSourceSize: IconEditorSize;
+  spriteOffset: IconEditorPoint;
+  textureRotated: boolean;
+  isNewFrame?: boolean;
+};
+
 export type IconEditorRenameResult = {
   plistPath: string;
   atlasPath: string;
@@ -53,15 +63,20 @@ export const getIconEditorSheetInfo = async (
 ): Promise<IconEditorSheetInfo> =>
   invoke<IconEditorSheetInfo>("icon_editor_sheet_info", { plistPath });
 
+export const getIconEditorPngDataUrl = async (texturePath: string): Promise<string> =>
+  invoke<string>("icon_editor_png_data_url", { texturePath });
+
 export const saveIconEditorPlist = async (
   plistPath: string,
   updates: IconEditorFrameUpdate[],
   removedFrameNames?: string[],
+  frameTextureUpdates?: IconEditorFrameTextureUpdate[],
 ): Promise<void> => {
   await invoke<void>("icon_editor_save_plist", {
     plistPath,
     updates,
     removedFrameNames: removedFrameNames ?? [],
+    frameTextureUpdates: frameTextureUpdates ?? [],
   });
 };
 
@@ -75,6 +90,16 @@ export const importIconEditorFrameTexture = async (
     frameName,
     texturePath,
   });
+};
+
+export type IconEditorRotateDirection = "clockwise" | "counterClockwise";
+
+export const rotateIconEditorFrame = async (
+  plistPath: string,
+  frameName: string,
+  direction: IconEditorRotateDirection,
+): Promise<void> => {
+  await invoke<void>("icon_editor_rotate_frame", { plistPath, frameName, direction });
 };
 
 export const addIconEditorFrameTexture = async (
@@ -124,10 +149,12 @@ export const copyIconEditorSheet = async (
   newStem: string,
   updates: IconEditorFrameUpdate[],
   removedFrameNames?: string[],
+  frameTextureUpdates?: IconEditorFrameTextureUpdate[],
 ): Promise<IconEditorRenameResult> =>
   invoke<IconEditorRenameResult>("icon_editor_copy_sheet", {
     plistPath,
     newStem,
     updates,
     removedFrameNames: removedFrameNames ?? [],
+    frameTextureUpdates: frameTextureUpdates ?? [],
   });
