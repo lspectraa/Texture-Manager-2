@@ -278,9 +278,14 @@ fn get_game_files_layout(game_files: tauri::State<'_, GameFilesState>) -> GameFi
 fn geode_buttons_target_index_cmd(
     game_files: tauri::State<'_, GameFilesState>,
     plist_path: String,
+    use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
-    geode_buttons_target_index(std::path::Path::new(&plist_path), game_files.0.as_ref())
-        .map_err(|err| err.to_string())
+    geode_buttons_target_index(
+        std::path::Path::new(&plist_path),
+        game_files.0.as_ref(),
+        use_game_files_cache,
+    )
+    .map_err(|err| err.to_string())
 }
 
 #[tauri::command]

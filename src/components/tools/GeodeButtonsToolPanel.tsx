@@ -19,7 +19,6 @@ import {
 import { PickFolderFn } from "./types";
 import {
   FolderPathField,
-  ToolField,
   ToolFilePathField,
   ToolPage,
   ToolPageHeader,
@@ -396,6 +395,14 @@ function FloatStepper({ value, step, min, max, onChange }: FloatStepperProps) {
   );
 }
 
+function stemAndParentFromPlistPath(plist: string): { stem: string; parent: string } {
+  const slash = Math.max(plist.lastIndexOf("/"), plist.lastIndexOf("\\"));
+  const fileName = slash >= 0 ? plist.slice(slash + 1) : plist;
+  const stem = fileName.replace(/\.plist$/i, "");
+  const parent = slash >= 0 ? plist.slice(0, slash) : "";
+  return { stem, parent };
+}
+
 export function GeodeButtonsToolPanel({
   inputDir,
   outputDir,
@@ -406,6 +413,7 @@ export function GeodeButtonsToolPanel({
   pickFolder,
 }: GeodeButtonsToolPanelProps) {
   const [plistPath, setPlistPath] = useState<string>("");
+  const [useCustomSheet, setUseCustomSheet] = useState(false);
   const [targets, setTargets] = useState<GeodeButtonsTargetGroup[] | null>(null);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
@@ -484,6 +492,40 @@ export function GeodeButtonsToolPanel({
     [],
   );
 
+  const applyPlistSelection = useCallback(
+    (resolved: string) => {
+      const normalized = normalizeFilesystemPath(resolved);
+      setPlistPath(normalized);
+      const { stem, parent } = stemAndParentFromPlistPath(normalized);
+      if (parent.trim()) {
+        onInputDirChange(parent);
+      }
+      if (stem.trim() && optionsRef.current.sheetStem !== stem) {
+        onOptionsChange({ ...optionsRef.current, sheetStem: stem });
+      }
+    },
+    [onInputDirChange, onOptionsChange],
+  );
+
+  const pickGamesheet = useCallback(async () => {
+    setTargetsError(null);
+    if (!isTauriRuntime()) {
+      setTargetsError("File picker is only available in Tauri runtime.");
+      return;
+    }
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title: "Select input gamesheet plist",
+      filters: [{ name: "Plist", extensions: ["plist"] }],
+    });
+    if (typeof selected !== "string" || !selected.trim()) {
+      return;
+    }
+    setUseCustomSheet(true);
+    applyPlistSelection(selected);
+  }, [applyPlistSelection]);
+
   useEffect(() => {
     let alive = true;
     getGeodeButtonsDefaultInputDir()
@@ -507,6 +549,9 @@ export function GeodeButtonsToolPanel({
   }, [onInputDirChange]);
 
   useEffect(() => {
+    if (useCustomSheet) {
+      return;
+    }
     if (!inputDir.trim()) {
       setPlistPath("");
       return;
@@ -517,11 +562,9 @@ export function GeodeButtonsToolPanel({
         if (!alive) return;
         if (resolved) {
           setPlistPath(resolved);
-          const slash = Math.max(resolved.lastIndexOf("/"), resolved.lastIndexOf("\\"));
-          const fileName = slash >= 0 ? resolved.slice(slash + 1) : resolved;
-          const stem = fileName.replace(/\.plist$/i, "");
-          if (stem.trim() && options.sheetStem !== stem) {
-            onOptionsChange({ ...options, sheetStem: stem });
+          const { stem } = stemAndParentFromPlistPath(resolved);
+          if (stem.trim() && optionsRef.current.sheetStem !== stem) {
+            onOptionsChange({ ...optionsRef.current, sheetStem: stem });
           }
         } else {
           setTargetsError(
@@ -537,7 +580,7 @@ export function GeodeButtonsToolPanel({
     return () => {
       alive = false;
     };
-  }, [inputDir, onOptionsChange, options, options.sheetStem]);
+  }, [inputDir, onOptionsChange, useCustomSheet]);
 
   useEffect(() => {
     if (!plistPath.trim()) {
@@ -548,7 +591,7 @@ export function GeodeButtonsToolPanel({
     let alive = true;
     setTargets(null);
     setTargetsError(null);
-    getGeodeButtonsTargetIndex(plistPath)
+    getGeodeButtonsTargetIndex(plistPath, { useGameFilesCache: !useCustomSheet })
       .then((groups) => {
         if (!alive) return;
         setTargets(groups);
@@ -561,7 +604,7 @@ export function GeodeButtonsToolPanel({
     return () => {
       alive = false;
     };
-  }, [plistPath]);
+  }, [plistPath, useCustomSheet]);
 
   useEffect(() => {
     if (!targets || targets.length === 0) {
@@ -731,18 +774,21 @@ export function GeodeButtonsToolPanel({
 
       <ToolSection
         title="Source & Output"
-        subtitle="BlankSheet is loaded from Steam geode/resources/geode.loader (hash-cached splits); choose where variants are written"
+        subtitle="BlankSheet loads from Steam geode/resources/geode.loader by default; browse to use a custom gamesheet instead"
         icon={FolderInput}
         columns={2}
       >
-        <ToolField label="Geode loader resources">
-          <input
-            className="tm-tool-text-input"
-            value={inputDir}
-            readOnly
-            placeholder="Resolving geode.loader directory…"
-          />
-        </ToolField>
+        <ToolFilePathField
+          label="Input gamesheet"
+          hint={useCustomSheet ? "Custom plist" : "Cached BlankSheet"}
+          value={plistPath}
+          placeholder="Resolving BlankSheet…"
+          browseLabel="Browse"
+          browseIcon={FileImage}
+          onBrowse={() => {
+            void pickGamesheet();
+          }}
+        />
         <FolderPathField
           label="Output directory"
           value={outputDir}
@@ -750,11 +796,6 @@ export function GeodeButtonsToolPanel({
           pickFolder={pickFolder}
           placeholder="C:/path/to/output"
         />
-        {plistPath.trim() ? (
-          <p className="tm-tool-section-note">
-            Active plist: <code>{plistPath}</code>
-          </p>
-        ) : null}
       </ToolSection>
 
       {targetsError ? <p className="tm-tool-inline-error">{targetsError}</p> : null}
@@ -806,7 +847,7 @@ export function GeodeButtonsToolPanel({
           ))}
           {targets === null ? (
             <div className="tm-geode-grid-empty">
-              {plistPath.trim() ? "Loading targets…" : "Waiting for input directory to load previews."}
+              {plistPath.trim() ? "Loading targets…" : "Waiting for gamesheet to load previews."}
             </div>
           ) : null}
         </ToolSection>

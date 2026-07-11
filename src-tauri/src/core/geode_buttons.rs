@@ -202,9 +202,14 @@ fn individual_frame_group_id(base_type: &str, frame_name: &str) -> String {
 /// Builds a structured index of the Geode loader UI primitives we generate for.
 /// This is used by the Create Geode Buttons tool to power the grid and ensure we only target frames
 /// that actually exist in the loaded sheet.
+///
+/// When `use_game_files_cache` is true (vanilla BlankSheet), previews go through the split-cache
+/// pipeline with hash-based update checks. When false (custom user plist), the sheet is read
+/// directly from disk and never written into or remapped through game-files cache.
 pub fn geode_buttons_target_index(
     plist_path: &Path,
     layout: &GameFilesLayout,
+    use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, AppError> {
     let root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
@@ -263,11 +268,34 @@ pub fn geode_buttons_target_index(
         group.frames.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
-    let splitter_opts = phase_defaults().splitter;
-    let source_pair = resolve_geode_buttons_sheet_candidate(layout, plist_path)?;
-    let split_dir = ensure_sheet_split_cached(layout, &source_pair, &splitter_opts)?;
+    if use_game_files_cache {
+        fill_previews_from_game_files_cache(layout, plist_path, &mut groups)?;
+    }
 
-    let mut missing_preview_names: Vec<String> = Vec::new();
+    let needs_direct_previews = groups.values().any(|g| g.preview_png_data_url.is_none());
+    if needs_direct_previews {
+        fill_previews_from_direct_extract(plist_path, &mut groups);
+    }
+
+    Ok(groups.into_values().collect())
+}
+
+fn fill_previews_from_game_files_cache(
+    layout: &GameFilesLayout,
+    plist_path: &Path,
+    groups: &mut BTreeMap<String, GeodeButtonsTargetGroup>,
+) -> Result<(), AppError> {
+    // Vanilla BlankSheet: resolve through Steam/Geode layout, then hash-check/rebuild split cache.
+    let source_pair = match resolve_geode_buttons_cached_sheet_candidate(layout, plist_path)? {
+        Some(pair) => pair,
+        None => resolve_geode_buttons_default_sheet(layout)?.ok_or_else(|| {
+            AppError::InvalidPath(
+                "could not resolve vanilla BlankSheet for geode buttons cache pipeline",
+            )
+        })?,
+    };
+    let splitter_opts = phase_defaults().splitter;
+    let split_dir = ensure_sheet_split_cached(layout, &source_pair, &splitter_opts)?;
     for group in groups.values_mut() {
         let biggest_name = group
             .frames
@@ -280,36 +308,36 @@ pub fn geode_buttons_target_index(
         if let Some(sprite_path) = resolve_cached_split_sprite(&split_dir, frame_name.as_str()) {
             if let Ok(data_url) = png_path_to_data_url(&sprite_path) {
                 group.preview_png_data_url = Some(data_url);
-                continue;
-            }
-        }
-        missing_preview_names.push(frame_name);
-    }
-
-    // One atlas-crop fallback pass for any frames the split cache could not resolve.
-    if !missing_preview_names.is_empty() {
-        if let Ok(extracted) = icon_editor_extract_frames(plist_path) {
-            let by_name: BTreeMap<String, String> = extracted
-                .into_iter()
-                .map(|frame| (frame.name, frame.png_data_url))
-                .collect();
-            for group in groups.values_mut() {
-                if group.preview_png_data_url.is_some() {
-                    continue;
-                }
-                let biggest_name = group
-                    .frames
-                    .iter()
-                    .max_by_key(|f| (f.sprite_size.width as u64) * (f.sprite_size.height as u64))
-                    .map(|f| f.name.as_str());
-                if let Some(frame_name) = biggest_name {
-                    group.preview_png_data_url = by_name.get(frame_name).cloned();
-                }
             }
         }
     }
+    Ok(())
+}
 
-    Ok(groups.into_values().collect())
+fn fill_previews_from_direct_extract(
+    plist_path: &Path,
+    groups: &mut BTreeMap<String, GeodeButtonsTargetGroup>,
+) {
+    let Ok(extracted) = icon_editor_extract_frames(plist_path) else {
+        return;
+    };
+    let by_name: BTreeMap<String, String> = extracted
+        .into_iter()
+        .map(|frame| (frame.name, frame.png_data_url))
+        .collect();
+    for group in groups.values_mut() {
+        if group.preview_png_data_url.is_some() {
+            continue;
+        }
+        let biggest_name = group
+            .frames
+            .iter()
+            .max_by_key(|f| (f.sprite_size.width as u64) * (f.sprite_size.height as u64))
+            .map(|f| f.name.as_str());
+        if let Some(frame_name) = biggest_name {
+            group.preview_png_data_url = by_name.get(frame_name).cloned();
+        }
+    }
 }
 
 /// Resolve the BlankSheet used by Geode Buttons from Steam/Geode game files.
@@ -341,32 +369,42 @@ pub fn resolve_geode_buttons_default_input_dir(layout: &GameFilesLayout) -> Stri
         .to_string()
 }
 
-fn resolve_geode_buttons_sheet_candidate(
+fn path_is_under(parent: &Path, child: &Path) -> bool {
+    let parent_norm = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
+    let child_norm = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
+    child_norm.strip_prefix(&parent_norm).is_ok()
+}
+
+/// True when `plist_path` lives under Steam/Geode game-files roots (safe for split-cache).
+fn geode_buttons_plist_is_under_game_files(layout: &GameFilesLayout, plist_path: &Path) -> bool {
+    let normalized = plist_path
+        .canonicalize()
+        .unwrap_or_else(|_| plist_path.to_path_buf());
+    let Some(parent) = normalized.parent() else {
+        return false;
+    };
+    if path_is_under(&layout.resources, parent) {
+        return true;
+    }
+    if path_is_under(&layout.geode_resources, parent) {
+        return true;
+    }
+    if path_is_under(&layout.geode_unzipped, parent) {
+        return true;
+    }
+    false
+}
+
+/// Resolve a sheet through the game-files cache/retrieve pipeline only when the plist is under
+/// Steam/Geode roots. Custom user paths return `None` so callers read the file directly.
+fn resolve_geode_buttons_cached_sheet_candidate(
     layout: &GameFilesLayout,
     plist_path: &Path,
-) -> Result<SheetCandidate, AppError> {
-    if let Some(pair) = find_current_sheet_for_plist(layout, plist_path)? {
-        return Ok(pair);
+) -> Result<Option<SheetCandidate>, AppError> {
+    if !geode_buttons_plist_is_under_game_files(layout, plist_path) {
+        return Ok(None);
     }
-
-    let stem = plist_path
-        .file_stem()
-        .and_then(|v| v.to_str())
-        .ok_or(AppError::InvalidPath("geode buttons plist has invalid stem"))?
-        .to_string();
-    let png_path = plist_path.with_extension("png");
-    if !png_path.exists() {
-        return Err(AppError::IoError(format!(
-            "geode buttons sheet png not found beside plist: {}",
-            png_path.to_string_lossy()
-        )));
-    }
-    Ok(SheetCandidate {
-        stem,
-        relative_dir: PathBuf::from("geode.loader"),
-        plist_path: plist_path.to_path_buf(),
-        png_path,
-    })
+    find_current_sheet_for_plist(layout, plist_path)
 }
 
 /// Auto-select BlankSheet plist with priority: `-uhd` -> `-hd` -> no suffix.
@@ -885,5 +923,107 @@ where
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn unique_temp_dir(label: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        std::env::temp_dir().join(format!("tm2-geode-buttons-{label}-{nanos}"))
+    }
+
+    fn test_layout(root: &Path, gd: &Path) -> GameFilesLayout {
+        GameFilesLayout {
+            root: root.to_path_buf(),
+            geometry_dash_dir: gd.to_path_buf(),
+            resources: gd.join("Resources"),
+            geode_resources: gd.join("geode").join("resources"),
+            geode_unzipped: gd.join("geode").join("unzipped"),
+            current_split: root.join("split-cache"),
+            legacy: root.join("legacy"),
+        }
+    }
+
+    #[test]
+    fn custom_plist_outside_game_files_skips_cache_pipeline() {
+        let root = unique_temp_dir("root");
+        let gd = unique_temp_dir("gd");
+        let custom = unique_temp_dir("custom");
+        fs::create_dir_all(gd.join("Resources")).expect("resources");
+        fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader")).expect("loader");
+        fs::create_dir_all(&custom).expect("custom");
+
+        let layout = test_layout(&root, &gd);
+        let custom_plist = custom.join("BlankSheet-uhd.plist");
+        fs::write(&custom_plist, "unused").expect("write custom");
+
+        assert!(
+            !geode_buttons_plist_is_under_game_files(&layout, &custom_plist),
+            "custom path must not be treated as game-files"
+        );
+        assert!(
+            resolve_geode_buttons_cached_sheet_candidate(&layout, &custom_plist)
+                .expect("resolve")
+                .is_none(),
+            "custom BlankSheet must not remap into Steam/Geode cache"
+        );
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&gd);
+        let _ = fs::remove_dir_all(&custom);
+    }
+
+    #[test]
+    fn geode_loader_plist_uses_cache_pipeline() {
+        let root = unique_temp_dir("root2");
+        let gd = unique_temp_dir("gd2");
+        let loader = gd.join("geode").join("resources").join("geode.loader");
+        fs::create_dir_all(&loader).expect("loader");
+        let layout = test_layout(&root, &gd);
+        let plist = loader.join("BlankSheet-uhd.plist");
+        fs::write(&plist, "unused").expect("write");
+
+        assert!(geode_buttons_plist_is_under_game_files(&layout, &plist));
+        let cached = resolve_geode_buttons_cached_sheet_candidate(&layout, &plist).expect("resolve");
+        let default = resolve_geode_buttons_default_sheet(&layout).expect("default");
+        assert!(
+            cached.is_some() || default.is_some(),
+            "vanilla geode.loader plist should resolve via cache candidate or default sheet lookup"
+        );
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&gd);
+    }
+
+    #[test]
+    fn vanilla_cache_flag_requires_resolvable_blank_sheet() {
+        let root = unique_temp_dir("root3");
+        let gd = unique_temp_dir("gd3");
+        fs::create_dir_all(gd.join("Resources")).expect("resources");
+        fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader")).expect("loader");
+        let layout = test_layout(&root, &gd);
+        let missing = gd
+            .join("geode")
+            .join("resources")
+            .join("geode.loader")
+            .join("BlankSheet-uhd.plist");
+        // Plist path is under game files but the sheet files do not exist yet.
+        let mut groups: BTreeMap<String, GeodeButtonsTargetGroup> = BTreeMap::new();
+        let err = fill_previews_from_game_files_cache(&layout, &missing, &mut groups);
+        assert!(
+            err.is_err(),
+            "vanilla cache pipeline should error when BlankSheet cannot be resolved"
+        );
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&gd);
+    }
 }
 

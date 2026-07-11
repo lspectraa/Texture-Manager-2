@@ -20,12 +20,14 @@ export type GeodeButtonsTargetGroup = {
 
 export const getGeodeButtonsTargetIndex = async (
   plistPath: string,
+  options?: { useGameFilesCache?: boolean },
 ): Promise<GeodeButtonsTargetGroup[]> => {
   if (!isTauriRuntime()) {
     throw new Error("Geode Buttons target index requires Tauri runtime.");
   }
   return invoke<GeodeButtonsTargetGroup[]>("geode_buttons_target_index_cmd", {
     plistPath,
+    useGameFilesCache: options?.useGameFilesCache ?? true,
   });
 };
 
