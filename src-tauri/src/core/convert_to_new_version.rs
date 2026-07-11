@@ -336,6 +336,144 @@ pub(crate) fn group_icon_output_frames(
     .collect()
 }
 
+fn frame_belongs_to_extracted_icon(frame_name: &str, extracted_icon_ids: &HashSet<String>) -> bool {
+    icon_sheet_id_from_frame_name(frame_name)
+        .map(|icon_id| extracted_icon_ids.contains(&icon_id))
+        .unwrap_or(false)
+}
+
+fn should_remove_from_legacy_gamesheet02(
+    frame_name: &str,
+    extracted_icon_ids: &HashSet<String>,
+) -> bool {
+    if is_fireboost_frame_name(frame_name) {
+        return true;
+    }
+    // Keep excluded types (portal/boost/…) on a rewritten GS02 when modern remerge
+    // did not run; those frames are handled separately via remerge when available.
+    frame_belongs_to_extracted_icon(frame_name, extracted_icon_ids)
+}
+
+fn should_remove_from_legacy_glow_sheet(
+    frame_name: &str,
+    extracted_icon_ids: &HashSet<String>,
+) -> bool {
+    frame_belongs_to_extracted_icon(frame_name, extracted_icon_ids)
+}
+
+fn rewrite_sheet_without_frames<F>(
+    source_split: &SplitMemoryResult,
+    remove_frame: &dyn Fn(&str) -> bool,
+    output_stem: &str,
+    relative_sheet: &Path,
+    converted_dir: &Path,
+    merger_opts: &MergerOptions,
+    total_units: usize,
+    completed: &Arc<AtomicUsize>,
+    plists_done_atomic: &Arc<AtomicU32>,
+    plists_total: u32,
+    on_progress: &Arc<Mutex<F>>,
+    issues: &mut Vec<ReportIssue>,
+    progress_label: &str,
+) -> Result<usize, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
+    let source_frames = frames_dictionary(&source_split.plist_root)?;
+    let mut kept_entries: BTreeMap<String, Value> = BTreeMap::new();
+    let mut kept_sprites: BTreeMap<String, RgbaImage> = BTreeMap::new();
+    let mut removed = 0usize;
+
+    for (frame_name, frame_value) in source_frames {
+        if remove_frame(frame_name) {
+            removed = removed.saturating_add(1);
+            continue;
+        }
+        let Some(sprite) = source_split.sprites.get(frame_name) else {
+            continue;
+        };
+        kept_entries.insert(frame_name.clone(), frame_value.clone());
+        kept_sprites.insert(frame_name.clone(), sprite.clone());
+    }
+
+    if kept_entries.is_empty() {
+        issues.push(ReportIssue {
+            level: ReportLevel::Info,
+            message: format!(
+                "removed all extractable icon frames from `{output_stem}`; no remaining frames to write"
+            ),
+            file: Some(format!("{output_stem}.plist")),
+        });
+        return Ok(0);
+    }
+
+    let mut metadata = Dictionary::new();
+    if let Some(source_meta) = source_split
+        .plist_root
+        .as_dictionary()
+        .and_then(|root| root.get("metadata"))
+        .and_then(Value::as_dictionary)
+    {
+        for key in ["format", "pixelFormat", "premultiplyAlpha"] {
+            if let Some(value) = source_meta.get(key) {
+                metadata.insert(key.to_string(), value.clone());
+            }
+        }
+    }
+    let texture_file = format!("{output_stem}.png");
+    metadata.insert(
+        "textureFileName".to_string(),
+        Value::String(texture_file.clone()),
+    );
+    metadata.insert(
+        "realTextureFileName".to_string(),
+        Value::String(texture_file),
+    );
+
+    let mut frames_dict = Dictionary::new();
+    for (name, value) in &kept_entries {
+        frames_dict.insert(name.clone(), value.clone());
+    }
+    let mut root = Dictionary::new();
+    root.insert("frames".to_string(), Value::Dictionary(frames_dict));
+    root.insert("metadata".to_string(), Value::Dictionary(metadata));
+    let mut plist_root = Value::Dictionary(root);
+
+    let completed_ref = Arc::clone(completed);
+    let on_progress_ref = Arc::clone(on_progress);
+    let plists_ref = Arc::clone(plists_done_atomic);
+    let label = progress_label.to_string();
+    let (atlas, _w, _h, _count, merge_issues) = merge_plist_from_memory(
+        &mut plist_root,
+        &kept_sprites,
+        label.as_str(),
+        merger_opts,
+        &mut |_label| {
+            let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
+            on_progress_ref.lock().unwrap()(operation_progress(
+                format!("{label} (strip icons)"),
+                n,
+                total_units,
+                plists_ref.load(Ordering::Relaxed),
+                plists_total,
+            ));
+        },
+    )?;
+    issues.extend(merge_issues);
+
+    let destination_dir = flattened_bundle_output_dir(converted_dir, relative_sheet);
+    save_merged_sheet(&destination_dir, output_stem, &plist_root, &atlas)?;
+    issues.push(ReportIssue {
+        level: ReportLevel::Info,
+        message: format!(
+            "rewrote `{output_stem}` without {removed} extracted icon-related frame(s); kept {}",
+            kept_entries.len()
+        ),
+        file: Some(format!("{output_stem}.plist")),
+    });
+    Ok(1)
+}
+
 fn collect_excluded_legacy_frames(
     split: &SplitMemoryResult,
 ) -> Result<BTreeMap<String, (Value, RgbaImage)>, AppError> {
@@ -748,7 +886,9 @@ where
         });
     }
 
-    sheets_written = sheets_written.saturating_add(remerge_excluded_into_modern_gamesheet02(
+    let extracted_icon_ids: HashSet<String> = groups.keys().cloned().collect();
+
+    let remerged = remerge_excluded_into_modern_gamesheet02(
         quality_suffix,
         &excluded_frames,
         game_files,
@@ -761,7 +901,57 @@ where
         plists_total,
         on_progress,
         &mut issues,
-    )?);
+    )?;
+    sheets_written = sheets_written.saturating_add(remerged);
+
+    let sheet02_relative: PathBuf = if pair.relative_dir.as_os_str().is_empty() {
+        PathBuf::from(&pair.stem)
+    } else {
+        pair.relative_dir.join(&pair.stem)
+    };
+
+    // When modern remerge wrote GS02, icons are already absent from that sheet.
+    // Otherwise rewrite the original GS02 without extracted icon frames.
+    if remerged == 0 {
+        sheets_written = sheets_written.saturating_add(rewrite_sheet_without_frames(
+            &split,
+            &|frame_name| should_remove_from_legacy_gamesheet02(frame_name, &extracted_icon_ids),
+            pair.stem.as_str(),
+            &sheet02_relative,
+            converted_dir,
+            merger_opts,
+            total_units,
+            completed,
+            plists_done_atomic,
+            plists_total,
+            on_progress,
+            &mut issues,
+            pair.stem.as_str(),
+        )?);
+    }
+
+    if let (Some(glow_pair), Some(glow_split)) = (glow_sheet_pair, glow_sheet_split.as_ref()) {
+        let glow_relative: PathBuf = if glow_pair.relative_dir.as_os_str().is_empty() {
+            PathBuf::from(&glow_pair.stem)
+        } else {
+            glow_pair.relative_dir.join(&glow_pair.stem)
+        };
+        sheets_written = sheets_written.saturating_add(rewrite_sheet_without_frames(
+            glow_split,
+            &|frame_name| should_remove_from_legacy_glow_sheet(frame_name, &extracted_icon_ids),
+            glow_pair.stem.as_str(),
+            &glow_relative,
+            converted_dir,
+            merger_opts,
+            total_units,
+            completed,
+            plists_done_atomic,
+            plists_total,
+            on_progress,
+            &mut issues,
+            glow_pair.stem.as_str(),
+        )?);
+    }
 
     let plist_done_now = plists_done_atomic.fetch_add(1, Ordering::Relaxed) + 1;
     on_progress.lock().unwrap()(operation_progress(
@@ -1262,10 +1452,11 @@ mod tests {
     use plist::{Dictionary, Value};
 
     use super::{
-        group_frame_names_by_icon_id, group_icon_output_frames, icon_sheet_id_from_frame_name,
-        is_excluded_legacy_icon_id, is_fireboost_frame_name, is_glow_frame_name,
-        is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet, is_legacy_icon_split_version,
-        missing_frame_keys, sheet_is_under_icons,
+        frame_belongs_to_extracted_icon, group_frame_names_by_icon_id, group_icon_output_frames,
+        icon_sheet_id_from_frame_name, is_excluded_legacy_icon_id, is_fireboost_frame_name,
+        is_glow_frame_name, is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet,
+        is_legacy_icon_split_version, missing_frame_keys, sheet_is_under_icons,
+        should_remove_from_legacy_gamesheet02, should_remove_from_legacy_glow_sheet,
     };
 
     #[test]
@@ -1478,6 +1669,47 @@ mod tests {
             Some("-hd".to_string())
         );
         assert_eq!(is_legacy_icon_glow_sheet("GJ_GameSheet02-uhd"), None);
+    }
+
+    #[test]
+    fn strip_predicates_remove_extracted_icons_from_gamesheet_and_glow() {
+        let extracted: HashSet<String> = ["player_02".to_string(), "bird_01".to_string()]
+            .into_iter()
+            .collect();
+
+        assert!(should_remove_from_legacy_gamesheet02(
+            "player_02_001.png",
+            &extracted
+        ));
+        assert!(should_remove_from_legacy_gamesheet02(
+            "player_02_glow_001.png",
+            &extracted
+        ));
+        assert!(should_remove_from_legacy_gamesheet02(
+            "fireBoost_001.png",
+            &extracted
+        ));
+        assert!(!should_remove_from_legacy_gamesheet02(
+            "portal_01_back_001.png",
+            &extracted
+        ));
+        assert!(!should_remove_from_legacy_gamesheet02(
+            "player_03_001.png",
+            &extracted
+        ));
+
+        assert!(should_remove_from_legacy_glow_sheet(
+            "bird_01_glow_001.png",
+            &extracted
+        ));
+        assert!(!should_remove_from_legacy_glow_sheet(
+            "player_03_glow_001.png",
+            &extracted
+        ));
+        assert!(frame_belongs_to_extracted_icon(
+            "robot_01_02_glow_001.png",
+            &["robot_01".to_string()].into_iter().collect()
+        ));
     }
 
     #[test]
