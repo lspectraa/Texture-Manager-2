@@ -493,7 +493,7 @@ export function GeodeButtonsToolPanel({
           onInputDirChange(resolved);
         } else {
           setTargetsError(
-            "Could not resolve game files directory. Place BlankSheet gamesheets under your TextureManager2/game-files/current folder.",
+            "Could not resolve geode.loader game files. Set TM_GEOMETRY_DASH_DIR or install Geometry Dash + Geode via Steam.",
           );
         }
       })
@@ -524,7 +524,9 @@ export function GeodeButtonsToolPanel({
             onOptionsChange({ ...options, sheetStem: stem });
           }
         } else {
-          setTargetsError("Could not auto-find BlankSheet plist in input directory.");
+          setTargetsError(
+            "Could not auto-find BlankSheet in geode.loader (or the selected input directory).",
+          );
           setPlistPath("");
         }
       })
@@ -729,16 +731,16 @@ export function GeodeButtonsToolPanel({
 
       <ToolSection
         title="Source & Output"
-        subtitle="Input is auto-detected from game files; choose where variants are written"
+        subtitle="BlankSheet is loaded from Steam geode/resources/geode.loader (hash-cached splits); choose where variants are written"
         icon={FolderInput}
         columns={2}
       >
-        <ToolField label="Input directory">
+        <ToolField label="Geode loader resources">
           <input
             className="tm-tool-text-input"
             value={inputDir}
             readOnly
-            placeholder="Resolving game files directory…"
+            placeholder="Resolving geode.loader directory…"
           />
         </ToolField>
         <FolderPathField

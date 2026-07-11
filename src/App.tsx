@@ -337,7 +337,7 @@ function App() {
         return;
       }
       if (!convertGameVersion.trim()) {
-        setRunError("Convert to New Version requires a game version.");
+        setRunError("Convert to New Version requires a previous game version.");
         return;
       }
       request = {

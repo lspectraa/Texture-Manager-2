@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::io::Cursor;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -12,8 +12,8 @@ use serde::Serialize;
 use crate::core::contracts::phase_defaults;
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    ensure_sheet_split_cached, find_current_sheet_for_plist, png_path_to_data_url,
-    resolve_cached_split_sprite, GameFilesLayout,
+    ensure_sheet_split_cached, find_current_sheet_for_input, find_current_sheet_for_plist,
+    png_path_to_data_url, resolve_cached_split_sprite, GameFilesLayout,
 };
 use crate::core::icon_editor::icon_editor_extract_frames;
 use crate::core::merger::merge_plist_from_memory;
@@ -264,9 +264,10 @@ pub fn geode_buttons_target_index(
     }
 
     let splitter_opts = phase_defaults().splitter;
-    let split_dir = find_current_sheet_for_plist(layout, plist_path)?
-        .and_then(|pair| ensure_sheet_split_cached(layout, &pair, &splitter_opts).ok());
+    let source_pair = resolve_geode_buttons_sheet_candidate(layout, plist_path)?;
+    let split_dir = ensure_sheet_split_cached(layout, &source_pair, &splitter_opts)?;
 
+    let mut missing_preview_names: Vec<String> = Vec::new();
     for group in groups.values_mut() {
         let biggest_name = group
             .frames
@@ -276,22 +277,96 @@ pub fn geode_buttons_target_index(
         let Some(frame_name) = biggest_name else {
             continue;
         };
-        if let Some(split_dir) = split_dir.as_ref() {
-            if let Some(sprite_path) = resolve_cached_split_sprite(split_dir, frame_name.as_str()) {
-                if let Ok(data_url) = png_path_to_data_url(&sprite_path) {
-                    group.preview_png_data_url = Some(data_url);
-                    continue;
-                }
+        if let Some(sprite_path) = resolve_cached_split_sprite(&split_dir, frame_name.as_str()) {
+            if let Ok(data_url) = png_path_to_data_url(&sprite_path) {
+                group.preview_png_data_url = Some(data_url);
+                continue;
             }
         }
+        missing_preview_names.push(frame_name);
+    }
+
+    // One atlas-crop fallback pass for any frames the split cache could not resolve.
+    if !missing_preview_names.is_empty() {
         if let Ok(extracted) = icon_editor_extract_frames(plist_path) {
-            if let Some(frame) = extracted.into_iter().find(|f| f.name == frame_name) {
-                group.preview_png_data_url = Some(frame.png_data_url);
+            let by_name: BTreeMap<String, String> = extracted
+                .into_iter()
+                .map(|frame| (frame.name, frame.png_data_url))
+                .collect();
+            for group in groups.values_mut() {
+                if group.preview_png_data_url.is_some() {
+                    continue;
+                }
+                let biggest_name = group
+                    .frames
+                    .iter()
+                    .max_by_key(|f| (f.sprite_size.width as u64) * (f.sprite_size.height as u64))
+                    .map(|f| f.name.as_str());
+                if let Some(frame_name) = biggest_name {
+                    group.preview_png_data_url = by_name.get(frame_name).cloned();
+                }
             }
         }
     }
 
     Ok(groups.into_values().collect())
+}
+
+/// Resolve the BlankSheet used by Geode Buttons from Steam/Geode game files.
+/// Prefers `geode/resources/geode.loader`, then vanilla `Resources`.
+pub fn resolve_geode_buttons_default_sheet(
+    layout: &GameFilesLayout,
+) -> Result<Option<SheetCandidate>, AppError> {
+    const STEMS: [&str; 3] = ["BlankSheet-uhd", "BlankSheet-hd", "BlankSheet"];
+    for stem in STEMS {
+        if let Some(pair) =
+            find_current_sheet_for_input(layout, Path::new("geode.loader"), stem)?
+        {
+            return Ok(Some(pair));
+        }
+    }
+    for stem in STEMS {
+        if let Some(pair) = find_current_sheet_for_input(layout, Path::new(""), stem)? {
+            return Ok(Some(pair));
+        }
+    }
+    Ok(None)
+}
+
+pub fn resolve_geode_buttons_default_input_dir(layout: &GameFilesLayout) -> String {
+    layout
+        .geode_resources
+        .join("geode.loader")
+        .to_string_lossy()
+        .to_string()
+}
+
+fn resolve_geode_buttons_sheet_candidate(
+    layout: &GameFilesLayout,
+    plist_path: &Path,
+) -> Result<SheetCandidate, AppError> {
+    if let Some(pair) = find_current_sheet_for_plist(layout, plist_path)? {
+        return Ok(pair);
+    }
+
+    let stem = plist_path
+        .file_stem()
+        .and_then(|v| v.to_str())
+        .ok_or(AppError::InvalidPath("geode buttons plist has invalid stem"))?
+        .to_string();
+    let png_path = plist_path.with_extension("png");
+    if !png_path.exists() {
+        return Err(AppError::IoError(format!(
+            "geode buttons sheet png not found beside plist: {}",
+            png_path.to_string_lossy()
+        )));
+    }
+    Ok(SheetCandidate {
+        stem,
+        relative_dir: PathBuf::from("geode.loader"),
+        plist_path: plist_path.to_path_buf(),
+        png_path,
+    })
 }
 
 /// Auto-select BlankSheet plist with priority: `-uhd` -> `-hd` -> no suffix.

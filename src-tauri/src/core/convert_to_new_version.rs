@@ -12,11 +12,11 @@ use plist::{Dictionary, Value};
 use crate::core::contracts::{
     phase_defaults, ConvertToNewVersionOptions, MergerOptions, OperationPlan, SplitterOptions,
 };
-use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
+use crate::core::discovery::{discover_sheet_pairs, discover_unpaired_pngs, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    build_plist_index_under, ensure_current_library_split_cached, resolve_cached_split_sprite,
-    GameFilesLayout,
+    ensure_input_sheet_latest_split_cached, find_current_sheet_for_input,
+    normalize_legacy_version, resolve_cached_split_sprite, GameFilesLayout,
 };
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::plist::count_frames_in_plist;
@@ -261,6 +261,11 @@ pub(crate) fn is_excluded_legacy_icon_id(icon_id: &str) -> bool {
         || lower.starts_with("floorline_")
 }
 
+/// Legacy combined-icon GS02 split only applies when converting from 2.11 packs.
+pub(crate) fn is_legacy_icon_split_version(game_version: &str) -> bool {
+    normalize_legacy_version(game_version) == "2.11"
+}
+
 pub(crate) fn is_glow_frame_name(frame_name: &str) -> bool {
     frame_name.contains("_glow_")
 }
@@ -331,6 +336,139 @@ pub(crate) fn group_icon_output_frames(
     .collect()
 }
 
+fn collect_excluded_legacy_frames(
+    split: &SplitMemoryResult,
+) -> Result<BTreeMap<String, (Value, RgbaImage)>, AppError> {
+    let frames = frames_dictionary(&split.plist_root)?;
+    let mut excluded: BTreeMap<String, (Value, RgbaImage)> = BTreeMap::new();
+    for (frame_name, frame_value) in frames {
+        if is_fireboost_frame_name(frame_name) || is_glow_frame_name(frame_name) {
+            continue;
+        }
+        let Some(icon_id) = icon_sheet_id_from_frame_name(frame_name) else {
+            continue;
+        };
+        if !is_excluded_legacy_icon_id(&icon_id) {
+            continue;
+        }
+        let Some(sprite) = split.sprites.get(frame_name) else {
+            continue;
+        };
+        excluded.insert(frame_name.clone(), (frame_value.clone(), sprite.clone()));
+    }
+    Ok(excluded)
+}
+
+fn remerge_excluded_into_modern_gamesheet02<F>(
+    quality_suffix: &str,
+    excluded_frames: &BTreeMap<String, (Value, RgbaImage)>,
+    game_files: &GameFilesLayout,
+    splitter_opts: &SplitterOptions,
+    merger_opts: &MergerOptions,
+    converted_dir: &Path,
+    total_units: usize,
+    completed: &Arc<AtomicUsize>,
+    plists_done_atomic: &Arc<AtomicU32>,
+    plists_total: u32,
+    on_progress: &Arc<Mutex<F>>,
+    issues: &mut Vec<ReportIssue>,
+) -> Result<usize, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
+    if excluded_frames.is_empty() {
+        return Ok(0);
+    }
+
+    let modern_stem = format!("GJ_GameSheet02{quality_suffix}");
+    let Some(modern_pair) =
+        find_current_sheet_for_input(game_files, Path::new(""), modern_stem.as_str())?
+    else {
+        issues.push(ReportIssue {
+            level: ReportLevel::Warning,
+            message: format!(
+                "modern `{modern_stem}` not found in Geometry Dash Resources; skipped remerging excluded frames"
+            ),
+            file: None,
+        });
+        return Ok(0);
+    };
+
+    let completed_ref = Arc::clone(completed);
+    let on_progress_ref = Arc::clone(on_progress);
+    let plists_ref = Arc::clone(plists_done_atomic);
+    let label = modern_stem.clone();
+    let mut modern_split = split_sheet_candidate_memory(&modern_pair, splitter_opts, || {
+        let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
+        on_progress_ref.lock().unwrap()(operation_progress(
+            format!("{label} (modern base)"),
+            n,
+            total_units,
+            plists_ref.load(Ordering::Relaxed),
+            plists_total,
+        ));
+    })?;
+    issues.append(&mut modern_split.issues);
+
+    let mut merged_plist_root = modern_split.plist_root;
+    let mut merged_sprites = modern_split.sprites;
+    let frames_mut = frames_dictionary_mut(&mut merged_plist_root)?;
+    let mut replaced = 0usize;
+    let mut added = 0usize;
+    for (frame_name, (frame_value, sprite)) in excluded_frames {
+        let existed = frames_mut.contains_key(frame_name);
+        frames_mut.insert(frame_name.clone(), frame_value.clone());
+        merged_sprites.insert(frame_name.clone(), sprite.clone());
+        if existed {
+            replaced = replaced.saturating_add(1);
+        } else {
+            added = added.saturating_add(1);
+        }
+    }
+
+    let completed_ref = Arc::clone(completed);
+    let on_progress_ref = Arc::clone(on_progress);
+    let plists_ref = Arc::clone(plists_done_atomic);
+    let pack_label = modern_stem.clone();
+    let (atlas, _w, _h, _count, merge_issues) = merge_plist_from_memory(
+        &mut merged_plist_root,
+        &merged_sprites,
+        pack_label.as_str(),
+        merger_opts,
+        &mut |_label| {
+            let n = completed_ref.fetch_add(1, Ordering::Relaxed) + 1;
+            on_progress_ref.lock().unwrap()(operation_progress(
+                format!("{pack_label} (remerge)"),
+                n,
+                total_units,
+                plists_ref.load(Ordering::Relaxed),
+                plists_total,
+            ));
+        },
+    )?;
+    issues.extend(merge_issues);
+
+    let destination_dir = flattened_bundle_output_dir(
+        converted_dir,
+        &PathBuf::from(modern_stem.as_str()),
+    );
+    save_merged_sheet(
+        &destination_dir,
+        modern_stem.as_str(),
+        &merged_plist_root,
+        &atlas,
+    )?;
+
+    issues.push(ReportIssue {
+        level: ReportLevel::Info,
+        message: format!(
+            "remerged {replaced} replaced and {added} added excluded frames into modern `{modern_stem}` from Geometry Dash Resources"
+        ),
+        file: Some(format!("{modern_stem}.plist")),
+    });
+    Ok(1)
+}
+
 fn collect_glow_frames_for_icon_from_split(
     icon_id: &str,
     split: &SplitMemoryResult,
@@ -358,48 +496,14 @@ fn resolve_glow_frames_for_icon(
     icon_id: &str,
     sheet02_split: &SplitMemoryResult,
     glow_sheet_split: Option<&SplitMemoryResult>,
-    latest_plist_path: Option<&Path>,
-    latest_source_pair: Option<&SheetCandidate>,
-    splitter_opts: &SplitterOptions,
-    latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
-) -> Result<BTreeMap<String, (Value, RgbaImage)>, AppError> {
+) -> BTreeMap<String, (Value, RgbaImage)> {
     if let Some(glow_split) = glow_sheet_split {
-        return Ok(collect_glow_frames_for_icon_from_split(icon_id, glow_split));
-    }
-
-    if let Some(latest_path) = latest_plist_path {
-        let latest_plist_root = Value::from_file(latest_path)
-            .map_err(|err| AppError::ParseError(format!("failed to parse latest icon plist: {err}")))?;
-        let latest_frames = frames_dictionary(&latest_plist_root)?;
-        let mut glow_frames: BTreeMap<String, (Value, RgbaImage)> = BTreeMap::new();
-        for (frame_name, frame_value) in latest_frames {
-            if !is_glow_frame_name(frame_name) {
-                continue;
-            }
-            if icon_sheet_id_from_frame_name(frame_name).as_deref() != Some(icon_id) {
-                continue;
-            }
-            let sprite = match latest_sheet_sprite_from_cache(
-                latest_path,
-                latest_source_pair,
-                frame_name,
-                splitter_opts,
-                latest_sheet_sprite_cache,
-            )? {
-                Some(sprite) => sprite,
-                None => continue,
-            };
-            glow_frames.insert(frame_name.clone(), (frame_value.clone(), sprite));
-        }
-        if !glow_frames.is_empty() {
-            return Ok(glow_frames);
+        let from_glow = collect_glow_frames_for_icon_from_split(icon_id, glow_split);
+        if !from_glow.is_empty() {
+            return from_glow;
         }
     }
-
-    Ok(collect_glow_frames_for_icon_from_split(
-        icon_id,
-        sheet02_split,
-    ))
+    collect_glow_frames_for_icon_from_split(icon_id, sheet02_split)
 }
 
 fn build_icon_plist_from_frames(
@@ -446,9 +550,7 @@ fn convert_legacy_icon_gamesheet<F>(
     all_sheet_pairs: &[SheetCandidate],
     splitter_opts: &SplitterOptions,
     merger_opts: &MergerOptions,
-    latest_plists_by_stem: &HashMap<String, PathBuf>,
-    current_pairs_by_stem: &HashMap<String, SheetCandidate>,
-    latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
+    game_files: &GameFilesLayout,
     converted_dir: &Path,
     total_units: usize,
     completed: &Arc<AtomicUsize>,
@@ -482,7 +584,9 @@ where
         issues.append(&mut glow_split.issues);
         issues.push(ReportIssue {
             level: ReportLevel::Info,
-            message: "using accompanying GJ_GameSheetGlow for icon glow sprites".to_string(),
+            message:
+                "icon glow sprites: prefer accompanying GJ_GameSheetGlow, fall back to GJ_GameSheet02"
+                    .to_string(),
             file: Some(format!("{}.plist", glow_pair.stem)),
         });
         Some(glow_split)
@@ -490,7 +594,7 @@ where
         issues.push(ReportIssue {
             level: ReportLevel::Info,
             message:
-                "no accompanying GJ_GameSheetGlow found; icon glow sprites will use latest placeholders when available"
+                "no accompanying GJ_GameSheetGlow found; icon glow sprites will use GJ_GameSheet02 when present"
                     .to_string(),
             file: Some(format!("{}.plist", pair.stem)),
         });
@@ -527,11 +631,15 @@ where
         .cloned()
         .collect();
     let groups = group_icon_output_frames(frame_names.iter().cloned());
+    let excluded_frames = collect_excluded_legacy_frames(&split)?;
 
     let grouped_count: usize = groups.values().map(|frames| frames.len()).sum();
     if grouped_count < frame_names.len() {
         for frame_name in &frame_names {
             if is_fireboost_frame_name(frame_name) {
+                continue;
+            }
+            if excluded_frames.contains_key(frame_name) {
                 continue;
             }
             let Some(icon_id) = icon_sheet_id_from_frame_name(frame_name) else {
@@ -559,18 +667,6 @@ where
             message: "legacy GJ_GameSheet02 has no groupable icon frames".to_string(),
             file: Some(format!("{}.plist", pair.stem)),
         });
-        let plist_done_now = plists_done_atomic.fetch_add(1, Ordering::Relaxed) + 1;
-        on_progress.lock().unwrap()(operation_progress(
-            stem,
-            completed.load(Ordering::Relaxed),
-            total_units,
-            plist_done_now,
-            plists_total,
-        ));
-        return Ok(ConvertSheetWorkOutcome {
-            sheets_written: 0,
-            issues,
-        });
     }
 
     let icons_dir = converted_dir.join("icons");
@@ -578,18 +674,11 @@ where
 
     for (icon_id, icon_frame_names) in &groups {
         let output_stem = format!("{icon_id}{quality_suffix}");
-        let latest_plist_path = latest_plists_by_stem.get(&output_stem.to_ascii_lowercase());
-        let latest_source_pair = latest_plist_path
-            .and_then(|_| current_pairs_by_stem.get(&output_stem.to_ascii_lowercase()));
         let glow_frames = resolve_glow_frames_for_icon(
             icon_id.as_str(),
             &split,
             glow_sheet_split.as_ref(),
-            latest_plist_path.map(PathBuf::as_path),
-            latest_source_pair,
-            splitter_opts,
-            latest_sheet_sprite_cache,
-        )?;
+        );
 
         let mut frame_entries: BTreeMap<String, Value> = BTreeMap::new();
         let sheet02_frames = frames_dictionary(&split.plist_root)?;
@@ -649,13 +738,30 @@ where
         sheets_written = sheets_written.saturating_add(1);
     }
 
-    issues.push(ReportIssue {
-        level: ReportLevel::Info,
-        message: format!(
-            "split legacy GJ_GameSheet02 into {sheets_written} icon sheets under icons/"
-        ),
-        file: Some(format!("{}.plist", pair.stem)),
-    });
+    if sheets_written > 0 {
+        issues.push(ReportIssue {
+            level: ReportLevel::Info,
+            message: format!(
+                "split legacy GJ_GameSheet02 into {sheets_written} icon sheets under icons/"
+            ),
+            file: Some(format!("{}.plist", pair.stem)),
+        });
+    }
+
+    sheets_written = sheets_written.saturating_add(remerge_excluded_into_modern_gamesheet02(
+        quality_suffix,
+        &excluded_frames,
+        game_files,
+        splitter_opts,
+        merger_opts,
+        converted_dir,
+        total_units,
+        completed,
+        plists_done_atomic,
+        plists_total,
+        on_progress,
+        &mut issues,
+    )?);
 
     let plist_done_now = plists_done_atomic.fetch_add(1, Ordering::Relaxed) + 1;
     on_progress.lock().unwrap()(operation_progress(
@@ -693,19 +799,40 @@ fn save_merged_sheet(
     Ok(())
 }
 
+fn copy_unpaired_png_to_converted(
+    png_path: &Path,
+    input_dir: &Path,
+    converted_dir: &Path,
+) -> Result<PathBuf, AppError> {
+    let relative = png_path.strip_prefix(input_dir).map_err(|_| {
+        AppError::InvalidOperation("failed to compute relative path for unpaired png")
+    })?;
+    let destination = converted_dir.join(relative);
+    if let Some(parent) = destination.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::copy(png_path, &destination).map_err(|err| {
+        AppError::IoError(format!(
+            "failed to copy unpaired png `{}`: {err}",
+            png_path.to_string_lossy()
+        ))
+    })?;
+    Ok(destination)
+}
+
 fn convert_process_one_sheet_candidate<F>(
     pair: &SheetCandidate,
     all_sheet_pairs: &[SheetCandidate],
     splitter_opts: &SplitterOptions,
     merger_opts: &MergerOptions,
-    latest_plists_by_stem: &HashMap<String, PathBuf>,
-    current_pairs_by_stem: &HashMap<String, SheetCandidate>,
+    game_files: &GameFilesLayout,
     latest_sheet_sprite_cache: &Arc<Mutex<HashMap<String, HashMap<String, RgbaImage>>>>,
     converted_dir: &Path,
     total_units: usize,
     completed: &Arc<AtomicUsize>,
     plists_done_atomic: &Arc<AtomicU32>,
     plists_total: u32,
+    legacy_icon_split: bool,
     on_progress: &Arc<Mutex<F>>,
 ) -> Result<ConvertSheetWorkOutcome, AppError>
 where
@@ -728,7 +855,7 @@ where
         });
     }
 
-    if is_legacy_icon_glow_sheet(&stem).is_some() {
+    if legacy_icon_split && is_legacy_icon_glow_sheet(&stem).is_some() {
         let plist_done_now = plists_done_atomic.fetch_add(1, Ordering::Relaxed) + 1;
         on_progress.lock().unwrap()(operation_progress(
             stem,
@@ -743,23 +870,23 @@ where
         });
     }
 
-    if let Some(quality_suffix) = is_legacy_combined_icon_sheet(&stem) {
-        return convert_legacy_icon_gamesheet(
-            pair,
-            quality_suffix.as_str(),
-            all_sheet_pairs,
-            splitter_opts,
-            merger_opts,
-            latest_plists_by_stem,
-            current_pairs_by_stem,
-            latest_sheet_sprite_cache,
-            converted_dir,
-            total_units,
-            completed,
-            plists_done_atomic,
-            plists_total,
-            on_progress,
-        );
+    if legacy_icon_split {
+        if let Some(quality_suffix) = is_legacy_combined_icon_sheet(&stem) {
+            return convert_legacy_icon_gamesheet(
+                pair,
+                quality_suffix.as_str(),
+                all_sheet_pairs,
+                splitter_opts,
+                merger_opts,
+                game_files,
+                converted_dir,
+                total_units,
+                completed,
+                plists_done_atomic,
+                plists_total,
+                on_progress,
+            );
+        }
     }
 
     let completed_ref = Arc::clone(completed);
@@ -778,7 +905,9 @@ where
     issues.extend(split.issues);
 
     let input_frame_names = frame_name_set(&split.plist_root)?;
-    let Some(latest_plist_path) = latest_plists_by_stem.get(&pair.stem.to_ascii_lowercase()) else {
+    let Some((latest_source_pair, latest_split_dir)) =
+        ensure_input_sheet_latest_split_cached(game_files, pair, splitter_opts)?
+    else {
         issues.push(ReportIssue {
             level: ReportLevel::Warning,
             message: "no latest placeholder plist found for sheet".to_string(),
@@ -797,8 +926,9 @@ where
             issues,
         });
     };
+    let latest_plist_path = latest_source_pair.plist_path.clone();
 
-    let latest_plist_root = Value::from_file(latest_plist_path)
+    let latest_plist_root = Value::from_file(&latest_plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse latest plist: {err}")))?;
     let latest_frames = frames_dictionary(&latest_plist_root)?;
     let missing_frame_keys = missing_frame_keys(latest_frames, &input_frame_names);
@@ -823,10 +953,6 @@ where
         });
     }
 
-    let latest_sheet_dir = latest_plist_path
-        .parent()
-        .map(Path::to_path_buf)
-        .unwrap_or_else(|| PathBuf::from("."));
     let mut merged_plist_root = split.plist_root.clone();
     let mut merged_sprites = split.sprites.clone();
     let frames_mut = frames_dictionary_mut(&mut merged_plist_root)?;
@@ -835,12 +961,10 @@ where
         let Some(frame_value) = latest_frames.get(&frame_name).cloned() else {
             continue;
         };
-        let Some(sprite_path) = resolve_cached_split_sprite(&latest_sheet_dir, &frame_name) else {
-            let latest_source_pair =
-                current_pairs_by_stem.get(&pair.stem.to_ascii_lowercase());
+        let Some(sprite_path) = resolve_cached_split_sprite(&latest_split_dir, &frame_name) else {
             match latest_sheet_sprite_from_cache(
                 latest_plist_path.as_path(),
-                latest_source_pair,
+                Some(&latest_source_pair),
                 &frame_name,
                 splitter_opts,
                 latest_sheet_sprite_cache,
@@ -964,14 +1088,6 @@ where
     fs::create_dir_all(&converted_dir)?;
 
     let splitter_opts = phase_defaults().splitter;
-    ensure_current_library_split_cached(game_files, &splitter_opts)?;
-    let latest_split_dir = game_files.current_split.clone();
-    let latest_plists_by_stem = build_plist_index_under(&latest_split_dir)?;
-    let current_pairs = crate::core::game_files::discover_current_sheet_pairs(game_files)?;
-    let current_pairs_by_stem: HashMap<String, SheetCandidate> = current_pairs
-        .into_iter()
-        .map(|pair| (pair.stem.to_ascii_lowercase(), pair))
-        .collect();
     let merger_opts = MergerOptions {
         include_outside_plist_files: false,
         dimensions: None,
@@ -979,11 +1095,19 @@ where
     };
 
     check_cancel(cancel.as_ref())?;
+    let legacy_icon_split = is_legacy_icon_split_version(&options.game_version);
     let all_sheet_pairs: Vec<SheetCandidate> = discover_sheet_pairs(input_dir)?;
+    let paired_pngs: HashSet<PathBuf> = all_sheet_pairs
+        .iter()
+        .map(|pair| pair.png_path.clone())
+        .collect();
+    let unpaired_pngs = discover_unpaired_pngs(input_dir, &paired_pngs)?;
     let sheet_pairs: Vec<SheetCandidate> = all_sheet_pairs
         .iter()
         .filter(|pair| !sheet_is_under_icons(&pair.relative_dir))
-        .filter(|pair| !is_legacy_icon_glow_sheet(&pair.stem).is_some())
+        .filter(|pair| {
+            !(legacy_icon_split && is_legacy_icon_glow_sheet(&pair.stem).is_some())
+        })
         .cloned()
         .collect();
     let plists_total = sheet_pairs.len() as u32;
@@ -995,6 +1119,7 @@ where
     let total_units = input_total_sprites
         .saturating_mul(2)
         .saturating_add(sheet_pairs.len())
+        .saturating_add(unpaired_pngs.len())
         .max(1);
     let completed = Arc::new(AtomicUsize::new(0));
     let plists_done_atomic = Arc::new(AtomicU32::new(0));
@@ -1010,17 +1135,24 @@ where
     let mut issues: Vec<ReportIssue> = Vec::new();
     issues.push(ReportIssue {
         level: ReportLevel::Info,
-        message: format!(
-            "requested game version `{}`; phase 1 currently always compares against latest placeholders",
-            options.game_version
-        ),
+        message: if legacy_icon_split {
+            format!(
+                "previous game version `{}`; applying legacy GJ_GameSheet02 icon split and comparing other sheets against Steam Geometry Dash Resources / geode mods",
+                options.game_version
+            )
+        } else {
+            format!(
+                "previous game version `{}`; comparing sheets against Steam Geometry Dash Resources / geode mods",
+                options.game_version
+            )
+        },
         file: None,
     });
     issues.push(ReportIssue {
         level: ReportLevel::Info,
         message: format!(
             "latest placeholder source: {}",
-            latest_split_dir.to_string_lossy()
+            game_files.resources.to_string_lossy()
         ),
         file: None,
     });
@@ -1040,8 +1172,7 @@ where
     let latest_sheet_sprite_cache_for_pool = Arc::clone(&latest_sheet_sprite_cache);
     let splitter_opts_for_convert = splitter_opts.clone();
     let merger_opts_for_convert = merger_opts.clone();
-    let latest_plists_for_convert = latest_plists_by_stem.clone();
-    let current_pairs_for_convert = current_pairs_by_stem.clone();
+    let game_files_for_convert = game_files.clone();
     let converted_dir_for_convert = converted_dir.clone();
     let all_sheet_pairs_for_convert = all_sheet_pairs.clone();
     let results: Vec<Result<ConvertSheetWorkOutcome, AppError>> = scope_run_weighted_job_queue(
@@ -1055,14 +1186,14 @@ where
                 all_sheet_pairs_for_convert.as_slice(),
                 &splitter_opts_for_convert,
                 &merger_opts_for_convert,
-                &latest_plists_for_convert,
-                &current_pairs_for_convert,
+                &game_files_for_convert,
                 &latest_sheet_sprite_cache_for_pool,
                 converted_dir_for_convert.as_path(),
                 total_units,
                 &completed_for_pool,
                 &plists_for_pool,
                 plists_total,
+                legacy_icon_split,
                 &progress_for_pool,
             )
         }),
@@ -1077,25 +1208,46 @@ where
         issues.extend(outcome.issues);
     }
 
-    if latest_plists_by_stem.is_empty() {
+    let mut unpaired_copied = 0usize;
+    for png_path in &unpaired_pngs {
+        check_cancel(cancel.as_ref())?;
+        if copy_unpaired_png_to_converted(png_path, input_dir, &converted_dir).is_ok() {
+            unpaired_copied = unpaired_copied.saturating_add(1);
+        }
+        let n = completed.fetch_add(1, Ordering::Relaxed) + 1;
+        on_progress.lock().unwrap()(operation_progress(
+            png_path
+                .file_name()
+                .and_then(|v| v.to_str())
+                .unwrap_or("unpaired.png")
+                .to_string(),
+            n,
+            total_units,
+            plists_done_atomic.load(Ordering::Relaxed),
+            plists_total,
+        ));
+    }
+
+    if !game_files.resources.is_dir() {
         issues.push(ReportIssue {
             level: ReportLevel::Warning,
-            message: "latest placeholder split source has no plist files".to_string(),
-            file: Some(latest_split_dir.to_string_lossy().to_string()),
+            message: "Geometry Dash Resources directory was not found".to_string(),
+            file: Some(game_files.resources.to_string_lossy().to_string()),
         });
     }
-    if sheet_pairs.is_empty() {
+    if sheet_pairs.is_empty() && unpaired_pngs.is_empty() {
         issues.push(ReportIssue {
             level: ReportLevel::Warning,
-            message: "no plist/png sheet pairs discovered for conversion".to_string(),
+            message: "no plist/png sheet pairs or unpaired png files discovered for conversion"
+                .to_string(),
             file: None,
         });
     }
 
     Ok(OperationReport {
         operation: format!("{:?}", plan.kind),
-        files_seen: sheet_pairs.len(),
-        files_processed: sheets_written,
+        files_seen: sheet_pairs.len().saturating_add(unpaired_pngs.len()),
+        files_processed: sheets_written.saturating_add(unpaired_copied),
         output_dir: converted_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
@@ -1112,8 +1264,8 @@ mod tests {
     use super::{
         group_frame_names_by_icon_id, group_icon_output_frames, icon_sheet_id_from_frame_name,
         is_excluded_legacy_icon_id, is_fireboost_frame_name, is_glow_frame_name,
-        is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet, missing_frame_keys,
-        sheet_is_under_icons,
+        is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet, is_legacy_icon_split_version,
+        missing_frame_keys, sheet_is_under_icons,
     };
 
     #[test]
@@ -1135,6 +1287,88 @@ mod tests {
         assert!(sheet_is_under_icons(Path::new("icons")));
         assert!(sheet_is_under_icons(Path::new("mods/icons/shared")));
         assert!(!sheet_is_under_icons(Path::new("mods/ui")));
+    }
+
+    #[test]
+    fn discover_unpaired_pngs_includes_assets_without_quality_suffix() {
+        use crate::core::discovery::discover_unpaired_pngs;
+        use std::collections::HashSet;
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let root = std::env::temp_dir().join(format!(
+            "tm_unpaired_png_{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(&root).expect("create temp");
+        let paired = root.join("GJ_GameSheet02-uhd.png");
+        let unpaired = root.join("edit_eAlphaBtn_001.png");
+        fs::write(&paired, b"paired").expect("write paired");
+        fs::write(&unpaired, b"unpaired").expect("write unpaired");
+        let paired_set: HashSet<_> = [paired].into_iter().collect();
+        let found = discover_unpaired_pngs(&root, &paired_set).expect("discover");
+        assert_eq!(found, vec![unpaired]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn is_legacy_icon_split_version_only_matches_2_11() {
+        assert!(is_legacy_icon_split_version("2.11"));
+        assert!(is_legacy_icon_split_version(" 2.11 "));
+        assert!(is_legacy_icon_split_version("v2.11"));
+        assert!(!is_legacy_icon_split_version("2.2"));
+        assert!(!is_legacy_icon_split_version("2.205"));
+        assert!(!is_legacy_icon_split_version(""));
+    }
+
+    #[test]
+    fn resolve_glow_frames_prefers_glow_sheet_then_gamesheet02() {
+        use super::resolve_glow_frames_for_icon;
+        use crate::core::splitter::SplitMemoryResult;
+        use image::RgbaImage;
+        use plist::{Dictionary, Value};
+        use std::collections::BTreeMap;
+
+        fn split_with_frames(frames: Vec<(&str, RgbaImage)>) -> SplitMemoryResult {
+            let mut frames_dict = Dictionary::new();
+            let mut sprites = BTreeMap::new();
+            for (name, sprite) in frames {
+                frames_dict.insert(name.to_string(), Value::Dictionary(Dictionary::new()));
+                sprites.insert(name.to_string(), sprite);
+            }
+            let mut root = Dictionary::new();
+            root.insert("frames".to_string(), Value::Dictionary(frames_dict));
+            SplitMemoryResult {
+                plist_root: Value::Dictionary(root),
+                sprites,
+                files_processed: 0,
+                issues: Vec::new(),
+            }
+        }
+
+        let tiny = || RgbaImage::from_pixel(1, 1, image::Rgba([255, 255, 255, 255]));
+        let sheet02 = split_with_frames(vec![
+            ("player_02_001.png", tiny()),
+            ("player_02_glow_001.png", tiny()),
+            ("player_03_glow_001.png", tiny()),
+        ]);
+        let glow_sheet = split_with_frames(vec![("player_02_glow_001.png", tiny())]);
+
+        let from_glow = resolve_glow_frames_for_icon("player_02", &sheet02, Some(&glow_sheet));
+        assert_eq!(from_glow.len(), 1);
+        assert!(from_glow.contains_key("player_02_glow_001.png"));
+
+        let from_sheet02_fallback =
+            resolve_glow_frames_for_icon("player_03", &sheet02, Some(&glow_sheet));
+        assert_eq!(from_sheet02_fallback.len(), 1);
+        assert!(from_sheet02_fallback.contains_key("player_03_glow_001.png"));
+
+        let no_glow_sheet = resolve_glow_frames_for_icon("player_02", &sheet02, None);
+        assert_eq!(no_glow_sheet.len(), 1);
+        assert!(no_glow_sheet.contains_key("player_02_glow_001.png"));
     }
 
     #[test]

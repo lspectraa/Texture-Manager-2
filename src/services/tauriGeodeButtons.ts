@@ -46,6 +46,10 @@ export type GameFilesLayout = {
   currentDir: string;
   splitDir: string;
   legacyDir: string;
+  geometryDashDir: string;
+  resourcesDir: string;
+  geodeResourcesDir: string;
+  geodeUnzippedDir: string;
 };
 
 export const getGameFilesLayout = async (): Promise<GameFilesLayout> => {

@@ -51,7 +51,7 @@ export function ConvertToNewVersionToolPanel({
         columns={2}
       >
         <ToolSelectField
-          label="Game version"
+          label="Previous game version"
           value={gameVersion}
           options={versionOptions}
           onChange={onGameVersionChange}

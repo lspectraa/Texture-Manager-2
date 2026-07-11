@@ -2,12 +2,12 @@ pub mod sync;
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::core::contracts::SplitterOptions;
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
@@ -16,13 +16,47 @@ use crate::core::splitter::split_sheet_candidate;
 
 const GAME_FILES_DIR_NAME: &str = "TextureManager2";
 const GAME_FILES_SUBDIR: &str = "game-files";
+const GEOMETRY_DASH_FOLDER: &str = "Geometry Dash";
 
 #[derive(Debug, Clone)]
 pub struct GameFilesLayout {
+    /// User-owned cache/legacy root (`~/TextureManager2/game-files`).
     pub root: PathBuf,
-    pub current: PathBuf,
+    /// Geometry Dash install root (Steam `.../common/Geometry Dash`).
+    pub geometry_dash_dir: PathBuf,
+    /// Vanilla textures: `{GD}/Resources` (also exposed as `current` for UI defaults).
+    pub resources: PathBuf,
+    /// Geode built-in resources root: `{GD}/geode/resources`.
+    pub geode_resources: PathBuf,
+    /// Geode unzipped mods: `{GD}/geode/unzipped`.
+    pub geode_unzipped: PathBuf,
+    /// On-demand split cache under the user data root.
     pub current_split: PathBuf,
     pub legacy: PathBuf,
+}
+
+impl GameFilesLayout {
+    /// Alias for vanilla Resources — used by Geode Buttons default input.
+    pub fn current(&self) -> &Path {
+        &self.resources
+    }
+
+    pub fn to_dto(&self) -> GameFilesLayoutDto {
+        GameFilesLayoutDto {
+            root_dir: self.root.to_string_lossy().to_string(),
+            current_dir: self.resources.to_string_lossy().to_string(),
+            split_dir: self.current_split.to_string_lossy().to_string(),
+            legacy_dir: self.legacy.to_string_lossy().to_string(),
+            geometry_dash_dir: self.geometry_dash_dir.to_string_lossy().to_string(),
+            resources_dir: self.resources.to_string_lossy().to_string(),
+            geode_resources_dir: self.geode_resources.to_string_lossy().to_string(),
+            geode_unzipped_dir: self.geode_unzipped.to_string_lossy().to_string(),
+        }
+    }
+
+    pub fn legacy_gamesheets_dir(&self, version: &str) -> PathBuf {
+        self.legacy.join(normalize_legacy_version(version))
+    }
 }
 
 #[derive(Clone)]
@@ -32,24 +66,14 @@ pub struct GameFilesState(pub Arc<GameFilesLayout>);
 #[serde(rename_all = "camelCase")]
 pub struct GameFilesLayoutDto {
     pub root_dir: String,
+    /// Vanilla Resources directory (latest placeholders for root + icons).
     pub current_dir: String,
     pub split_dir: String,
     pub legacy_dir: String,
-}
-
-impl GameFilesLayout {
-    pub fn to_dto(&self) -> GameFilesLayoutDto {
-        GameFilesLayoutDto {
-            root_dir: self.root.to_string_lossy().to_string(),
-            current_dir: self.current.to_string_lossy().to_string(),
-            split_dir: self.current_split.to_string_lossy().to_string(),
-            legacy_dir: self.legacy.to_string_lossy().to_string(),
-        }
-    }
-
-    pub fn legacy_gamesheets_dir(&self, version: &str) -> PathBuf {
-        self.legacy.join(normalize_legacy_version(version))
-    }
+    pub geometry_dash_dir: String,
+    pub resources_dir: String,
+    pub geode_resources_dir: String,
+    pub geode_unzipped_dir: String,
 }
 
 pub fn resolve_game_files_root() -> PathBuf {
@@ -80,24 +104,133 @@ pub fn resolve_game_files_root() -> PathBuf {
 }
 
 pub fn normalize_legacy_version(version: &str) -> String {
-    version.trim().trim_start_matches('v').trim_start_matches('V').to_string()
+    version
+        .trim()
+        .trim_start_matches('v')
+        .trim_start_matches('V')
+        .to_string()
+}
+
+fn looks_like_geometry_dash_dir(path: &Path) -> bool {
+    path.join("Resources").is_dir()
+}
+
+fn steam_library_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    let push_unique = |roots: &mut Vec<PathBuf>, path: PathBuf| {
+        if path.as_os_str().is_empty() {
+            return;
+        }
+        if !roots.iter().any(|existing| existing == &path) {
+            roots.push(path);
+        }
+    };
+
+    for env_key in ["ProgramFiles(x86)", "ProgramFiles", "PROGRAMFILES(X86)", "PROGRAMFILES"] {
+        if let Ok(pf) = std::env::var(env_key) {
+            if !pf.trim().is_empty() {
+                push_unique(&mut roots, PathBuf::from(pf).join("Steam"));
+            }
+        }
+    }
+    push_unique(&mut roots, PathBuf::from(r"C:\Program Files (x86)\Steam"));
+    push_unique(&mut roots, PathBuf::from(r"C:\Program Files\Steam"));
+
+    let mut vdf_paths: Vec<PathBuf> = roots
+        .iter()
+        .map(|steam| steam.join("steamapps").join("libraryfolders.vdf"))
+        .collect();
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        vdf_paths.push(
+            PathBuf::from(home)
+                .join("AppData")
+                .join("Local")
+                .join("Steam")
+                .join("steamapps")
+                .join("libraryfolders.vdf"),
+        );
+    }
+
+    for vdf_path in vdf_paths {
+        if let Ok(text) = fs::read_to_string(&vdf_path) {
+            for library_path in parse_steam_library_paths(&text) {
+                push_unique(&mut roots, library_path);
+            }
+        }
+    }
+
+    roots
+}
+
+fn parse_steam_library_paths(vdf_text: &str) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for line in vdf_text.lines() {
+        let trimmed = line.trim();
+        // "path"		"D:\\SteamLibrary"
+        if !trimmed.starts_with("\"path\"") {
+            continue;
+        }
+        let Some(rest) = trimmed.strip_prefix("\"path\"") else {
+            continue;
+        };
+        let value = rest.trim().trim_matches('"').replace("\\\\", "\\");
+        if !value.is_empty() {
+            out.push(PathBuf::from(value));
+        }
+    }
+    out
+}
+
+pub fn resolve_geometry_dash_dir() -> Result<PathBuf, AppError> {
+    if let Ok(env_override) = std::env::var("TM_GEOMETRY_DASH_DIR") {
+        let trimmed = env_override.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if looks_like_geometry_dash_dir(&path) {
+                return Ok(path);
+            }
+            return Err(AppError::IoError(format!(
+                "TM_GEOMETRY_DASH_DIR does not look like a Geometry Dash install (missing Resources): {}",
+                path.to_string_lossy()
+            )));
+        }
+    }
+
+    for steam_root in steam_library_roots() {
+        let candidate = steam_root
+            .join("steamapps")
+            .join("common")
+            .join(GEOMETRY_DASH_FOLDER);
+        if looks_like_geometry_dash_dir(&candidate) {
+            return Ok(candidate);
+        }
+    }
+
+    Err(AppError::IoError(
+        "Geometry Dash installation not found. Set TM_GEOMETRY_DASH_DIR to your Steam Geometry Dash folder."
+            .to_string(),
+    ))
 }
 
 pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     let root = resolve_game_files_root();
-    let current = root.join("current");
-    let current_split = current.join("split");
+    let current_split = root.join("split-cache");
     let legacy = root.join("legacy");
 
-    fs::create_dir_all(&current)?;
     fs::create_dir_all(&current_split)?;
     fs::create_dir_all(&legacy)?;
 
-    maybe_seed_current_from_env(&current)?;
+    let geometry_dash_dir = resolve_geometry_dash_dir()?;
+    let resources = geometry_dash_dir.join("Resources");
+    let geode_resources = geometry_dash_dir.join("geode").join("resources");
+    let geode_unzipped = geometry_dash_dir.join("geode").join("unzipped");
 
     let layout = GameFilesLayout {
         root,
-        current,
+        geometry_dash_dir,
+        resources,
+        geode_resources,
+        geode_unzipped,
         current_split,
         legacy,
     };
@@ -105,57 +238,171 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     Ok(layout)
 }
 
-fn maybe_seed_current_from_env(current: &Path) -> Result<(), AppError> {
-    let Ok(seed_from) = std::env::var("TM_SEED_GAME_FILES_FROM") else {
-        return Ok(());
-    };
-    if seed_from.trim().is_empty() {
-        return Ok(());
+/// Map an input pack relative directory to the Steam/Geode source directory for latest textures.
+///
+/// - root / empty → `{GD}/Resources`
+/// - `icons` (+ nested) → `{GD}/Resources/icons/...`
+/// - `geode.loader` (+ nested) → `{GD}/geode/resources/geode.loader/...`
+/// - `{mod}` (+ nested) → `{GD}/geode/unzipped/{mod}/resources/{mod}/...`
+pub fn resolve_current_source_dir(layout: &GameFilesLayout, relative_dir: &Path) -> PathBuf {
+    let parts: Vec<String> = relative_dir
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(name) => name.to_str().map(|s| s.to_string()),
+            _ => None,
+        })
+        .collect();
+
+    if parts.is_empty() {
+        return layout.resources.clone();
     }
-    let seed_path = PathBuf::from(seed_from.trim());
-    if !seed_path.exists() || !seed_path.is_dir() {
-        return Ok(());
+
+    if parts[0].eq_ignore_ascii_case("icons") {
+        let mut path = layout.resources.join("icons");
+        for part in parts.iter().skip(1) {
+            path.push(part);
+        }
+        return path;
     }
-    if !discover_sheet_pairs(current)?.is_empty() {
-        return Ok(());
+
+    if parts[0].eq_ignore_ascii_case("geode.loader") {
+        let mut path = layout.geode_resources.join("geode.loader");
+        for part in parts.iter().skip(1) {
+            path.push(part);
+        }
+        return path;
     }
-    copy_dir_recursive(&seed_path, current)?;
-    Ok(())
+
+    let mod_name = &parts[0];
+    let mut path = layout
+        .geode_unzipped
+        .join(mod_name)
+        .join("resources")
+        .join(mod_name);
+    for part in parts.iter().skip(1) {
+        path.push(part);
+    }
+    path
 }
 
-fn copy_dir_recursive(source: &Path, destination: &Path) -> Result<(), AppError> {
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let file_type = entry.file_type()?;
-        let target = destination.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_recursive(&entry.path(), &target)?;
-        } else if file_type.is_file() {
-            fs::copy(entry.path(), &target)?;
+fn resolve_png_beside_plist(plist_path: &Path) -> PathBuf {
+    let direct = plist_path.with_extension("png");
+    if direct.exists() {
+        return direct;
+    }
+    if let Some(texture_name) = texture_file_name_from_plist(plist_path) {
+        if let Some(parent) = plist_path.parent() {
+            let candidate = parent.join(texture_name);
+            if candidate.exists() {
+                return candidate;
+            }
         }
     }
-    Ok(())
+    direct
+}
+
+fn texture_file_name_from_plist(plist_path: &Path) -> Option<String> {
+    let root = plist::Value::from_file(plist_path).ok()?;
+    let metadata = root
+        .as_dictionary()
+        .and_then(|d| d.get("metadata"))
+        .and_then(|v| v.as_dictionary())?;
+    for key in ["realTextureFileName", "textureFileName"] {
+        if let Some(name) = metadata.get(key).and_then(|v| v.as_string()) {
+            if !name.is_empty() {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Find a latest placeholder sheet for an input pack sheet under the Steam/Geode source tree.
+pub fn find_current_sheet_for_input(
+    layout: &GameFilesLayout,
+    relative_dir: &Path,
+    stem: &str,
+) -> Result<Option<SheetCandidate>, AppError> {
+    let source_dir = resolve_current_source_dir(layout, relative_dir);
+    if !source_dir.is_dir() {
+        return Ok(None);
+    }
+
+    let direct_plist = source_dir.join(format!("{stem}.plist"));
+    let plist_path = if direct_plist.exists() {
+        direct_plist
+    } else {
+        let wanted = format!("{stem}.plist");
+        match recursive_find_file_named(&source_dir, &wanted) {
+            Some(path) => path,
+            None => return Ok(None),
+        }
+    };
+
+    let png_path = resolve_png_beside_plist(&plist_path);
+    Ok(Some(SheetCandidate {
+        stem: stem.to_string(),
+        relative_dir: relative_dir.to_path_buf(),
+        plist_path,
+        png_path,
+    }))
 }
 
 pub fn discover_current_sheet_pairs(layout: &GameFilesLayout) -> Result<Vec<SheetCandidate>, AppError> {
-    discover_sheet_pairs(&layout.current)
+    discover_sheet_pairs(&layout.resources)
 }
 
 pub fn find_current_sheet_for_plist(
     layout: &GameFilesLayout,
     plist_path: &Path,
 ) -> Result<Option<SheetCandidate>, AppError> {
-    let pairs = discover_sheet_pairs(&layout.current)?;
     let normalized = plist_path
         .canonicalize()
         .unwrap_or_else(|_| plist_path.to_path_buf());
-    Ok(pairs.into_iter().find(|pair| {
-        pair.plist_path
-            .canonicalize()
-            .unwrap_or_else(|_| pair.plist_path.clone())
-            == normalized
-    }))
+    let stem = normalized
+        .file_stem()
+        .and_then(|v| v.to_str())
+        .unwrap_or("")
+        .to_string();
+    if stem.is_empty() {
+        return Ok(None);
+    }
+
+    if let Some(parent) = normalized.parent() {
+        if let Ok(rel) = parent.strip_prefix(&layout.resources) {
+            return find_current_sheet_for_input(layout, rel, &stem);
+        }
+
+        let geode_loader_root = layout.geode_resources.join("geode.loader");
+        if let Ok(rel) = parent.strip_prefix(&geode_loader_root) {
+            let mut relative = PathBuf::from("geode.loader");
+            relative.push(rel);
+            return find_current_sheet_for_input(layout, &relative, &stem);
+        }
+
+        if let Ok(after_unzipped) = parent.strip_prefix(&layout.geode_unzipped) {
+            let parts: Vec<String> = after_unzipped
+                .components()
+                .filter_map(|c| match c {
+                    Component::Normal(name) => name.to_str().map(|s| s.to_string()),
+                    _ => None,
+                })
+                .collect();
+            // {mod}/resources/{mod}/[nested...]
+            if parts.len() >= 3 && parts[1].eq_ignore_ascii_case("resources") {
+                let mod_name = &parts[0];
+                let mut relative = PathBuf::from(mod_name);
+                if parts.len() > 3 {
+                    for part in parts.iter().skip(3) {
+                        relative.push(part);
+                    }
+                }
+                return find_current_sheet_for_input(layout, &relative, &stem);
+            }
+        }
+    }
+
+    find_current_sheet_for_input(layout, Path::new(""), &stem)
 }
 
 pub fn split_output_dir_for(layout: &GameFilesLayout, pair: &SheetCandidate) -> PathBuf {
@@ -165,18 +412,132 @@ pub fn split_output_dir_for(layout: &GameFilesLayout, pair: &SheetCandidate) -> 
         .join(&pair.stem)
 }
 
-pub fn split_cache_is_valid(pair: &SheetCandidate, split_dir: &Path) -> bool {
-    let split_plist = split_dir.join(format!("{}.plist", pair.stem));
-    if !split_plist.exists() {
-        return false;
+fn split_cache_entry_key(pair: &SheetCandidate) -> String {
+    let relative = if pair.relative_dir.as_os_str().is_empty() {
+        pair.stem.clone()
+    } else {
+        pair.relative_dir
+            .join(&pair.stem)
+            .to_string_lossy()
+            .replace('\\', "/")
+    };
+    relative
+}
+
+fn split_cache_hashes_path(layout: &GameFilesLayout) -> PathBuf {
+    layout.current_split.join("hashes.json")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+struct SplitCacheHashesFile {
+    schema_version: u32,
+    #[serde(default)]
+    entries: HashMap<String, SplitCacheHashEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+struct SplitCacheHashEntry {
+    plist_sha256: String,
+    png_sha256: String,
+}
+
+fn split_cache_manifest_lock() -> &'static std::sync::Mutex<()> {
+    static LOCK: std::sync::OnceLock<std::sync::Mutex<()>> = std::sync::OnceLock::new();
+    LOCK.get_or_init(|| std::sync::Mutex::new(()))
+}
+
+fn sha256_file(path: &Path) -> Result<String, AppError> {
+    use sha2::{Digest, Sha256};
+    let bytes = fs::read(path).map_err(|err| {
+        AppError::IoError(format!(
+            "failed to read `{}` for hashing: {err}",
+            path.to_string_lossy()
+        ))
+    })?;
+    let digest = Sha256::digest(&bytes);
+    Ok(format!("{digest:x}"))
+}
+
+fn hash_sheet_pair(pair: &SheetCandidate) -> Result<SplitCacheHashEntry, AppError> {
+    Ok(SplitCacheHashEntry {
+        plist_sha256: sha256_file(&pair.plist_path)?,
+        png_sha256: sha256_file(&pair.png_path)?,
+    })
+}
+
+fn load_split_cache_hashes(layout: &GameFilesLayout) -> Result<SplitCacheHashesFile, AppError> {
+    let path = split_cache_hashes_path(layout);
+    if !path.exists() {
+        return Ok(SplitCacheHashesFile {
+            schema_version: 1,
+            entries: HashMap::new(),
+        });
     }
-    let Ok(source_mtime) = fs::metadata(&pair.plist_path).and_then(|m| m.modified()) else {
-        return false;
-    };
-    let Ok(split_mtime) = fs::metadata(&split_plist).and_then(|m| m.modified()) else {
-        return false;
-    };
-    split_mtime >= source_mtime
+    let text = fs::read_to_string(&path).map_err(|err| {
+        AppError::IoError(format!(
+            "failed to read split cache hashes `{}`: {err}",
+            path.to_string_lossy()
+        ))
+    })?;
+    serde_json::from_str(&text).map_err(|err| {
+        AppError::ParseError(format!(
+            "failed to parse split cache hashes `{}`: {err}",
+            path.to_string_lossy()
+        ))
+    })
+}
+
+fn save_split_cache_hashes(
+    layout: &GameFilesLayout,
+    file: &SplitCacheHashesFile,
+) -> Result<(), AppError> {
+    fs::create_dir_all(&layout.current_split)?;
+    let path = split_cache_hashes_path(layout);
+    let json = serde_json::to_string_pretty(file)
+        .map_err(|err| AppError::IoError(format!("failed to serialize split cache hashes: {err}")))?;
+    fs::write(&path, json).map_err(|err| {
+        AppError::IoError(format!(
+            "failed to write split cache hashes `{}`: {err}",
+            path.to_string_lossy()
+        ))
+    })?;
+    Ok(())
+}
+
+fn split_dir_has_cached_plist(pair: &SheetCandidate, split_dir: &Path) -> bool {
+    split_dir.join(format!("{}.plist", pair.stem)).exists()
+}
+
+fn clear_split_cache_dir(split_dir: &Path) -> Result<(), AppError> {
+    if split_dir.exists() {
+        fs::remove_dir_all(split_dir).map_err(|err| {
+            AppError::IoError(format!(
+                "failed to clear stale split cache `{}`: {err}",
+                split_dir.to_string_lossy()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+/// Returns true when the on-disk split cache matches the hashed source gamesheet pair.
+pub fn split_cache_is_valid(
+    layout: &GameFilesLayout,
+    pair: &SheetCandidate,
+    split_dir: &Path,
+) -> Result<bool, AppError> {
+    if !split_dir_has_cached_plist(pair, split_dir) {
+        return Ok(false);
+    }
+    let current = hash_sheet_pair(pair)?;
+    let key = split_cache_entry_key(pair);
+    let _guard = split_cache_manifest_lock()
+        .lock()
+        .map_err(|_| AppError::InvalidOperation("split cache hash lock poisoned"))?;
+    let manifest = load_split_cache_hashes(layout)?;
+    Ok(manifest.entries.get(&key) == Some(&current))
 }
 
 pub fn ensure_sheet_split_cached(
@@ -185,17 +546,56 @@ pub fn ensure_sheet_split_cached(
     options: &SplitterOptions,
 ) -> Result<PathBuf, AppError> {
     let split_dir = split_output_dir_for(layout, pair);
-    if split_cache_is_valid(pair, &split_dir) {
-        return Ok(split_dir);
+    let key = split_cache_entry_key(pair);
+    let current_hash = hash_sheet_pair(pair)?;
+
+    {
+        let _guard = split_cache_manifest_lock()
+            .lock()
+            .map_err(|_| AppError::InvalidOperation("split cache hash lock poisoned"))?;
+        let manifest = load_split_cache_hashes(layout)?;
+        if split_dir_has_cached_plist(pair, &split_dir)
+            && manifest.entries.get(&key) == Some(&current_hash)
+        {
+            return Ok(split_dir);
+        }
     }
 
+    // Source changed or first use: wipe stale cache, resplit, then record hashes.
+    clear_split_cache_dir(&split_dir)?;
     fs::create_dir_all(&split_dir)?;
     split_sheet_candidate(pair, &split_dir, options, || {})?;
+
+    let _guard = split_cache_manifest_lock()
+        .lock()
+        .map_err(|_| AppError::InvalidOperation("split cache hash lock poisoned"))?;
+    let mut manifest = load_split_cache_hashes(layout)?;
+    manifest.schema_version = 1;
+    manifest.entries.insert(key, current_hash);
+    save_split_cache_hashes(layout, &manifest)?;
     Ok(split_dir)
+}
+
+/// Ensure the Steam/Geode source sheet for this input pair is split into the local cache.
+pub fn ensure_input_sheet_latest_split_cached(
+    layout: &GameFilesLayout,
+    input_pair: &SheetCandidate,
+    options: &SplitterOptions,
+) -> Result<Option<(SheetCandidate, PathBuf)>, AppError> {
+    let Some(source_pair) =
+        find_current_sheet_for_input(layout, &input_pair.relative_dir, &input_pair.stem)?
+    else {
+        return Ok(None);
+    };
+    let split_dir = ensure_sheet_split_cached(layout, &source_pair, options)?;
+    Ok(Some((source_pair, split_dir)))
 }
 
 pub fn build_plist_index_under(root: &Path) -> Result<HashMap<String, PathBuf>, AppError> {
     let mut index: HashMap<String, PathBuf> = HashMap::new();
+    if !root.is_dir() {
+        return Ok(index);
+    }
     for plist_path in collect_plists_recursive(root)? {
         let Some(stem) = plist_path.file_stem().and_then(|value| value.to_str()) else {
             continue;
@@ -209,7 +609,10 @@ fn collect_plists_recursive(root: &Path) -> Result<Vec<PathBuf>, AppError> {
     let mut files: Vec<PathBuf> = Vec::new();
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        for entry in fs::read_dir(&dir)? {
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
@@ -333,21 +736,10 @@ pub fn png_path_to_data_url(path: &Path) -> Result<String, AppError> {
     Ok(format!("data:image/png;base64,{encoded}"))
 }
 
-pub fn ensure_current_library_split_cached(
-    layout: &GameFilesLayout,
-    options: &SplitterOptions,
-) -> Result<(), AppError> {
-    let pairs = discover_current_sheet_pairs(layout)?;
-    for pair in pairs {
-        ensure_sheet_split_cached(layout, &pair, options)?;
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::{Duration, SystemTime};
+    use std::time::SystemTime;
 
     fn temp_game_files_root(label: &str) -> PathBuf {
         std::env::temp_dir().join(format!(
@@ -359,6 +751,18 @@ mod tests {
         ))
     }
 
+    fn test_layout(root: &Path, gd: &Path) -> GameFilesLayout {
+        GameFilesLayout {
+            root: root.to_path_buf(),
+            geometry_dash_dir: gd.to_path_buf(),
+            resources: gd.join("Resources"),
+            geode_resources: gd.join("geode").join("resources"),
+            geode_unzipped: gd.join("geode").join("unzipped"),
+            current_split: root.join("split-cache"),
+            legacy: root.join("legacy"),
+        }
+    }
+
     #[test]
     fn normalize_legacy_version_strips_prefix_and_whitespace() {
         assert_eq!(normalize_legacy_version(" 2.11 "), "2.11");
@@ -366,58 +770,141 @@ mod tests {
     }
 
     #[test]
-    fn split_output_dir_matches_splitter_layout() {
-        let layout = GameFilesLayout {
-            root: PathBuf::from("/game-files"),
-            current: PathBuf::from("/game-files/current"),
-            current_split: PathBuf::from("/game-files/current/split"),
-            legacy: PathBuf::from("/game-files/legacy"),
-        };
-        let pair = SheetCandidate {
-            stem: "BlankSheet-uhd".to_string(),
-            relative_dir: PathBuf::new(),
-            plist_path: PathBuf::from("/game-files/current/BlankSheet-uhd.plist"),
-            png_path: PathBuf::from("/game-files/current/BlankSheet-uhd.png"),
-        };
+    fn resolve_current_source_dir_maps_root_icons_and_mods() {
+        let layout = test_layout(Path::new("/cache"), Path::new("/gd"));
         assert_eq!(
-            split_output_dir_for(&layout, &pair),
-            PathBuf::from("/game-files/current/split/BlankSheet-uhd")
+            resolve_current_source_dir(&layout, Path::new("")),
+            PathBuf::from("/gd/Resources")
+        );
+        assert_eq!(
+            resolve_current_source_dir(&layout, Path::new("icons")),
+            PathBuf::from("/gd/Resources/icons")
+        );
+        assert_eq!(
+            resolve_current_source_dir(&layout, Path::new("icons/extra")),
+            PathBuf::from("/gd/Resources/icons/extra")
+        );
+        assert_eq!(
+            resolve_current_source_dir(&layout, Path::new("geode.loader")),
+            PathBuf::from("/gd/geode/resources/geode.loader")
+        );
+        assert_eq!(
+            resolve_current_source_dir(&layout, Path::new("geode.loader/sub")),
+            PathBuf::from("/gd/geode/resources/geode.loader/sub")
+        );
+        assert_eq!(
+            resolve_current_source_dir(&layout, Path::new("my.mod/sub")),
+            PathBuf::from("/gd/geode/unzipped/my.mod/resources/my.mod/sub")
         );
     }
 
     #[test]
-    fn bootstrap_creates_expected_directories() {
-        let root = temp_game_files_root("bootstrap");
-        std::env::set_var("TM_GAME_FILES_DIR", root.to_string_lossy().to_string());
-        let layout = bootstrap_game_files().expect("bootstrap");
-        assert!(layout.current.is_dir());
-        assert!(layout.current_split.is_dir());
-        assert!(layout.legacy.is_dir());
-        assert!(root.join("manifest.local.json").exists());
-        std::env::remove_var("TM_GAME_FILES_DIR");
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn split_cache_validity_tracks_source_mtime() {
-        let root = temp_game_files_root("split_validity");
-        let current = root.join("current");
-        let split_dir = current.join("split").join("BlankSheet-uhd");
-        fs::create_dir_all(&split_dir).expect("create split dir");
-        let plist_path = current.join("BlankSheet-uhd.plist");
-        let split_plist = split_dir.join("BlankSheet-uhd.plist");
-        fs::write(&plist_path, b"source").expect("write source plist");
-        fs::write(&split_plist, b"split").expect("write split plist");
+    fn split_output_dir_matches_splitter_layout() {
+        let layout = test_layout(Path::new("/game-files"), Path::new("/gd"));
         let pair = SheetCandidate {
             stem: "BlankSheet-uhd".to_string(),
             relative_dir: PathBuf::new(),
-            plist_path: plist_path.clone(),
-            png_path: current.join("BlankSheet-uhd.png"),
+            plist_path: PathBuf::from("/gd/Resources/BlankSheet-uhd.plist"),
+            png_path: PathBuf::from("/gd/Resources/BlankSheet-uhd.png"),
         };
-        assert!(split_cache_is_valid(&pair, &split_dir));
-        std::thread::sleep(Duration::from_millis(20));
-        fs::write(&plist_path, b"source-updated").expect("touch source");
-        assert!(!split_cache_is_valid(&pair, &split_dir));
+        assert_eq!(
+            split_output_dir_for(&layout, &pair),
+            PathBuf::from("/game-files/split-cache/BlankSheet-uhd")
+        );
+    }
+
+    #[test]
+    fn parse_steam_library_paths_reads_path_entries() {
+        let vdf = r#"
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"C:\\Program Files (x86)\\Steam"
+	}
+	"1"
+	{
+		"path"		"D:\\SteamLibrary"
+	}
+}
+"#;
+        let paths = parse_steam_library_paths(vdf);
+        assert!(paths.iter().any(|p| p.ends_with("Steam")));
+        assert!(paths.iter().any(|p| p.ends_with("SteamLibrary")));
+    }
+
+    #[test]
+    fn split_cache_uses_hashes_and_rebuilds_on_source_change() {
+        use crate::core::contracts::phase_defaults;
+        use image::{ImageBuffer, Rgba};
+        use plist::{Dictionary, Value};
+
+        let root = temp_game_files_root("split_hash");
+        let gd = root.join("gd");
+        let resources = gd.join("Resources");
+        fs::create_dir_all(&resources).expect("resources");
+        let layout = test_layout(&root, &gd);
+        fs::create_dir_all(&layout.current_split).expect("split cache");
+
+        let plist_path = resources.join("TinySheet.plist");
+        let png_path = resources.join("TinySheet.png");
+        let mut frames = Dictionary::new();
+        frames.insert("a.png".to_string(), Value::Dictionary(Dictionary::new()));
+        let mut root_dict = Dictionary::new();
+        root_dict.insert("frames".to_string(), Value::Dictionary(frames));
+        let mut metadata = Dictionary::new();
+        metadata.insert(
+            "textureFileName".to_string(),
+            Value::String("TinySheet.png".to_string()),
+        );
+        metadata.insert("format".to_string(), Value::Integer(2.into()));
+        root_dict.insert("metadata".to_string(), Value::Dictionary(metadata));
+        Value::Dictionary(root_dict)
+            .to_file_xml(&plist_path)
+            .expect("write plist");
+        let img: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(2, 2, Rgba([255, 0, 0, 255]));
+        img.save(&png_path).expect("write png");
+
+        let pair = SheetCandidate {
+            stem: "TinySheet".to_string(),
+            relative_dir: PathBuf::new(),
+            plist_path: plist_path.clone(),
+            png_path: png_path.clone(),
+        };
+        let opts = phase_defaults().splitter;
+
+        // First use: create cache + hash entry.
+        let split_dir = ensure_sheet_split_cached(&layout, &pair, &opts).expect("first cache");
+        assert!(split_dir.join("TinySheet.plist").exists());
+        let hashes_path = layout.current_split.join("hashes.json");
+        assert!(hashes_path.exists());
+        let first_hash = hash_sheet_pair(&pair).expect("hash");
+        assert!(split_cache_is_valid(&layout, &pair, &split_dir).expect("valid"));
+
+        // Unchanged source: reuse cache (hash entry stays the same).
+        let split_dir_2 = ensure_sheet_split_cached(&layout, &pair, &opts).expect("reuse");
+        assert_eq!(split_dir, split_dir_2);
+        let manifest = load_split_cache_hashes(&layout).expect("load");
+        assert_eq!(manifest.entries.get("TinySheet"), Some(&first_hash));
+
+        // Change source png: cache should be wiped and rebuilt with new hash.
+        let marker = split_dir.join("stale_marker.txt");
+        fs::write(&marker, b"stale").expect("marker");
+        let img2: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_pixel(2, 2, Rgba([0, 255, 0, 255]));
+        img2.save(&png_path).expect("rewrite png");
+        assert!(!split_cache_is_valid(&layout, &pair, &split_dir).expect("invalid after change"));
+
+        let split_dir_3 = ensure_sheet_split_cached(&layout, &pair, &opts).expect("rebuild");
+        assert_eq!(split_dir, split_dir_3);
+        assert!(!marker.exists(), "stale cache files should be deleted");
+        assert!(split_dir.join("TinySheet.plist").exists());
+        let second_hash = hash_sheet_pair(&pair).expect("hash2");
+        assert_ne!(first_hash, second_hash);
+        let manifest2 = load_split_cache_hashes(&layout).expect("load2");
+        assert_eq!(manifest2.entries.get("TinySheet"), Some(&second_hash));
+
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -446,5 +933,50 @@ mod tests {
         );
         assert_eq!(resolved, Some(sprite_path));
         let _ = fs::remove_dir_all(&temp);
+    }
+
+    #[test]
+    fn find_current_sheet_for_input_reads_resources_and_mod_paths() {
+        let root = temp_game_files_root("steam_resolve");
+        let gd = root.join("Geometry Dash");
+        let resources = gd.join("Resources");
+        let icons = resources.join("icons");
+        let mod_res = gd
+            .join("geode")
+            .join("resources")
+            .join("geode.loader");
+        fs::create_dir_all(&icons).expect("resources");
+        fs::create_dir_all(&mod_res).expect("geode.loader");
+        fs::write(resources.join("BlankSheet-uhd.plist"), b"p").unwrap();
+        fs::write(resources.join("BlankSheet-uhd.png"), b"g").unwrap();
+        fs::write(icons.join("player_02-uhd.plist"), b"p").unwrap();
+        fs::write(icons.join("player_02-uhd.png"), b"g").unwrap();
+        fs::write(mod_res.join("BlankSheet-uhd.plist"), b"p").unwrap();
+        fs::write(mod_res.join("BlankSheet-uhd.png"), b"g").unwrap();
+
+        let layout = test_layout(&root, &gd);
+        let root_sheet =
+            find_current_sheet_for_input(&layout, Path::new(""), "BlankSheet-uhd").unwrap();
+        assert!(root_sheet.unwrap().plist_path.ends_with("BlankSheet-uhd.plist"));
+
+        let icon_sheet =
+            find_current_sheet_for_input(&layout, Path::new("icons"), "player_02-uhd").unwrap();
+        assert!(icon_sheet
+            .unwrap()
+            .plist_path
+            .to_string_lossy()
+            .contains("icons"));
+
+        let mod_sheet =
+            find_current_sheet_for_input(&layout, Path::new("geode.loader"), "BlankSheet-uhd")
+                .unwrap();
+        assert!(mod_sheet
+            .unwrap()
+            .plist_path
+            .to_string_lossy()
+            .replace('\\', "/")
+            .contains("geode/resources/geode.loader"));
+
+        let _ = fs::remove_dir_all(&root);
     }
 }

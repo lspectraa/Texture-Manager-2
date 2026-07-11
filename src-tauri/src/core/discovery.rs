@@ -139,6 +139,32 @@ pub fn discover_standalone_pngs(
     Ok(out)
 }
 
+/// Unpaired `.png` files under `input_dir` (no matching plist), with no stem eligibility filter.
+/// Used by Convert to New Version to copy-through assets like `edit_eAlphaBtn_001.png`.
+pub fn discover_unpaired_pngs(
+    input_dir: &Path,
+    paired_png_paths: &HashSet<PathBuf>,
+) -> Result<Vec<PathBuf>, AppError> {
+    let files = collect_files_recursive(input_dir)?;
+    let mut out: Vec<PathBuf> = Vec::new();
+    for file in files {
+        if !file.is_file() {
+            continue;
+        }
+        let is_png = file
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|e| e.eq_ignore_ascii_case("png"))
+            .unwrap_or(false);
+        if !is_png || paired_png_paths.contains(&file) {
+            continue;
+        }
+        out.push(file);
+    }
+    out.sort();
+    Ok(out)
+}
+
 /// `.fnt` files under `input_dir` whose stem ends with `-hd` or `-uhd` (classic porter eligibility).
 pub fn discover_standalone_fnts(input_dir: &Path) -> Result<Vec<PathBuf>, AppError> {
     let files = collect_files_recursive(input_dir)?;

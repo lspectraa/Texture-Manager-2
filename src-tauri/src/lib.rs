@@ -11,8 +11,9 @@ use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
 use crate::core::executor::execute_operation_plan;
 use crate::core::game_files::{bootstrap_game_files, GameFilesLayoutDto, GameFilesState};
 use crate::core::geode_buttons::{
-    geode_buttons_target_index, geode_buttons_template_preview_data_url, resolve_geode_buttons_plist,
-    GeodeButtonsTargetGroup,
+    geode_buttons_target_index, geode_buttons_template_preview_data_url,
+    resolve_geode_buttons_default_input_dir, resolve_geode_buttons_default_sheet,
+    resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
 };
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
@@ -283,13 +284,26 @@ fn geode_buttons_target_index_cmd(
 }
 
 #[tauri::command]
-fn geode_buttons_autoselect_plist_cmd(input_dir: String) -> Result<Option<String>, String> {
-    resolve_geode_buttons_plist(std::path::Path::new(&input_dir)).map_err(|err| err.to_string())
+fn geode_buttons_autoselect_plist_cmd(
+    game_files: tauri::State<'_, GameFilesState>,
+    input_dir: String,
+) -> Result<Option<String>, String> {
+    let trimmed = input_dir.trim();
+    if !trimmed.is_empty() {
+        if let Some(path) =
+            resolve_geode_buttons_plist(std::path::Path::new(trimmed)).map_err(|err| err.to_string())?
+        {
+            return Ok(Some(path));
+        }
+    }
+    Ok(resolve_geode_buttons_default_sheet(game_files.0.as_ref())
+        .map_err(|err| err.to_string())?
+        .map(|pair| pair.plist_path.to_string_lossy().to_string()))
 }
 
 #[tauri::command]
 fn geode_buttons_default_input_dir_cmd(game_files: tauri::State<'_, GameFilesState>) -> String {
-    game_files.0.current.to_string_lossy().to_string()
+    resolve_geode_buttons_default_input_dir(game_files.0.as_ref())
 }
 
 #[tauri::command]
