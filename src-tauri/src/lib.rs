@@ -3,13 +3,13 @@ mod core;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use base64::Engine as _;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
 use crate::core::executor::execute_operation_plan;
-use crate::core::game_files::{bootstrap_game_files, GameFilesLayoutDto, GameFilesState};
+use crate::core::game_files::{
+    bootstrap_game_files, refresh_game_files_layout, GameFilesLayoutDto, GameFilesState,
+};
 use crate::core::geode_buttons::{
     geode_buttons_target_index, geode_buttons_template_preview_data_url,
     resolve_geode_buttons_default_input_dir, resolve_geode_buttons_default_sheet,
@@ -25,17 +25,161 @@ use crate::core::icon_editor::{
     icon_editor_rename_sheet as icon_editor_rename_sheet_core,
     icon_editor_swap_rename_sheet as icon_editor_swap_rename_sheet_core,
     icon_editor_save_plist as icon_editor_save_plist_core,
+    icon_editor_save_png_data_url as icon_editor_save_png_data_url_core,
     icon_editor_sheet_info as icon_editor_sheet_info_core, IconEditorExtractedFrame,
     IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
 };
 use crate::core::operations::build_operation_plan;
-use crate::core::pipeline::{alpha_trim_bounds, normalize_rotation, nullify_offset};
-use crate::core::plist::{format_pair, parse_pair, scale_pair_ceil, scale_pair_floor};
-use crate::core::report::{OperationReport, ReportIssue, ReportLevel};
+use crate::core::report::OperationReport;
+use crate::core::settings::{
+    apply_save_request, load_settings, save_settings, settings_view, AppSettings, AppSettingsView,
+    SaveAppSettingsRequest,
+};
+
+fn phase_defaults_from_settings() -> PhaseDefaults {
+    let settings = load_settings();
+    let mut defaults = phase_defaults();
+    let concurrency = settings.default_sheet_concurrency;
+    defaults.splitter.sheet_concurrency = concurrency;
+    defaults.porter.sheet_concurrency = concurrency;
+    defaults.merger.sheet_concurrency = concurrency;
+    defaults.convert_to_new_version.sheet_concurrency = concurrency;
+    defaults
+}
+
+fn refresh_layout_from_settings(
+    game_files: &GameFilesState,
+    settings: &AppSettings,
+) -> AppSettingsView {
+    let layout = refresh_game_files_layout(settings.geometry_dash_dir.as_deref());
+    game_files.replace(layout);
+    settings_view(settings, &game_files.snapshot())
+}
+
+fn save_settings_and_refresh(
+    game_files: &GameFilesState,
+    request: SaveAppSettingsRequest,
+) -> Result<AppSettingsView, String> {
+    let current = load_settings();
+    let next = apply_save_request(&current, request).map_err(|err| err.to_string())?;
+    let saved = save_settings(&next).map_err(|err| err.to_string())?;
+    Ok(refresh_layout_from_settings(game_files, &saved))
+}
 
 #[tauri::command]
 fn get_phase_defaults() -> PhaseDefaults {
-    phase_defaults()
+    phase_defaults_from_settings()
+}
+
+#[tauri::command]
+fn get_app_settings(game_files: tauri::State<'_, GameFilesState>) -> AppSettingsView {
+    let settings = load_settings();
+    settings_view(&settings, &game_files.snapshot())
+}
+
+#[tauri::command]
+fn save_app_settings(
+    game_files: tauri::State<'_, GameFilesState>,
+    request: SaveAppSettingsRequest,
+) -> Result<AppSettingsView, String> {
+    save_settings_and_refresh(&game_files, request)
+}
+
+#[tauri::command]
+fn set_geometry_dash_dir(
+    game_files: tauri::State<'_, GameFilesState>,
+    path: String,
+) -> Result<AppSettingsView, String> {
+    save_settings_and_refresh(
+        &game_files,
+        SaveAppSettingsRequest {
+            geometry_dash_dir: Some(path),
+            clear_geometry_dash_dir: false,
+            default_sheet_concurrency: None,
+            theme: None,
+            language: None,
+        },
+    )
+}
+
+#[tauri::command]
+fn clear_geometry_dash_dir(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<AppSettingsView, String> {
+    save_settings_and_refresh(
+        &game_files,
+        SaveAppSettingsRequest {
+            geometry_dash_dir: None,
+            clear_geometry_dash_dir: true,
+            default_sheet_concurrency: None,
+            theme: None,
+            language: None,
+        },
+    )
+}
+
+#[tauri::command]
+fn redetect_geometry_dash_dir(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<AppSettingsView, String> {
+    save_settings_and_refresh(
+        &game_files,
+        SaveAppSettingsRequest {
+            geometry_dash_dir: None,
+            clear_geometry_dash_dir: true,
+            default_sheet_concurrency: None,
+            theme: None,
+            language: None,
+        },
+    )
+}
+
+#[tauri::command]
+fn open_path_in_os(path: String) -> Result<(), String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("Path is empty.".to_string());
+    }
+    let target = std::path::PathBuf::from(trimmed);
+    if !target.exists() {
+        return Err(format!("Path does not exist: {trimmed}"));
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(if target.is_dir() {
+                trimmed.to_string()
+            } else {
+                format!("/select,{trimmed}")
+            })
+            .spawn()
+            .map_err(|err| format!("Failed to open path: {err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg(trimmed)
+            .spawn()
+            .map_err(|err| format!("Failed to open path: {err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::process::Command::new("xdg-open")
+            .arg(trimmed)
+            .spawn()
+            .map_err(|err| format!("Failed to open path: {err}"))?;
+        return Ok(());
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
+    {
+        Err("Opening folders is not supported on this platform.".to_string())
+    }
 }
 
 #[tauri::command]
@@ -77,12 +221,12 @@ async fn run_operation(
     cancel.prepare_run();
     let cancel_flag = cancel.token();
     let plan = build_operation_plan(request).map_err(|err| err.to_string())?;
-    let layout = Arc::clone(&game_files.0);
+    let layout = game_files.snapshot();
     let app_handle = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         execute_operation_plan(
             &plan,
-            layout.as_ref(),
+            &layout,
             move |progress| {
                 let _ = app_handle.emit("operation-progress", &progress);
             },
@@ -92,55 +236,6 @@ async fn run_operation(
     .await
     .map_err(|err| format!("blocking task join: {err}"))?
     .map_err(|err| err.to_string())
-}
-
-#[tauri::command]
-fn phase1_primitives_smoke_report() -> OperationReport {
-    let mut issues: Vec<ReportIssue> = Vec::new();
-
-    match parse_pair("{10.0,20.0}") {
-        Ok(parsed) => match scale_pair_ceil(parsed, 2.0) {
-            Ok(scaled) => {
-                let _formatted = format_pair(scaled);
-                let _scaled_floor = scale_pair_floor(parsed, 2.0);
-            }
-            Err(err) => {
-                issues.push(ReportIssue {
-                    level: ReportLevel::Error,
-                    message: format!("scale_pair_ceil failed: {err}"),
-                    file: None,
-                });
-            }
-        },
-        Err(err) => {
-            issues.push(ReportIssue {
-                level: ReportLevel::Error,
-                message: format!("parse_pair failed: {err}"),
-                file: None,
-            });
-        }
-    }
-
-    let alpha = vec![vec![0_u8, 0_u8, 0_u8], vec![0_u8, 255_u8, 0_u8]];
-    if alpha_trim_bounds(&alpha).is_none() {
-        issues.push(ReportIssue {
-            level: ReportLevel::Warning,
-            message: "alpha_trim_bounds returned None for non-empty alpha".to_string(),
-            file: None,
-        });
-    }
-
-    let _normalized = normalize_rotation(true);
-    let _offset = nullify_offset();
-
-    OperationReport {
-        operation: "phase1PrimitivesSmoke".to_string(),
-        files_seen: 1,
-        files_processed: 1,
-        output_dir: "in-memory".to_string(),
-        elapsed_ms: 0,
-        issues,
-    }
 }
 
 #[tauri::command]
@@ -259,19 +354,13 @@ fn icon_editor_png_data_url(texture_path: String) -> Result<String, String> {
 
 #[tauri::command]
 fn icon_editor_save_png_data_url(output_path: String, png_data_url: String) -> Result<(), String> {
-    let encoded = png_data_url
-        .split_once(',')
-        .map(|(_, data)| data)
-        .ok_or_else(|| "invalid png data url".to_string())?;
-    let bytes = BASE64_STANDARD
-        .decode(encoded)
-        .map_err(|err| format!("failed to decode png data: {err}"))?;
-    std::fs::write(&output_path, bytes).map_err(|err| format!("failed to write png: {err}"))
+    icon_editor_save_png_data_url_core(std::path::Path::new(&output_path), png_data_url.as_str())
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
 fn get_game_files_layout(game_files: tauri::State<'_, GameFilesState>) -> GameFilesLayoutDto {
-    game_files.0.to_dto()
+    game_files.snapshot().to_dto()
 }
 
 #[tauri::command]
@@ -280,9 +369,10 @@ fn geode_buttons_target_index_cmd(
     plist_path: String,
     use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
+    let layout = game_files.snapshot();
     geode_buttons_target_index(
         std::path::Path::new(&plist_path),
-        game_files.0.as_ref(),
+        &layout,
         use_game_files_cache,
     )
     .map_err(|err| err.to_string())
@@ -301,14 +391,15 @@ fn geode_buttons_autoselect_plist_cmd(
             return Ok(Some(path));
         }
     }
-    Ok(resolve_geode_buttons_default_sheet(game_files.0.as_ref())
+    let layout = game_files.snapshot();
+    Ok(resolve_geode_buttons_default_sheet(&layout)
         .map_err(|err| err.to_string())?
         .map(|pair| pair.plist_path.to_string_lossy().to_string()))
 }
 
 #[tauri::command]
 fn geode_buttons_default_input_dir_cmd(game_files: tauri::State<'_, GameFilesState>) -> String {
-    resolve_geode_buttons_default_input_dir(game_files.0.as_ref())
+    resolve_geode_buttons_default_input_dir(&game_files.snapshot())
 }
 
 #[tauri::command]
@@ -323,17 +414,22 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
             let layout = bootstrap_game_files().map_err(|err| err.to_string())?;
-            app.manage(GameFilesState(Arc::new(layout)));
+            app.manage(GameFilesState::new(layout));
             Ok(())
         })
         .manage(OperationCancel::default())
         .invoke_handler(tauri::generate_handler![
             get_phase_defaults,
+            get_app_settings,
+            save_app_settings,
+            set_geometry_dash_dir,
+            clear_geometry_dash_dir,
+            redetect_geometry_dash_dir,
+            open_path_in_os,
             get_game_files_layout,
             validate_operation_request,
             run_operation,
             cancel_operation,
-            phase1_primitives_smoke_report,
             geode_buttons_target_index_cmd,
             geode_buttons_autoselect_plist_cmd,
             geode_buttons_default_input_dir_cmd,

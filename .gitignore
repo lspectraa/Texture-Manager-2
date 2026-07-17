@@ -22,3 +22,10 @@ target
 .vscode/*
 dist/*
 node_modules/*
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+e2e/*

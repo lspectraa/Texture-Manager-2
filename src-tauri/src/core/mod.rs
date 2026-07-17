@@ -17,4 +17,6 @@ pub mod plist;
 pub mod porter;
 pub mod randomizer;
 pub mod report;
+pub mod safe_fs;
+pub mod settings;
 pub mod splitter;

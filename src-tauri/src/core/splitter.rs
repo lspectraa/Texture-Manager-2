@@ -12,6 +12,7 @@ use crate::core::discovery::SheetCandidate;
 use crate::core::errors::AppError;
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::report::{ReportIssue, ReportLevel};
+use crate::core::safe_fs::{is_safe_path_segment, path_from_slashes};
 
 pub struct SplitExecutionResult {
     pub files_processed: usize,
@@ -199,18 +200,16 @@ fn build_sprite_output_path(
         }
     };
 
-    output_dir.join(frame_path_from_slashes(&trimmed))
-}
-
-fn frame_path_from_slashes(value: &str) -> std::path::PathBuf {
-    value
-        .split('/')
-        .fold(std::path::PathBuf::new(), |mut acc, part| {
-            if !part.is_empty() {
-                acc.push(part);
-            }
-            acc
-        })
+    if let Ok(relative) = path_from_slashes(&trimmed) {
+        return output_dir.join(relative);
+    }
+    // Fall back to basename only when the frame key is unsafe.
+    let basename = trimmed
+        .rsplit('/')
+        .next()
+        .filter(|part| is_safe_path_segment(part))
+        .unwrap_or("sprite.png");
+    output_dir.join(basename)
 }
 
 fn extract_frame_image(

@@ -11,6 +11,7 @@ use crate::core::contracts::{DimensionOverride, MergerOptions};
 use crate::core::errors::AppError;
 use crate::core::image_io::save_rgba_png_fast;
 use crate::core::report::{ReportIssue, ReportLevel};
+use crate::core::safe_fs::{is_safe_path_segment, path_from_slashes};
 
 /// Transparent gutter between packed sprite rects so bilinear filtering does not sample
 /// neighboring frames. Uses a **shared** seam: each slot is `w + gap` × `h + gap` and the
@@ -727,7 +728,10 @@ fn resolve_sprite_path(source_dir: &Path, frame_name: &str) -> Option<PathBuf> {
         .trim_start_matches('/')
         .to_string();
 
-    let direct = source_dir.join(path_from_slashes(&normalized));
+    let Ok(relative) = path_from_slashes(&normalized) else {
+        return None;
+    };
+    let direct = source_dir.join(&relative);
     if direct.exists() {
         return Some(direct);
     }
@@ -751,20 +755,24 @@ fn resolve_sprite_path(source_dir: &Path, frame_name: &str) -> Option<PathBuf> {
     prefixes.push("icons/".to_string());
     for prefix in prefixes {
         if let Some(trimmed) = normalized.strip_prefix(&prefix) {
-            let trimmed_path = source_dir.join(path_from_slashes(trimmed));
-            if trimmed_path.exists() {
-                return Some(trimmed_path);
+            if let Ok(trimmed_rel) = path_from_slashes(trimmed) {
+                let trimmed_path = source_dir.join(trimmed_rel);
+                if trimmed_path.exists() {
+                    return Some(trimmed_path);
+                }
             }
         }
     }
 
     if let Some(file_name_only) = normalized.rsplit('/').next() {
-        let direct_filename = source_dir.join(file_name_only);
-        if direct_filename.exists() {
-            return Some(direct_filename);
-        }
-        if let Some(found) = recursive_find_file_named(source_dir, file_name_only) {
-            return Some(found);
+        if is_safe_path_segment(file_name_only) {
+            let direct_filename = source_dir.join(file_name_only);
+            if direct_filename.exists() {
+                return Some(direct_filename);
+            }
+            if let Some(found) = recursive_find_file_named(source_dir, file_name_only) {
+                return Some(found);
+            }
         }
     }
 
@@ -774,9 +782,11 @@ fn resolve_sprite_path(source_dir: &Path, frame_name: &str) -> Option<PathBuf> {
     if parts.len() > 1 {
         for start in 1..parts.len() {
             let remainder = parts[start..].join("/");
-            let candidate = source_dir.join(path_from_slashes(&remainder));
-            if candidate.exists() {
-                return Some(candidate);
+            if let Ok(remainder_rel) = path_from_slashes(&remainder) {
+                let candidate = source_dir.join(remainder_rel);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
             }
         }
     }
@@ -785,6 +795,9 @@ fn resolve_sprite_path(source_dir: &Path, frame_name: &str) -> Option<PathBuf> {
 }
 
 fn recursive_find_file_named(root: &Path, wanted_file_name: &str) -> Option<PathBuf> {
+    if !is_safe_path_segment(wanted_file_name) {
+        return None;
+    }
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let entries = fs::read_dir(&dir).ok()?;
@@ -805,13 +818,4 @@ fn recursive_find_file_named(root: &Path, wanted_file_name: &str) -> Option<Path
         }
     }
     None
-}
-
-fn path_from_slashes(value: &str) -> PathBuf {
-    value.split('/').fold(PathBuf::new(), |mut acc, part| {
-        if !part.is_empty() {
-            acc.push(part);
-        }
-        acc
-    })
 }

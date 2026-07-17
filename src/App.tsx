@@ -34,6 +34,7 @@ import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVer
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
 import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
+import { SettingsToolPanel } from "./components/tools/SettingsToolPanel";
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
@@ -47,9 +48,21 @@ import {
   issuesCsvFileName,
 } from "./utils/reportIssuesCsv";
 import convertVersionMap from "./config/convertVersionMap.json";
+import type { AppSettingsView } from "./domain/settings";
+import { DEFAULT_APP_SETTINGS_VIEW } from "./domain/settings";
+import {
+  clearGeometryDashDir,
+  getAppSettings,
+  openPathInOs,
+  redetectGeometryDashDir,
+  saveAppSettings,
+  setGeometryDashDir,
+} from "./services/tauriSettings";
+import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
 
 type PrimaryTool =
   | "home"
+  | "settings"
   | "iconEditor"
   | "splitter"
   | "porter"
@@ -126,6 +139,11 @@ function App() {
     readStoredCollapsed(REPORT_COLLAPSED_STORAGE_KEY),
   );
   const [isCopyrightOpen, setIsCopyrightOpen] = useState(false);
+  const [appSettings, setAppSettings] = useState<AppSettingsView>(
+    DEFAULT_APP_SETTINGS_VIEW,
+  );
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
   const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
 
@@ -214,11 +232,25 @@ function App() {
   useEffect(() => {
     const loadDefaults = async (): Promise<void> => {
       try {
+        const settings = await getAppSettings();
+        setAppSettings(settings);
+        applyTheme(settings.theme);
+        setStoredTheme(settings.theme);
+
         const response = await getPhaseDefaults();
-        setSplitterSheetConcurrency(response.splitter.sheetConcurrency);
-        setPorterSheetConcurrency(response.porter.sheetConcurrency);
-        setMergerSheetConcurrency(response.merger.sheetConcurrency);
-        setConvertSheetConcurrency(response.convertToNewVersion.sheetConcurrency);
+        const concurrency = settings.defaultSheetConcurrency;
+        setSplitterSheetConcurrency(
+          response.splitter.sheetConcurrency || concurrency,
+        );
+        setPorterSheetConcurrency(
+          response.porter.sheetConcurrency || concurrency,
+        );
+        setMergerSheetConcurrency(
+          response.merger.sheetConcurrency || concurrency,
+        );
+        setConvertSheetConcurrency(
+          response.convertToNewVersion.sheetConcurrency || concurrency,
+        );
       } catch (error) {
         setLoadError(
           error instanceof Error
@@ -236,6 +268,46 @@ function App() {
       setLoadError(message);
     });
   }, []);
+
+  const applySettingsView = useCallback((view: AppSettingsView): void => {
+    setAppSettings((prev) => {
+      if (prev.theme !== view.theme) {
+        applyTheme(view.theme);
+        setStoredTheme(view.theme);
+      }
+      return view;
+    });
+    setSplitterSheetConcurrency(view.defaultSheetConcurrency);
+    setPorterSheetConcurrency(view.defaultSheetConcurrency);
+    setMergerSheetConcurrency(view.defaultSheetConcurrency);
+    setConvertSheetConcurrency(view.defaultSheetConcurrency);
+  }, []);
+
+  const runSettingsAction = useCallback(
+    async (
+      action: () => Promise<AppSettingsView>,
+      options?: { blockUi?: boolean },
+    ): Promise<void> => {
+      const blockUi = options?.blockUi ?? true;
+      setSettingsError(null);
+      if (blockUi) {
+        setSettingsBusy(true);
+      }
+      try {
+        const view = await action();
+        applySettingsView(view);
+      } catch (error) {
+        setSettingsError(
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        if (blockUi) {
+          setSettingsBusy(false);
+        }
+      }
+    },
+    [applySettingsView],
+  );
 
   const pickFolder = async (assign: (path: string) => void): Promise<void> => {
     if (!isTauriRuntime()) {
@@ -535,10 +607,11 @@ function App() {
             : "Ready";
   const isIconEditor = selectedTool === "iconEditor";
   const isHome = selectedTool === "home";
+  const isSettings = selectedTool === "settings";
   const isGeodeButtons = selectedTool === "geodeButtons";
-  const isToolPanel = !isIconEditor && !isHome;
+  const isToolPanel = !isIconEditor && !isHome && !isSettings;
   const showRunAction = isToolPanel;
-  const showOperationAndReport = !isIconEditor && !isHome && !isGeodeButtons;
+  const showOperationAndReport = !isIconEditor && !isHome && !isGeodeButtons && !isSettings;
 
   const toolPanel = (() => {
     switch (selectedTool) {
@@ -550,6 +623,82 @@ function App() {
                 return;
               }
               setSelectedTool(toolId);
+            }}
+          />
+        );
+      case "settings":
+        return (
+          <SettingsToolPanel
+            settings={appSettings}
+            busy={settingsBusy}
+            error={settingsError}
+            pickFolder={pickFolder}
+            onThemeChange={(theme: AppTheme) => {
+              // Optimistic: keep selection/theme stable while Tauri persists.
+              applyTheme(theme);
+              setStoredTheme(theme);
+              setAppSettings((prev) =>
+                prev.theme === theme ? prev : { ...prev, theme },
+              );
+              runSettingsAction(() => saveAppSettings({ theme }), {
+                blockUi: false,
+              }).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onConcurrencyChange={(value) => {
+              setAppSettings((prev) =>
+                prev.defaultSheetConcurrency === value
+                  ? prev
+                  : { ...prev, defaultSheetConcurrency: value },
+              );
+              setSplitterSheetConcurrency(value);
+              setPorterSheetConcurrency(value);
+              setMergerSheetConcurrency(value);
+              setConvertSheetConcurrency(value);
+              runSettingsAction(
+                () => saveAppSettings({ defaultSheetConcurrency: value }),
+                { blockUi: false },
+              ).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onGeometryDashPathSelected={(path) => {
+              runSettingsAction(() => setGeometryDashDir(path)).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onClearGeometryDashOverride={() => {
+              runSettingsAction(() => clearGeometryDashDir()).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onRedetectGeometryDash={() => {
+              runSettingsAction(() => redetectGeometryDashDir()).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onOpenCacheFolder={() => {
+              if (!appSettings.gameFilesRoot) {
+                return;
+              }
+              openPathInOs(appSettings.gameFilesRoot).catch((error: unknown) => {
+                setSettingsError(
+                  error instanceof Error ? error.message : String(error),
+                );
+              });
+            }}
+            onResetDefaults={() => {
+              runSettingsAction(() =>
+                saveAppSettings({
+                  clearGeometryDashDir: true,
+                  defaultSheetConcurrency: DEFAULT_SHEET_CONCURRENCY,
+                  theme: "dark",
+                  language: "en",
+                }),
+              ).catch(() => {
+                // Error surfaced via settingsError.
+              });
             }}
           />
         );
@@ -754,7 +903,7 @@ function App() {
 
       <section
         className={`tm-layout ${
-          isIconEditor || isHome || isGeodeButtons ? "tm-layout-icon-editor" : ""
+          isIconEditor || isHome || isGeodeButtons || isSettings ? "tm-layout-icon-editor" : ""
         }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
           showOperationAndReport && isReportCollapsed ? " tm-layout-report-collapsed" : ""
         }${
@@ -770,7 +919,7 @@ function App() {
           onExpand={navPanelTransition.expand}
           onCollapse={navPanelTransition.collapse}
           onNavigate={(tool) => {
-            if (tool !== "home" && isUpcomingTool(tool)) {
+            if (tool !== "home" && tool !== "settings" && isUpcomingTool(tool)) {
               return;
             }
             setSelectedTool(tool);
@@ -781,7 +930,7 @@ function App() {
         <section
           className={`tm-panel tm-glass-card${
             isIconEditor ? " tm-panel-icon-editor" : ""
-          }${isHome ? " tm-panel-home" : ""}${isToolPanel ? " tm-panel-tool" : ""}${
+          }${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
             isGeodeButtons ? " tm-panel-geode" : ""
           }`}
         >

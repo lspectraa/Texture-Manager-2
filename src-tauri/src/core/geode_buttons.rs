@@ -19,6 +19,7 @@ use crate::core::icon_editor::icon_editor_extract_frames;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::porter::save_merged_sheet;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
+use crate::core::safe_fs::ensure_readable_image_file;
 use crate::core::splitter::split_sheet_candidate_memory;
 use crate::core::{
     contracts::GeodeButtonsOptions,
@@ -711,6 +712,7 @@ fn normalize_user_template_path(path: &str) -> std::path::PathBuf {
 
 fn load_template_rgba(path: &str) -> Result<RgbaImage, AppError> {
     let p = normalize_user_template_path(path);
+    ensure_readable_image_file(&p)?;
     let img = image::open(&p).map_err(|err| {
         AppError::ParseError(format!(
             "failed to open template png `{}`: {err}",
@@ -723,6 +725,7 @@ fn load_template_rgba(path: &str) -> Result<RgbaImage, AppError> {
 /// PNG data URL for webview previews — same path rules as export (`load_template_rgba`).
 pub fn geode_buttons_template_preview_data_url(path: &str) -> Result<String, AppError> {
     let p = normalize_user_template_path(path);
+    ensure_readable_image_file(&p)?;
     let img = image::open(&p).map_err(|err| {
         AppError::ParseError(format!(
             "failed to open template image `{}`: {err}",

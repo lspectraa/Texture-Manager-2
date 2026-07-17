@@ -10,6 +10,7 @@ use regex::Regex;
 
 use crate::core::contracts::{MergerOptions, PorterOptions};
 use crate::core::errors::AppError;
+use crate::core::safe_fs::join_under_parent;
 
 /// Root-level sheet bundles write directly under `output_root`; nested sheets keep only the
 /// parent path (same layout rule as merger `Merged/`).
@@ -538,7 +539,7 @@ pub fn port_bitmap_fnt(
     let fnt_parent = fnt_path
         .parent()
         .ok_or_else(|| AppError::InvalidPath("fnt has no parent directory"))?;
-    let texture_path = fnt_parent.join(&page_file_plain);
+    let texture_path = join_under_parent(fnt_parent, &page_file_plain)?;
     let texture_wh = if texture_path.is_file() {
         Some(image::image_dimensions(&texture_path).map_err(|e| AppError::IoError(e.to_string()))?)
     } else {

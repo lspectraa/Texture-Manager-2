@@ -3,20 +3,20 @@ pub mod sync;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 
 use crate::core::contracts::SplitterOptions;
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
+use crate::core::safe_fs::{is_safe_path_segment, join_under_parent, path_from_slashes, png_file_to_data_url};
 use crate::core::splitter::split_sheet_candidate;
 
 const GAME_FILES_DIR_NAME: &str = "TextureManager2";
 const GAME_FILES_SUBDIR: &str = "game-files";
 const GEOMETRY_DASH_FOLDER: &str = "Geometry Dash";
+const UNRESOLVED_GD_DIR_NAME: &str = "_unresolved_geometry_dash";
 
 #[derive(Debug, Clone)]
 pub struct GameFilesLayout {
@@ -41,16 +41,42 @@ impl GameFilesLayout {
         &self.resources
     }
 
+    pub fn geometry_dash_found(&self) -> bool {
+        looks_like_geometry_dash_dir(&self.geometry_dash_dir)
+    }
+
     pub fn to_dto(&self) -> GameFilesLayoutDto {
+        let found = self.geometry_dash_found();
         GameFilesLayoutDto {
             root_dir: self.root.to_string_lossy().to_string(),
-            current_dir: self.resources.to_string_lossy().to_string(),
+            current_dir: if found {
+                self.resources.to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
             split_dir: self.current_split.to_string_lossy().to_string(),
             legacy_dir: self.legacy.to_string_lossy().to_string(),
-            geometry_dash_dir: self.geometry_dash_dir.to_string_lossy().to_string(),
-            resources_dir: self.resources.to_string_lossy().to_string(),
-            geode_resources_dir: self.geode_resources.to_string_lossy().to_string(),
-            geode_unzipped_dir: self.geode_unzipped.to_string_lossy().to_string(),
+            geometry_dash_dir: if found {
+                self.geometry_dash_dir.to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            resources_dir: if found {
+                self.resources.to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            geode_resources_dir: if found {
+                self.geode_resources.to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            geode_unzipped_dir: if found {
+                self.geode_unzipped.to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            geometry_dash_found: found,
         }
     }
 
@@ -60,7 +86,35 @@ impl GameFilesLayout {
 }
 
 #[derive(Clone)]
-pub struct GameFilesState(pub Arc<GameFilesLayout>);
+pub struct GameFilesState(pub Arc<RwLock<GameFilesLayout>>);
+
+impl GameFilesState {
+    pub fn new(layout: GameFilesLayout) -> Self {
+        Self(Arc::new(RwLock::new(layout)))
+    }
+
+    pub fn snapshot(&self) -> GameFilesLayout {
+        self.0
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
+
+    pub fn replace(&self, layout: GameFilesLayout) {
+        *self
+            .0
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = layout;
+    }
+
+    pub fn with_layout<R>(&self, f: impl FnOnce(&GameFilesLayout) -> R) -> R {
+        let guard = self
+            .0
+            .read()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        f(&guard)
+    }
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,6 +128,7 @@ pub struct GameFilesLayoutDto {
     pub resources_dir: String,
     pub geode_resources_dir: String,
     pub geode_unzipped_dir: String,
+    pub geometry_dash_found: bool,
 }
 
 pub fn resolve_game_files_root() -> PathBuf {
@@ -111,20 +166,156 @@ pub fn normalize_legacy_version(version: &str) -> String {
         .to_string()
 }
 
-fn looks_like_geometry_dash_dir(path: &Path) -> bool {
-    path.join("Resources").is_dir()
+pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
+    !path.as_os_str().is_empty()
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name != UNRESOLVED_GD_DIR_NAME)
+            .unwrap_or(true)
+        && path.join("Resources").is_dir()
 }
 
-fn steam_library_roots() -> Vec<PathBuf> {
+fn home_dir() -> Option<PathBuf> {
+    if let Ok(home) = std::env::var("USERPROFILE") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    if let Ok(home) = std::env::var("HOME") {
+        let trimmed = home.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+    None
+}
+
+fn push_unique(roots: &mut Vec<PathBuf>, path: PathBuf) {
+    if path.as_os_str().is_empty() {
+        return;
+    }
+    if !roots.iter().any(|existing| existing == &path) {
+        roots.push(path);
+    }
+}
+
+fn unescape_vdf_path(value: &str) -> String {
+    let mut out = String::with_capacity(value.len());
+    let mut chars = value.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                Some('\\') => out.push('\\'),
+                Some('n') => out.push('\n'),
+                Some('t') => out.push('\t'),
+                Some('r') => out.push('\r'),
+                Some('"') => out.push('"'),
+                Some(other) => {
+                    out.push('\\');
+                    out.push(other);
+                }
+                None => out.push('\\'),
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+fn parse_steam_library_paths(vdf_text: &str) -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for line in vdf_text.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with("//") {
+            continue;
+        }
+
+        // Accept `"path" "D:\\SteamLibrary"` and `"path"\t\t"D:\\SteamLibrary"`.
+        let Some(after_key) = trimmed
+            .strip_prefix("\"path\"")
+            .or_else(|| trimmed.strip_prefix("\"Path\""))
+        else {
+            continue;
+        };
+        let rest = after_key.trim_start();
+        let value = if let Some(quoted) = rest.strip_prefix('"') {
+            let mut raw = String::new();
+            let mut chars = quoted.chars();
+            while let Some(ch) = chars.next() {
+                if ch == '\\' {
+                    match chars.next() {
+                        Some(next) => {
+                            raw.push('\\');
+                            raw.push(next);
+                        }
+                        None => raw.push('\\'),
+                    }
+                } else if ch == '"' {
+                    break;
+                } else {
+                    raw.push(ch);
+                }
+            }
+            unescape_vdf_path(&raw)
+        } else {
+            rest.trim_matches('"').to_string()
+        };
+
+        let cleaned = value.trim();
+        if cleaned.is_empty() {
+            continue;
+        }
+        out.push(PathBuf::from(cleaned));
+    }
+    out
+}
+
+#[cfg(windows)]
+fn steam_install_from_registry() -> Vec<PathBuf> {
+    use std::process::Command;
+
+    let mut out = Vec::new();
+    let keys = [
+        r"HKLM\SOFTWARE\WOW6432Node\Valve\Steam",
+        r"HKLM\SOFTWARE\Valve\Steam",
+        r"HKCU\SOFTWARE\Valve\Steam",
+    ];
+    for key in keys {
+        let Ok(output) = Command::new("reg")
+            .args(["query", key, "/v", "InstallPath"])
+            .output()
+        else {
+            continue;
+        };
+        if !output.status.success() {
+            continue;
+        }
+        let text = String::from_utf8_lossy(&output.stdout);
+        for line in text.lines() {
+            let trimmed = line.trim();
+            // InstallPath    REG_SZ    C:\Program Files (x86)\Steam
+            let Some((_, value)) = trimmed.split_once("REG_SZ") else {
+                continue;
+            };
+            let path = value.trim();
+            if !path.is_empty() {
+                out.push(PathBuf::from(path));
+            }
+        }
+    }
+    out
+}
+
+#[cfg(not(windows))]
+fn steam_install_from_registry() -> Vec<PathBuf> {
+    Vec::new()
+}
+
+fn candidate_steam_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
-    let push_unique = |roots: &mut Vec<PathBuf>, path: PathBuf| {
-        if path.as_os_str().is_empty() {
-            return;
-        }
-        if !roots.iter().any(|existing| existing == &path) {
-            roots.push(path);
-        }
-    };
 
     for env_key in ["ProgramFiles(x86)", "ProgramFiles", "PROGRAMFILES(X86)", "PROGRAMFILES"] {
         if let Ok(pf) = std::env::var(env_key) {
@@ -133,18 +324,97 @@ fn steam_library_roots() -> Vec<PathBuf> {
             }
         }
     }
+
     push_unique(&mut roots, PathBuf::from(r"C:\Program Files (x86)\Steam"));
     push_unique(&mut roots, PathBuf::from(r"C:\Program Files\Steam"));
 
+    for drive in [b'D', b'E', b'F', b'G'] {
+        let letter = drive as char;
+        push_unique(
+            &mut roots,
+            PathBuf::from(format!(r"{letter}:\Steam")),
+        );
+        push_unique(
+            &mut roots,
+            PathBuf::from(format!(r"{letter}:\SteamLibrary")),
+        );
+        push_unique(
+            &mut roots,
+            PathBuf::from(format!(r"{letter}:\Program Files (x86)\Steam")),
+        );
+        push_unique(
+            &mut roots,
+            PathBuf::from(format!(r"{letter}:\Program Files\Steam")),
+        );
+    }
+
+    if let Some(home) = home_dir() {
+        push_unique(
+            &mut roots,
+            home.join("AppData")
+                .join("Local")
+                .join("Steam"),
+        );
+        // macOS
+        push_unique(
+            &mut roots,
+            home.join("Library")
+                .join("Application Support")
+                .join("Steam"),
+        );
+        // Linux common layouts
+        push_unique(&mut roots, home.join(".steam").join("steam"));
+        push_unique(&mut roots, home.join(".steam").join("root"));
+        push_unique(&mut roots, home.join(".local").join("share").join("Steam"));
+        push_unique(&mut roots, home.join(".var").join("app").join("com.valvesoftware.Steam").join("data").join("Steam"));
+    }
+
+    for registry_root in steam_install_from_registry() {
+        push_unique(&mut roots, registry_root);
+    }
+
+    roots
+}
+
+fn steam_library_roots() -> Vec<PathBuf> {
+    let mut roots = candidate_steam_roots();
+
     let mut vdf_paths: Vec<PathBuf> = roots
         .iter()
-        .map(|steam| steam.join("steamapps").join("libraryfolders.vdf"))
+        .flat_map(|steam| {
+            [
+                steam.join("steamapps").join("libraryfolders.vdf"),
+                steam
+                    .join("config")
+                    .join("libraryfolders.vdf"),
+            ]
+        })
         .collect();
-    if let Ok(home) = std::env::var("USERPROFILE") {
+
+    if let Some(home) = home_dir() {
         vdf_paths.push(
-            PathBuf::from(home)
-                .join("AppData")
+            home.join("AppData")
                 .join("Local")
+                .join("Steam")
+                .join("steamapps")
+                .join("libraryfolders.vdf"),
+        );
+        vdf_paths.push(
+            home.join(".steam")
+                .join("steam")
+                .join("steamapps")
+                .join("libraryfolders.vdf"),
+        );
+        vdf_paths.push(
+            home.join(".local")
+                .join("share")
+                .join("Steam")
+                .join("steamapps")
+                .join("libraryfolders.vdf"),
+        );
+        vdf_paths.push(
+            home.join("Library")
+                .join("Application Support")
                 .join("Steam")
                 .join("steamapps")
                 .join("libraryfolders.vdf"),
@@ -162,26 +432,14 @@ fn steam_library_roots() -> Vec<PathBuf> {
     roots
 }
 
-fn parse_steam_library_paths(vdf_text: &str) -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = Vec::new();
-    for line in vdf_text.lines() {
-        let trimmed = line.trim();
-        // "path"		"D:\\SteamLibrary"
-        if !trimmed.starts_with("\"path\"") {
-            continue;
-        }
-        let Some(rest) = trimmed.strip_prefix("\"path\"") else {
-            continue;
-        };
-        let value = rest.trim().trim_matches('"').replace("\\\\", "\\");
-        if !value.is_empty() {
-            out.push(PathBuf::from(value));
-        }
-    }
-    out
+/// Auto-detect Geometry Dash without user override (still honors `TM_GEOMETRY_DASH_DIR`).
+pub fn detect_geometry_dash_dir() -> Result<PathBuf, AppError> {
+    resolve_geometry_dash_dir_with_override(None)
 }
 
-pub fn resolve_geometry_dash_dir() -> Result<PathBuf, AppError> {
+pub fn resolve_geometry_dash_dir_with_override(
+    settings_override: Option<&str>,
+) -> Result<PathBuf, AppError> {
     if let Ok(env_override) = std::env::var("TM_GEOMETRY_DASH_DIR") {
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
@@ -191,6 +449,20 @@ pub fn resolve_geometry_dash_dir() -> Result<PathBuf, AppError> {
             }
             return Err(AppError::IoError(format!(
                 "TM_GEOMETRY_DASH_DIR does not look like a Geometry Dash install (missing Resources): {}",
+                path.to_string_lossy()
+            )));
+        }
+    }
+
+    if let Some(override_path) = settings_override {
+        let trimmed = override_path.trim();
+        if !trimmed.is_empty() {
+            let path = PathBuf::from(trimmed);
+            if looks_like_geometry_dash_dir(&path) {
+                return Ok(path);
+            }
+            return Err(AppError::IoError(format!(
+                "Configured Geometry Dash folder does not look like an install (missing Resources): {}",
                 path.to_string_lossy()
             )));
         }
@@ -207,9 +479,51 @@ pub fn resolve_geometry_dash_dir() -> Result<PathBuf, AppError> {
     }
 
     Err(AppError::IoError(
-        "Geometry Dash installation not found. Set TM_GEOMETRY_DASH_DIR to your Steam Geometry Dash folder."
+        "Geometry Dash installation not found. Set the path in Settings or TM_GEOMETRY_DASH_DIR."
             .to_string(),
     ))
+}
+
+pub fn resolve_geometry_dash_dir() -> Result<PathBuf, AppError> {
+    let root = resolve_game_files_root();
+    let override_path = read_settings_geometry_dash_override(&root);
+    resolve_geometry_dash_dir_with_override(override_path.as_deref())
+}
+
+fn read_settings_geometry_dash_override(root: &Path) -> Option<String> {
+    let text = fs::read_to_string(root.join("settings.json")).ok()?;
+    let value: serde_json::Value = serde_json::from_str(&text).ok()?;
+    let raw = value.get("geometryDashDir")?.as_str()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn layout_from_parts(root: PathBuf, geometry_dash_dir: PathBuf) -> GameFilesLayout {
+    let resources = geometry_dash_dir.join("Resources");
+    let geode_resources = geometry_dash_dir.join("geode").join("resources");
+    let geode_unzipped = geometry_dash_dir.join("geode").join("unzipped");
+    let current_split = root.join("split-cache");
+    let legacy = root.join("legacy");
+
+    GameFilesLayout {
+        root,
+        geometry_dash_dir,
+        resources,
+        geode_resources,
+        geode_unzipped,
+        current_split,
+        legacy,
+    }
+}
+
+pub fn build_game_files_layout(geometry_dash_dir: Option<PathBuf>) -> GameFilesLayout {
+    let root = resolve_game_files_root();
+    let gd = geometry_dash_dir.unwrap_or_else(|| root.join(UNRESOLVED_GD_DIR_NAME));
+    layout_from_parts(root, gd)
 }
 
 pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
@@ -220,22 +534,26 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     fs::create_dir_all(&current_split)?;
     fs::create_dir_all(&legacy)?;
 
-    let geometry_dash_dir = resolve_geometry_dash_dir()?;
-    let resources = geometry_dash_dir.join("Resources");
-    let geode_resources = geometry_dash_dir.join("geode").join("resources");
-    let geode_unzipped = geometry_dash_dir.join("geode").join("unzipped");
+    let override_path = read_settings_geometry_dash_override(&root);
+    let geometry_dash_dir = resolve_geometry_dash_dir_with_override(override_path.as_deref())
+        .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME));
 
-    let layout = GameFilesLayout {
-        root,
-        geometry_dash_dir,
-        resources,
-        geode_resources,
-        geode_unzipped,
-        current_split,
-        legacy,
-    };
-    sync::check_for_updates(&layout)?;
+    let layout = layout_from_parts(root, geometry_dash_dir);
+    // Soft-fail: sync is best-effort and must not block launch when GD is missing.
+    let _ = sync::check_for_updates(&layout);
     Ok(layout)
+}
+
+/// Rebuild layout after settings change (keeps cache dirs; refreshes GD paths).
+pub fn refresh_game_files_layout(settings_override: Option<&str>) -> GameFilesLayout {
+    let root = resolve_game_files_root();
+    let _ = fs::create_dir_all(root.join("split-cache"));
+    let _ = fs::create_dir_all(root.join("legacy"));
+    let geometry_dash_dir = resolve_geometry_dash_dir_with_override(settings_override)
+        .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME));
+    let layout = layout_from_parts(root, geometry_dash_dir);
+    let _ = sync::check_for_updates(&layout);
+    layout
 }
 
 /// Map an input pack relative directory to the Steam/Geode source directory for latest textures.
@@ -292,9 +610,10 @@ fn resolve_png_beside_plist(plist_path: &Path) -> PathBuf {
     }
     if let Some(texture_name) = texture_file_name_from_plist(plist_path) {
         if let Some(parent) = plist_path.parent() {
-            let candidate = parent.join(texture_name);
-            if candidate.exists() {
-                return candidate;
+            if let Ok(candidate) = join_under_parent(parent, &texture_name) {
+                if candidate.exists() {
+                    return candidate;
+                }
             }
         }
     }
@@ -633,16 +952,10 @@ fn collect_plists_recursive(root: &Path) -> Result<Vec<PathBuf>, AppError> {
     Ok(files)
 }
 
-fn path_from_slashes(value: &str) -> PathBuf {
-    value.split('/').fold(PathBuf::new(), |mut acc, part| {
-        if !part.is_empty() {
-            acc.push(part);
-        }
-        acc
-    })
-}
-
 fn recursive_find_file_named(root: &Path, wanted_file_name: &str) -> Option<PathBuf> {
+    if !is_safe_path_segment(wanted_file_name) {
+        return None;
+    }
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
         let entries = fs::read_dir(&dir).ok()?;
@@ -673,7 +986,10 @@ pub fn resolve_cached_split_sprite(split_dir: &Path, frame_name: &str) -> Option
         .trim_start_matches('/')
         .to_string();
 
-    let direct = split_dir.join(path_from_slashes(&normalized));
+    let Ok(relative) = path_from_slashes(&normalized) else {
+        return None;
+    };
+    let direct = split_dir.join(&relative);
     if direct.exists() {
         return Some(direct);
     }
@@ -696,20 +1012,24 @@ pub fn resolve_cached_split_sprite(split_dir: &Path, frame_name: &str) -> Option
     prefixes.push("icons/".to_string());
     for prefix in prefixes {
         if let Some(trimmed) = normalized.strip_prefix(&prefix) {
-            let trimmed_path = split_dir.join(path_from_slashes(trimmed));
-            if trimmed_path.exists() {
-                return Some(trimmed_path);
+            if let Ok(trimmed_rel) = path_from_slashes(trimmed) {
+                let trimmed_path = split_dir.join(trimmed_rel);
+                if trimmed_path.exists() {
+                    return Some(trimmed_path);
+                }
             }
         }
     }
 
     if let Some(file_name_only) = normalized.rsplit('/').next() {
-        let direct_filename = split_dir.join(file_name_only);
-        if direct_filename.exists() {
-            return Some(direct_filename);
-        }
-        if let Some(found) = recursive_find_file_named(split_dir, file_name_only) {
-            return Some(found);
+        if is_safe_path_segment(file_name_only) {
+            let direct_filename = split_dir.join(file_name_only);
+            if direct_filename.exists() {
+                return Some(direct_filename);
+            }
+            if let Some(found) = recursive_find_file_named(split_dir, file_name_only) {
+                return Some(found);
+            }
         }
     }
 
@@ -720,9 +1040,11 @@ pub fn resolve_cached_split_sprite(split_dir: &Path, frame_name: &str) -> Option
     if parts.len() > 1 {
         for start in 1..parts.len() {
             let remainder = parts[start..].join("/");
-            let candidate = split_dir.join(path_from_slashes(&remainder));
-            if candidate.exists() {
-                return Some(candidate);
+            if let Ok(remainder_rel) = path_from_slashes(&remainder) {
+                let candidate = split_dir.join(remainder_rel);
+                if candidate.exists() {
+                    return Some(candidate);
+                }
             }
         }
     }
@@ -731,9 +1053,7 @@ pub fn resolve_cached_split_sprite(split_dir: &Path, frame_name: &str) -> Option
 }
 
 pub fn png_path_to_data_url(path: &Path) -> Result<String, AppError> {
-    let bytes = fs::read(path)?;
-    let encoded = BASE64_STANDARD.encode(bytes);
-    Ok(format!("data:image/png;base64,{encoded}"))
+    png_file_to_data_url(path)
 }
 
 #[cfg(test)]
@@ -826,11 +1146,18 @@ mod tests {
 	{
 		"path"		"D:\\SteamLibrary"
 	}
+	"2"
+	{
+		"Path" "E:\\Games\\SteamLibrary"
+	}
 }
 "#;
         let paths = parse_steam_library_paths(vdf);
         assert!(paths.iter().any(|p| p.ends_with("Steam")));
         assert!(paths.iter().any(|p| p.ends_with("SteamLibrary")));
+        assert!(paths.iter().any(|p| {
+            p.to_string_lossy().contains("E:") && p.to_string_lossy().contains("SteamLibrary")
+        }));
     }
 
     #[test]

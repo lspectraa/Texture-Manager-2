@@ -1,13 +1,13 @@
-import { ChevronLeft, Compass, House } from "lucide-react";
+import { ChevronLeft, Compass, House, Settings2 } from "lucide-react";
 import { AppToolId, TOOL_NAV_SECTIONS } from "../config/toolNavigation";
 
 type AppSidebarProps = {
-  selectedTool: "home" | AppToolId;
+  selectedTool: "home" | "settings" | AppToolId;
   collapsed: boolean;
   animating: boolean;
   onExpand: () => void;
   onCollapse: () => void;
-  onNavigate: (tool: "home" | AppToolId) => void;
+  onNavigate: (tool: "home" | "settings" | AppToolId) => void;
   onCopyrightClick: () => void;
 };
 
@@ -129,19 +129,37 @@ export function AppSidebar({
         );
       })}
 
-      <button
-        type="button"
-        className="tm-nav-btn tm-nav-btn-sky tm-sidebar-copyright"
-        title="© Spectra 2026"
-        aria-label="Copyright and about"
-        aria-haspopup="dialog"
-        onClick={onCopyrightClick}
-      >
-        <span className="tm-nav-btn-icon" aria-hidden>
-          <span className="tm-sidebar-copyright-glyph">©</span>
-        </span>
-        <span className="tm-nav-btn-label">Spectra 2026</span>
-      </button>
+      <div className="tm-sidebar-footer">
+        <button
+          type="button"
+          className={`tm-nav-btn tm-nav-btn-sky tm-sidebar-settings${
+            selectedTool === "settings" ? " active" : ""
+          }`}
+          title="Settings"
+          aria-label="Settings"
+          aria-current={selectedTool === "settings" ? "page" : undefined}
+          onClick={() => onNavigate("settings")}
+        >
+          <span className="tm-nav-btn-icon" aria-hidden>
+            <Settings2 size={16} strokeWidth={1.85} />
+          </span>
+          <span className="tm-nav-btn-label">Settings</span>
+        </button>
+
+        <button
+          type="button"
+          className="tm-nav-btn tm-nav-btn-sky tm-sidebar-copyright"
+          title="© Spectra 2026"
+          aria-label="Copyright and about"
+          aria-haspopup="dialog"
+          onClick={onCopyrightClick}
+        >
+          <span className="tm-nav-btn-icon" aria-hidden>
+            <span className="tm-sidebar-copyright-glyph">©</span>
+          </span>
+          <span className="tm-nav-btn-label">Spectra 2026</span>
+        </button>
+      </div>
     </aside>
   );
 }

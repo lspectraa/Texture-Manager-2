@@ -13,6 +13,7 @@ use crate::core::contracts::MergerOptions;
 use crate::core::errors::AppError;
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::merger::merge_plist_from_memory;
+use crate::core::safe_fs::{join_under_parent, png_file_to_data_url, save_png_data_url};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -551,12 +552,15 @@ pub fn icon_editor_extract_frames(
 
 /// PNG data URL for webview previews of user-picked files outside the asset protocol scope.
 pub fn icon_editor_png_data_url(texture_path: &Path) -> Result<String, AppError> {
-    if !texture_path.exists() {
-        return Err(AppError::InvalidPath("texture file does not exist"));
-    }
-    let bytes = fs::read(texture_path)?;
-    let encoded = BASE64_STANDARD.encode(bytes);
-    Ok(format!("data:image/png;base64,{encoded}"))
+    png_file_to_data_url(texture_path)
+}
+
+/// Persist a PNG data URL to disk with path / size / magic validation.
+pub fn icon_editor_save_png_data_url(
+    output_path: &Path,
+    png_data_url: &str,
+) -> Result<(), AppError> {
+    save_png_data_url(output_path, png_data_url)
 }
 
 fn validate_sheet_stem(new_stem: &str) -> Result<(), AppError> {
@@ -1054,7 +1058,9 @@ fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathB
         else {
             continue;
         };
-        let candidate = plist_parent.join(file_name);
+        let Ok(candidate) = join_under_parent(plist_parent, file_name) else {
+            continue;
+        };
         if candidate.exists() {
             return Ok(candidate);
         }
