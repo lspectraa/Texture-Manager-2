@@ -162,6 +162,11 @@ function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [onboardingBusy, setOnboardingBusy] = useState(false);
+  /** While set, applySettingsView must not clobber a newer in-flight opacity drag. */
+  const optimisticBackgroundOpacityRef = useRef<number | null>(null);
+  const backgroundOpacitySaveTimerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
   const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
   const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
 
@@ -300,6 +305,17 @@ function App() {
         applyTheme(view.theme);
         setStoredTheme(view.theme);
       }
+      const optimisticOpacity = optimisticBackgroundOpacityRef.current;
+      if (optimisticOpacity !== null) {
+        const sameOpacity =
+          Math.round(view.appBackgroundOpacity * 100) ===
+          Math.round(optimisticOpacity * 100);
+        if (sameOpacity) {
+          optimisticBackgroundOpacityRef.current = null;
+          return view;
+        }
+        return { ...view, appBackgroundOpacity: optimisticOpacity };
+      }
       return view;
     });
     setSplitterSheetConcurrency(view.defaultSheetConcurrency);
@@ -308,19 +324,30 @@ function App() {
     setConvertSheetConcurrency(view.defaultSheetConcurrency);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      if (backgroundOpacitySaveTimerRef.current !== null) {
+        clearTimeout(backgroundOpacitySaveTimerRef.current);
+      }
+    };
+  }, []);
+
   const runSettingsAction = useCallback(
     async (
       action: () => Promise<AppSettingsView>,
-      options?: { blockUi?: boolean },
+      options?: { blockUi?: boolean; applyResult?: boolean },
     ): Promise<void> => {
       const blockUi = options?.blockUi ?? true;
+      const applyResult = options?.applyResult ?? true;
       setSettingsError(null);
       if (blockUi) {
         setSettingsBusy(true);
       }
       try {
         const view = await action();
-        applySettingsView(view);
+        if (applyResult) {
+          applySettingsView(view);
+        }
       } catch (error) {
         setSettingsError(
           error instanceof Error ? error.message : String(error),
@@ -772,19 +799,50 @@ function App() {
               });
             }}
             onAppBackgroundOpacityChange={(appBackgroundOpacity) => {
+              optimisticBackgroundOpacityRef.current = appBackgroundOpacity;
               setAppSettings((prev) =>
                 prev.appBackgroundOpacity === appBackgroundOpacity
                   ? prev
                   : { ...prev, appBackgroundOpacity },
               );
-              runSettingsAction(
-                () => saveAppSettings({ appBackgroundOpacity }),
-                { blockUi: false },
-              ).catch(() => {
-                // Error surfaced via settingsError.
-              });
+              if (backgroundOpacitySaveTimerRef.current !== null) {
+                clearTimeout(backgroundOpacitySaveTimerRef.current);
+              }
+              // Debounce disk writes: range input fires many times per drag.
+              // Skip applying the save result — optimistic UI is already correct,
+              // and out-of-order responses were snapping the slider backwards.
+              backgroundOpacitySaveTimerRef.current = setTimeout(() => {
+                backgroundOpacitySaveTimerRef.current = null;
+                const value = optimisticBackgroundOpacityRef.current;
+                if (value === null) {
+                  return;
+                }
+                runSettingsAction(
+                  async () => {
+                    const view = await saveAppSettings({
+                      appBackgroundOpacity: value,
+                    });
+                    if (
+                      optimisticBackgroundOpacityRef.current !== null &&
+                      Math.round(optimisticBackgroundOpacityRef.current * 100) ===
+                        Math.round(value * 100)
+                    ) {
+                      optimisticBackgroundOpacityRef.current = null;
+                    }
+                    return view;
+                  },
+                  { blockUi: false, applyResult: false },
+                ).catch(() => {
+                  // Error surfaced via settingsError.
+                });
+              }, 180);
             }}
             onResetDefaults={() => {
+              optimisticBackgroundOpacityRef.current = null;
+              if (backgroundOpacitySaveTimerRef.current !== null) {
+                clearTimeout(backgroundOpacitySaveTimerRef.current);
+                backgroundOpacitySaveTimerRef.current = null;
+              }
               runSettingsAction(() =>
                 saveAppSettings({
                   clearGeometryDashDir: true,
