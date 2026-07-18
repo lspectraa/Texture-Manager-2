@@ -1,4 +1,5 @@
 import { Dices } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
   ToolPage,
@@ -27,6 +28,8 @@ export function RandomizerToolPanel({
   onSeedChange,
   pickFolder,
 }: RandomizerToolPanelProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolPage accent="amber">
       <ToolPageHeader toolId="randomizer" />
@@ -38,16 +41,16 @@ export function RandomizerToolPanel({
         pickFolder={pickFolder}
       />
       <ToolSection
-        title="Randomization"
-        subtitle="Use a fixed seed to reproduce the same shuffle later"
+        title={t("randomizer.section")}
+        subtitle={t("randomizer.sectionDescription")}
         icon={Dices}
       >
         <ToolTextField
-          label="Seed"
-          hint="Optional"
+          label={t("randomizer.seed")}
+          hint={t("common:optional")}
           value={seed}
           onChange={onSeedChange}
-          placeholder="Leave blank for random seed"
+          placeholder={t("randomizer.seedPlaceholder")}
         />
       </ToolSection>
     </ToolPage>

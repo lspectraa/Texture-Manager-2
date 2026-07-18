@@ -1,5 +1,6 @@
 import { useEffect, useId } from "react";
 import { Code2, ExternalLink, MessageCircle, Play, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   APP_LINKS,
   APP_VERSION,
@@ -17,28 +18,29 @@ type CopyrightDialogProps = {
 const LINK_ITEMS = [
   {
     id: "github",
-    label: "Project on GitHub",
-    hint: "Source code and issues",
+    labelKey: "about.github",
+    hintKey: "about.githubHint",
     url: APP_LINKS.github,
     icon: Code2,
   },
   {
     id: "youtube",
-    label: "YouTube channel",
-    hint: "Texture packs and tutorials",
+    labelKey: "about.youtube",
+    hintKey: "about.youtubeHint",
     url: APP_LINKS.youtube,
     icon: Play,
   },
   {
     id: "discord",
-    label: "Discord server",
-    hint: "Community and support",
+    labelKey: "about.discord",
+    hintKey: "about.discordHint",
     url: APP_LINKS.discord,
     icon: MessageCircle,
   },
 ] as const;
 
 export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
+  const { t } = useTranslation("common");
   const titleId = useId();
 
   useEffect(() => {
@@ -78,27 +80,29 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
         <GlassFrost />
         <div className="tm-copyright-dialog-head">
           <div className="tm-copyright-dialog-title-wrap">
-            <p className="tm-copyright-dialog-eyebrow">Texture Manager 2</p>
+            <p className="tm-copyright-dialog-eyebrow">{t("productName")}</p>
             <h2 id={titleId} className="tm-copyright-dialog-title">
-              About
+              {t("about.title")}
             </h2>
           </div>
           <button
             type="button"
             className="tm-copyright-dialog-close"
             onClick={onClose}
-            aria-label="Close about dialog"
+            aria-label={t("about.closeAria")}
           >
             <X size={16} strokeWidth={2} aria-hidden />
           </button>
         </div>
 
         <p className="tm-copyright-dialog-notice">
-          © {COPYRIGHT_YEAR} {COPYRIGHT_HOLDER}. All rights reserved.
+          {t("about.copyright", {
+            year: COPYRIGHT_YEAR,
+            holder: COPYRIGHT_HOLDER,
+          })}
         </p>
         <p className="tm-copyright-dialog-copy">
-          Built for Geometry Dash texture workflows — split, merge, port, and edit
-          gamesheets with a focused desktop toolkit.
+          {t("about.description")}
         </p>
 
         <div className="tm-copyright-dialog-links">
@@ -117,8 +121,12 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
                   <Icon size={17} strokeWidth={1.85} />
                 </span>
                 <span className="tm-copyright-dialog-link-copy">
-                  <span className="tm-copyright-dialog-link-label">{item.label}</span>
-                  <span className="tm-copyright-dialog-link-hint">{item.hint}</span>
+                  <span className="tm-copyright-dialog-link-label">
+                    {t(item.labelKey)}
+                  </span>
+                  <span className="tm-copyright-dialog-link-hint">
+                    {t(item.hintKey)}
+                  </span>
                 </span>
                 <ExternalLink
                   className="tm-copyright-dialog-link-external"
@@ -132,7 +140,9 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
         </div>
 
         <div className="tm-copyright-dialog-footer">
-          <span className="tm-copyright-dialog-version-label">Version</span>
+          <span className="tm-copyright-dialog-version-label">
+            {t("about.version")}
+          </span>
           <span className="tm-copyright-dialog-version-value">v{APP_VERSION}</span>
         </div>
       </div>

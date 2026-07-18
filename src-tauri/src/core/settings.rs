@@ -14,6 +14,8 @@ use crate::core::safe_fs::{
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const DEFAULT_SHEET_CONCURRENCY: u32 = 5;
 const DEFAULT_LANGUAGE: &str = "en";
+/// Keep in sync with frontend `AppLanguage` / `APP_LANGUAGES`.
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru"];
 /// Default: pick a discovered `game_bg_*` once per frontend session.
 const DEFAULT_APP_BACKGROUND: &str = "random";
 const DEFAULT_APP_BACKGROUND_OPACITY: f32 = 0.75;
@@ -23,6 +25,30 @@ const MAX_APP_BACKGROUND_OPACITY: f32 = 1.0;
 const DEFAULT_ONBOARDING_VERSION: u32 = 0;
 const GAME_BG_PREFIX: &str = "game_bg_";
 const GAME_BG_UHD_SUFFIX: &str = "_001-uhd.png";
+
+fn is_supported_language(value: &str) -> bool {
+    SUPPORTED_LANGUAGES
+        .iter()
+        .any(|code| code.eq_ignore_ascii_case(value))
+}
+
+/// Normalize a stored language: blank/unknown → English; supported codes lowercased.
+fn normalize_language(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return default_language();
+    }
+    let primary = trimmed
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(trimmed)
+        .to_ascii_lowercase();
+    if is_supported_language(&primary) {
+        primary
+    } else {
+        default_language()
+    }
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -112,9 +138,7 @@ impl Default for AppSettings {
 impl AppSettings {
     pub fn clamp(mut self) -> Self {
         self.default_sheet_concurrency = self.default_sheet_concurrency.clamp(1, 64);
-        if self.language.trim().is_empty() {
-            self.language = default_language();
-        }
+        self.language = normalize_language(&self.language);
         let trimmed_bg = self.app_background.trim().to_string();
         if trimmed_bg.is_empty() {
             self.app_background = default_app_background();
@@ -374,10 +398,23 @@ pub fn apply_save_request(
     }
 
     if let Some(language) = request.language {
-        let trimmed = language.trim().to_string();
-        if !trimmed.is_empty() {
-            next.language = trimmed;
+        let trimmed = language.trim();
+        if trimmed.is_empty() {
+            return Err(AppError::IoError(
+                "Invalid language ''. Expected 'en', 'es', or 'ru'.".to_string(),
+            ));
         }
+        let primary = trimmed
+            .split(['-', '_'])
+            .next()
+            .unwrap_or(trimmed)
+            .to_ascii_lowercase();
+        if !is_supported_language(&primary) {
+            return Err(AppError::IoError(format!(
+                "Invalid language '{trimmed}'. Expected 'en', 'es', or 'ru'."
+            )));
+        }
+        next.language = primary;
     }
 
     if let Some(app_background) = request.app_background {
@@ -463,6 +500,80 @@ mod tests {
         assert_eq!(next.onboarding_version, 1);
         assert_eq!(next.theme, AppTheme::Light);
         assert_eq!(next.language, "en");
+    }
+
+    #[test]
+    fn clamp_migrates_blank_and_unknown_language_to_english() {
+        let blank = AppSettings {
+            language: "   ".to_string(),
+            ..AppSettings::default()
+        }
+        .clamp();
+        assert_eq!(blank.language, "en");
+
+        let unknown = AppSettings {
+            language: "de".to_string(),
+            ..AppSettings::default()
+        }
+        .clamp();
+        assert_eq!(unknown.language, "en");
+
+        let locale_tag = AppSettings {
+            language: "es-MX".to_string(),
+            ..AppSettings::default()
+        }
+        .clamp();
+        assert_eq!(locale_tag.language, "es");
+    }
+
+    #[test]
+    fn language_roundtrip_en_es_ru() {
+        for code in ["en", "es", "ru", "ES", "ru-RU"] {
+            let next = apply_save_request(
+                &AppSettings::default(),
+                SaveAppSettingsRequest {
+                    geometry_dash_dir: None,
+                    clear_geometry_dash_dir: false,
+                    default_sheet_concurrency: None,
+                    theme: None,
+                    language: Some(code.to_string()),
+                    app_background: None,
+                    app_background_opacity: None,
+                    onboarding_version: None,
+                },
+            )
+            .expect("apply language");
+            let expected = code
+                .split(['-', '_'])
+                .next()
+                .unwrap()
+                .to_ascii_lowercase();
+            assert_eq!(next.language, expected);
+        }
+    }
+
+    #[test]
+    fn apply_save_request_rejects_unsupported_language() {
+        let err = apply_save_request(
+            &AppSettings::default(),
+            SaveAppSettingsRequest {
+                geometry_dash_dir: None,
+                clear_geometry_dash_dir: false,
+                default_sheet_concurrency: None,
+                theme: None,
+                language: Some("de".to_string()),
+                app_background: None,
+                app_background_opacity: None,
+                onboarding_version: None,
+            },
+        )
+        .expect_err("unsupported language");
+        match err {
+            AppError::IoError(message) => {
+                assert!(message.contains("Invalid language"));
+            }
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     #[test]

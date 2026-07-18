@@ -10,6 +10,7 @@ import {
   DEFAULT_APP_SETTINGS_VIEW,
   SaveAppSettingsRequest,
 } from "../domain/settings";
+import { normalizeAppLanguage } from "../i18n/languages";
 import { isAppTheme } from "../utils/theme";
 import { isTauriRuntime } from "./tauriOperations";
 
@@ -40,7 +41,7 @@ function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
     ...DEFAULT_APP_SETTINGS_VIEW,
     ...raw,
     theme: isAppTheme(raw.theme) ? raw.theme : "dark",
-    language: raw.language?.trim() || "en",
+    language: normalizeAppLanguage(raw.language),
     appBackground,
     appBackgroundOpacity: Math.min(
       MAX_APP_BACKGROUND_OPACITY,
@@ -74,7 +75,9 @@ export const saveAppSettings = async (
     return {
       ...DEFAULT_APP_SETTINGS_VIEW,
       theme: request.theme ?? DEFAULT_APP_SETTINGS_VIEW.theme,
-      language: request.language ?? DEFAULT_APP_SETTINGS_VIEW.language,
+      language: normalizeAppLanguage(
+        request.language ?? DEFAULT_APP_SETTINGS_VIEW.language,
+      ),
       defaultSheetConcurrency:
         request.defaultSheetConcurrency ??
         DEFAULT_APP_SETTINGS_VIEW.defaultSheetConcurrency,

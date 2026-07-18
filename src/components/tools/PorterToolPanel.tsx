@@ -1,4 +1,5 @@
 import { Settings2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -32,6 +33,8 @@ export function PorterToolPanel({
   onSheetConcurrencyChange,
   pickFolder,
 }: PorterToolPanelProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolPage accent="sky">
       <ToolPageHeader toolId="porter" />
@@ -43,19 +46,19 @@ export function PorterToolPanel({
         pickFolder={pickFolder}
       />
       <ToolSection
-        title="Port Settings"
-        subtitle="Choose output tier and parallel processing limits"
+        title={t("porter.settings")}
+        subtitle={t("porter.settingsDescription")}
         icon={Settings2}
         columns={2}
       >
         <ToolCheckboxField
-          label="Port to Low Graphics"
+          label={t("porter.lowGraphics")}
           checked={lowPort}
           onChange={onLowPortChange}
         />
         <ToolNumberField
-          label="Concurrent gamesheets and textures"
-          hint="1–64"
+          label={t("porter.concurrentGamesheetsAndTextures")}
+          hint={t("common.range1To64")}
           value={sheetConcurrency}
           min={1}
           max={64}

@@ -3,6 +3,7 @@ import type { CSSProperties } from "react";
 import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import type {
   GeodeButtonsOptions,
   GeodeButtonsVariant,
@@ -35,17 +36,6 @@ type GeodeButtonsToolPanelProps = {
   onOptionsChange: (next: GeodeButtonsOptions) => void;
   pickFolder: PickFolderFn;
 };
-
-const VARIANTS: ReadonlyArray<{ id: GeodeButtonsVariant; label: string; suffix: string }> = [
-  { id: "primary", label: "Primary", suffix: "Green" },
-  { id: "secondary", label: "Secondary", suffix: "Cyan" },
-  { id: "darkAqua", label: "Dark Aqua", suffix: "DarkAqua" },
-  { id: "darkPurple", label: "Dark Purple", suffix: "DarkPurple" },
-  { id: "gray", label: "Gray", suffix: "Gray" },
-  { id: "error", label: "Error", suffix: "Red" },
-  { id: "info", label: "Info", suffix: "Blue" },
-  { id: "pink", label: "Pink", suffix: "Pink" },
-];
 
 const defaultHsv = (): HsvDelta => ({ hueDeg: 0, satDelta: 0, valDelta: 0 });
 
@@ -121,16 +111,20 @@ function resolveGroup(baseType: string): FamilyGroupId {
   return "account";
 }
 
-function groupLabel(groupId: FamilyGroupId): string {
+function groupLabelKey(groupId: FamilyGroupId): string {
   switch (groupId) {
     case "uiChrome":
-      return "Menus";
+      return "geodeButtons.groups.menus";
     case "circle":
-      return "Circle";
+      return "geodeButtons.groups.circle";
     case "editorBase":
-      return "Editor Base";
+      return "geodeButtons.groups.editorBase";
     case "account":
-      return "Account";
+      return "geodeButtons.groups.account";
+    default: {
+      const _exhaustive: never = groupId;
+      return _exhaustive;
+    }
   }
 }
 
@@ -495,6 +489,7 @@ export function GeodeButtonsToolPanel({
   onOptionsChange,
   pickFolder,
 }: GeodeButtonsToolPanelProps) {
+  const { t } = useTranslation(["tools", "errors"]);
   const [plistPath, setPlistPath] = useState<string>("");
   const [useCustomSheet, setUseCustomSheet] = useState(false);
   const [targets, setTargets] = useState<GeodeButtonsTargetGroup[] | null>(null);
@@ -534,12 +529,12 @@ export function GeodeButtonsToolPanel({
         return a.label.localeCompare(b.label);
       });
     return [
-      { id: "uiChrome" as const, label: groupLabel("uiChrome"), items: sortItems(grouped.uiChrome) },
-      { id: "circle" as const, label: groupLabel("circle"), items: sortItems(grouped.circle) },
-      { id: "editorBase" as const, label: groupLabel("editorBase"), items: sortItems(grouped.editorBase) },
-      { id: "account" as const, label: groupLabel("account"), items: sortItems(grouped.account) },
+      { id: "uiChrome" as const, label: t(groupLabelKey("uiChrome")), items: sortItems(grouped.uiChrome) },
+      { id: "circle" as const, label: t(groupLabelKey("circle")), items: sortItems(grouped.circle) },
+      { id: "editorBase" as const, label: t(groupLabelKey("editorBase")), items: sortItems(grouped.editorBase) },
+      { id: "account" as const, label: t(groupLabelKey("account")), items: sortItems(grouped.account) },
     ].filter((group) => group.items.length > 0);
-  }, [targets]);
+  }, [t, targets]);
 
   const selectedVariant = useMemo(() => parseVariantFromFamilyId(selectedFamilyId), [selectedFamilyId]);
   const selectedAdjustVariant = useMemo(
@@ -599,20 +594,20 @@ export function GeodeButtonsToolPanel({
     async (assign: (path: string) => void) => {
       setTargetsError(null);
       if (!isTauriRuntime()) {
-        setTargetsError("File picker is only available in Tauri runtime.");
+        setTargetsError(t("errors:runtime.filePickerUnavailable"));
         return;
       }
       const selected = await open({
         multiple: false,
         directory: false,
-        title: "Select template png",
+        title: t("geodeButtons.selectTemplatePngDialog"),
         filters: [{ name: "PNG", extensions: ["png"] }],
       });
       if (typeof selected === "string" && selected.trim()) {
         assign(selected);
       }
     },
-    [],
+    [t],
   );
 
   const applyPlistSelection = useCallback(
@@ -633,13 +628,13 @@ export function GeodeButtonsToolPanel({
   const pickGamesheet = useCallback(async () => {
     setTargetsError(null);
     if (!isTauriRuntime()) {
-      setTargetsError("File picker is only available in Tauri runtime.");
+      setTargetsError(t("errors:runtime.filePickerUnavailable"));
       return;
     }
     const selected = await open({
       multiple: false,
       directory: false,
-      title: "Select input gamesheet plist",
+      title: t("geodeButtons.selectInputGamesheetDialog"),
       filters: [{ name: "Plist", extensions: ["plist"] }],
     });
     if (typeof selected !== "string" || !selected.trim()) {
@@ -647,7 +642,7 @@ export function GeodeButtonsToolPanel({
     }
     setUseCustomSheet(true);
     applyPlistSelection(selected);
-  }, [applyPlistSelection]);
+  }, [applyPlistSelection, t]);
 
   useEffect(() => {
     let alive = true;
@@ -658,18 +653,22 @@ export function GeodeButtonsToolPanel({
           onInputDirChange(resolved);
         } else {
           setTargetsError(
-            "Could not resolve geode.loader game files. Set TM_GEOMETRY_DASH_DIR or install Geometry Dash + Geode via Steam.",
+            t("errors:geodeButtons.gameFilesNotFound"),
           );
         }
       })
       .catch((err: unknown) => {
         if (!alive) return;
-        setTargetsError(err instanceof Error ? err.message : "Failed to resolve default input.");
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:geodeButtons.resolveDefaultInputFailed"),
+        );
       });
     return () => {
       alive = false;
     };
-  }, [onInputDirChange]);
+  }, [onInputDirChange, t]);
 
   useEffect(() => {
     if (useCustomSheet) {
@@ -691,19 +690,23 @@ export function GeodeButtonsToolPanel({
           }
         } else {
           setTargetsError(
-            "Could not auto-find BlankSheet in geode.loader (or the selected input directory).",
+            t("errors:geodeButtons.blankSheetNotFound"),
           );
           setPlistPath("");
         }
       })
       .catch((err: unknown) => {
         if (!alive) return;
-        setTargetsError(err instanceof Error ? err.message : "Failed to auto-select plist.");
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:geodeButtons.autoSelectPlistFailed"),
+        );
       });
     return () => {
       alive = false;
     };
-  }, [inputDir, onOptionsChange, useCustomSheet]);
+  }, [inputDir, onOptionsChange, t, useCustomSheet]);
 
   useEffect(() => {
     if (!plistPath.trim()) {
@@ -722,12 +725,16 @@ export function GeodeButtonsToolPanel({
       })
       .catch((err: unknown) => {
         if (!alive) return;
-        setTargetsError(err instanceof Error ? err.message : "Failed to read target frames.");
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:geodeButtons.readTargetFramesFailed"),
+        );
       });
     return () => {
       alive = false;
     };
-  }, [plistPath, useCustomSheet]);
+  }, [plistPath, t, useCustomSheet]);
 
   useEffect(() => {
     if (!targets || targets.length === 0) {
@@ -888,32 +895,36 @@ export function GeodeButtonsToolPanel({
   );
 
   const selectedVariantLabel = selectedVariant
-    ? VARIANTS.find((variant) => variant.id === selectedVariant)?.label ?? selectedVariant
-    : "N/A";
+    ? t(`geodeButtons.variants.${selectedVariant}`)
+    : t("geodeButtons.notAvailable");
 
   return (
     <ToolPage accent="cyan" wide>
       <ToolPageHeader toolId="geodeButtons" />
 
       <ToolSection
-        title="Source & Output"
-        subtitle="BlankSheet loads from Steam geode/resources/geode.loader by default; browse to use a custom gamesheet instead"
+        title={t("common.sourceAndOutput")}
+        subtitle={t("geodeButtons.sourceDescription")}
         icon={FolderInput}
         columns={2}
       >
         <ToolFilePathField
-          label="Input gamesheet"
-          hint={useCustomSheet ? "Custom plist" : "Cached BlankSheet"}
+          label={t("geodeButtons.inputGamesheet")}
+          hint={
+            useCustomSheet
+              ? t("geodeButtons.customPlist")
+              : t("geodeButtons.cachedBlankSheet")
+          }
           value={plistPath}
-          placeholder="Resolving BlankSheet…"
-          browseLabel="Browse"
+          placeholder={t("geodeButtons.resolvingBlankSheet")}
+          browseLabel={t("common:browse")}
           browseIcon={FileImage}
           onBrowse={() => {
             void pickGamesheet();
           }}
         />
         <FolderPathField
-          label="Output directory"
+          label={t("common.outputDirectory")}
           value={outputDir}
           onChange={onOutputDirChange}
           pickFolder={pickFolder}
@@ -925,8 +936,8 @@ export function GeodeButtonsToolPanel({
 
       <div className="tm-geode-workspace">
         <ToolSection
-          title="Button Families"
-          subtitle="Select a family to preview templates and tune HSV deltas"
+          title={t("geodeButtons.buttonFamilies")}
+          subtitle={t("geodeButtons.buttonFamiliesDescription")}
           icon={Grid3x3}
         >
           {groupedTargets.map((section) => (
@@ -949,17 +960,26 @@ export function GeodeButtonsToolPanel({
                           <img
                             className="tm-geode-family-thumb"
                             src={previewSrc}
-                            alt={`${group.label} preview`}
+                            alt={t("geodeButtons.previewAlt", {
+                              family: group.label,
+                            })}
                           />
                         ) : (
-                          <span className="tm-geode-cell-missing">No preview</span>
+                          <span className="tm-geode-cell-missing">
+                            {t("geodeButtons.noPreview")}
+                          </span>
                         )}
                       </div>
                       <div className="tm-geode-family-title">{group.label}</div>
                       <div className="tm-geode-family-meta">
-                        {group.frames.length} frames •{" "}
+                        {t("geodeButtons.frames", {
+                          count: group.frames.length,
+                        })}{" "}
+                        •{" "}
                         <span className={hasTemplate ? "ok" : "missing"}>
-                          {hasTemplate ? "template set" : "using default"}
+                          {hasTemplate
+                            ? t("geodeButtons.templateSet")
+                            : t("geodeButtons.usingDefault")}
                         </span>
                       </div>
                     </button>
@@ -970,22 +990,28 @@ export function GeodeButtonsToolPanel({
           ))}
           {targets === null ? (
             <div className="tm-geode-grid-empty">
-              {plistPath.trim() ? "Loading targets…" : "Waiting for gamesheet to load previews."}
+              {plistPath.trim()
+                ? t("geodeButtons.loadingTargets")
+                : t("geodeButtons.waitingForGamesheet")}
             </div>
           ) : null}
         </ToolSection>
 
         <ToolSection
           className="tm-geode-adjust-panel"
-          title="Adjust"
-          subtitle={`${selectedFamily?.label ?? "No family selected"} • Variant ${selectedVariantLabel}`}
+          title={t("geodeButtons.adjust")}
+          subtitle={t("geodeButtons.adjustSubtitle", {
+            family:
+              selectedFamily?.label ?? t("geodeButtons.noFamilySelected"),
+            variant: selectedVariantLabel,
+          })}
           icon={SlidersHorizontal}
         >
           <ToolFilePathField
-            label="Template PNG"
-            hint="Per family"
+            label={t("geodeButtons.templatePng")}
+            hint={t("geodeButtons.perFamily")}
             value={currentTemplatePath}
-            placeholder="Select template png"
+            placeholder={t("geodeButtons.selectTemplatePng")}
             browseIcon={FileImage}
             disabled={!selectedFamilyId}
             onBrowse={() => {
@@ -996,11 +1022,13 @@ export function GeodeButtonsToolPanel({
           />
 
           <div className="tm-geode-hsv-block">
-            <div className="tm-geode-block-title">HSV (delta)</div>
+            <div className="tm-geode-block-title">
+              {t("geodeButtons.hsvDelta")}
+            </div>
 
             <div className="tm-geode-hsv-row">
               <label className="tm-geode-hsv-label">
-                Hue (deg)
+                {t("geodeButtons.hueDegrees")}
                 <input
                   className="tm-geode-slider tm-geode-slider--hue"
                   type="range"
@@ -1029,7 +1057,7 @@ export function GeodeButtonsToolPanel({
 
             <div className="tm-geode-hsv-row">
               <label className="tm-geode-hsv-label">
-                Saturation
+                {t("geodeButtons.saturation")}
                 <input
                   className="tm-geode-slider tm-geode-slider--sat"
                   type="range"
@@ -1058,7 +1086,7 @@ export function GeodeButtonsToolPanel({
 
             <div className="tm-geode-hsv-row">
               <label className="tm-geode-hsv-label">
-                Value
+                {t("geodeButtons.value")}
                 <input
                   className="tm-geode-slider tm-geode-slider--val"
                   type="range"
@@ -1086,8 +1114,7 @@ export function GeodeButtonsToolPanel({
             </div>
 
             <p className="tm-tool-section-note">
-              These deltas apply when regenerating frames whose color suffix maps to the selected
-              variant. Double-click a slider to reset it.
+              {t("geodeButtons.hsvHelp")}
             </p>
           </div>
         </ToolSection>

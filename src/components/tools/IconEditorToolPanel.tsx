@@ -12,6 +12,7 @@ import { createPortal } from "react-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import html2canvas from "html2canvas";
+import { useTranslation } from "react-i18next";
 import {
   FolderOpen,
   Save,
@@ -37,7 +38,9 @@ import {
   Redo2,
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
+import { getAppI18n } from "../../i18n";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { AppSelect, type AppSelectOption } from "../AppSelect";
 import {
   extractIconEditorFrames,
   getIconEditorPngDataUrl,
@@ -104,19 +107,12 @@ const BASE_LAYER_ROLES: IconLayerRole[] = ["glow", "secondary", "primary", "extr
 const BIRD_LAYER_ROLES: IconLayerRole[] = ["glow", "capsule", "secondary", "primary", "extra"];
 const TINT_TARGETS: TintTarget[] = ["primary", "secondary", "glow"];
 
-const ROLE_LABELS: Record<IconLayerRole, string> = {
-  glow: "Glow",
-  secondary: "Secondary",
-  primary: "Primary",
-  extra: "Extra",
-  capsule: "Capsule",
-};
 const ROBOT_PART_DRAW_ORDER: RobotPartId[] = ["02", "03", "04", "01"];
-const ROBOT_PART_LABELS: Record<RobotPartId, string> = {
-  "01": "Head",
-  "02": "Body",
-  "03": "Leg",
-  "04": "Foot",
+const ROBOT_PART_KEYS: Record<RobotPartId, string> = {
+  "01": "robotParts.head",
+  "02": "robotParts.body",
+  "03": "robotParts.leg",
+  "04": "robotParts.foot",
 };
 /** Stacking between robot parts (each part’s layers live in a wrapper with this z-index). */
 const ROBOT_PART_Z_BASE: Record<RobotPartId, number> = {
@@ -158,11 +154,11 @@ const ROBOT_PART_VIEW_OFFSET: Record<RobotPartId, { x: number; y: number }> = {
 
 /** Draw order: back (04) under body (01); legs (03, 02) above. */
 const SPIDER_PART_DRAW_ORDER: RobotPartId[] = ["04", "01", "03", "02"];
-const SPIDER_PART_LABELS: Record<RobotPartId, string> = {
-  "01": "Body",
-  "02": "Front legs",
-  "03": "Back legs",
-  "04": "Back",
+const SPIDER_PART_KEYS: Record<RobotPartId, string> = {
+  "01": "spiderParts.body",
+  "02": "spiderParts.frontLegs",
+  "03": "spiderParts.backLegs",
+  "04": "spiderParts.back",
 };
 const SPIDER_PART_Z_BASE: Record<RobotPartId, number> = {
   "04": 100,
@@ -658,7 +654,12 @@ const buildCanvasFromDataUrl = async (pngDataUrl: string): Promise<HTMLCanvasEle
   const image = await new Promise<HTMLImageElement>((resolve, reject) => {
     const next = new Image();
     next.onload = () => resolve(next);
-    next.onerror = () => reject(new Error("Failed to decode extracted frame image."));
+    next.onerror = () =>
+      reject(
+        new Error(
+          getAppI18n().t("errors:iconEditor.decodeFrameFailed"),
+        ),
+      );
     next.src = pngDataUrl;
   });
   const canvas = document.createElement("canvas");
@@ -666,7 +667,7 @@ const buildCanvasFromDataUrl = async (pngDataUrl: string): Promise<HTMLCanvasEle
   canvas.height = Math.max(1, image.height);
   const context = canvas.getContext("2d");
   if (!context) {
-    throw new Error("Failed to allocate canvas for extracted frame.");
+    throw new Error(getAppI18n().t("errors:iconEditor.allocateCanvasFailed"));
   }
   context.imageSmoothingEnabled = false;
   context.drawImage(image, 0, 0);
@@ -1055,6 +1056,7 @@ function SpriteOffsetAxisControls({
   onBump,
   onSetAxis,
 }: SpriteOffsetAxisControlsProps) {
+  const { t } = useTranslation("iconEditor");
   const isX = axis === "x";
   const DecreaseIcon = isX ? ChevronLeft : ChevronDown;
   const IncreaseIcon = isX ? ChevronRight : ChevronUp;
@@ -1097,7 +1099,7 @@ function SpriteOffsetAxisControls({
           <button
             type="button"
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-coarse"
-            aria-label={`Decrease sprite offset ${axisLabel} by 1`}
+            aria-label={t("plist.decreaseOffsetByOne", { axis: axisLabel })}
             title="−1"
             onClick={() => onBump(frameName, axis, -1, OFFSET_BUMP_COARSE)}
           >
@@ -1107,7 +1109,7 @@ function SpriteOffsetAxisControls({
           <button
             type="button"
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-fine"
-            aria-label={`Decrease sprite offset ${axisLabel} by 0.5`}
+            aria-label={t("plist.decreaseOffsetByHalf", { axis: axisLabel })}
             title="−0.5"
             onClick={() => onBump(frameName, axis, -1)}
           >
@@ -1119,7 +1121,7 @@ function SpriteOffsetAxisControls({
           type="text"
           inputMode="decimal"
           className="tm-icon-editor-plist-offset-value"
-          aria-label={`Sprite offset ${axisLabel}`}
+          aria-label={t("plist.offsetAxis", { axis: axisLabel })}
           value={draft}
           onFocus={() => setIsEditing(true)}
           onChange={(event) => setDraft(event.target.value)}
@@ -1140,7 +1142,7 @@ function SpriteOffsetAxisControls({
           <button
             type="button"
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-fine"
-            aria-label={`Increase sprite offset ${axisLabel} by 0.5`}
+            aria-label={t("plist.increaseOffsetByHalf", { axis: axisLabel })}
             title="+0.5"
             onClick={() => onBump(frameName, axis, 1)}
           >
@@ -1150,7 +1152,7 @@ function SpriteOffsetAxisControls({
           <button
             type="button"
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-coarse"
-            aria-label={`Increase sprite offset ${axisLabel} by 1`}
+            aria-label={t("plist.increaseOffsetByOne", { axis: axisLabel })}
             title="+1"
             onClick={() => onBump(frameName, axis, 1, OFFSET_BUMP_COARSE)}
           >
@@ -1164,6 +1166,7 @@ function SpriteOffsetAxisControls({
 }
 
 export function IconEditorToolPanel() {
+  const { t } = useTranslation("iconEditor");
   const [sheetInfo, setSheetInfo] = useState<IconEditorSheetInfo | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [atlasVersion, setAtlasVersion] = useState(0);
@@ -1635,18 +1638,22 @@ export function IconEditorToolPanel() {
   const extraMappingDirty =
     sheetInfo !== null && roleMap.extra.trim() !== extraMappingBaseline.trim();
   const dirty = offsetDirty || extraMappingDirty || textureDirty;
-  const saveStatusLabel = !sheetInfo ? "Save" : dirty ? "Unsaved" : "Saved";
+  const saveStatusLabel = !sheetInfo
+    ? t("saveStatus.save")
+    : dirty
+      ? t("saveStatus.unsaved")
+      : t("saveStatus.saved");
   const saveTooltip = useMemo(() => {
     if (!sheetInfo) {
-      return "Save plist offset changes";
+      return t("saveStatus.saveOffsets");
     }
     if (isBusy) {
-      return "Saving changes to plist…";
+      return t("saveStatus.savingChanges");
     }
     if (dirty) {
-      return "Save unsaved changes (Ctrl+S)";
+      return t("saveStatus.saveUnsaved");
     }
-    return "All changes saved";
+    return t("saveStatus.allSaved");
   }, [dirty, isBusy, sheetInfo]);
   const saveStatusClass = !sheetInfo
     ? "tm-icon-editor-viewport-hud-save--idle"
@@ -1715,7 +1722,10 @@ export function IconEditorToolPanel() {
         setAtlasVersion((value) => value + 1);
         setViewportFocusGeneration((generation) => generation + 1);
       } catch (error) {
-        const parsed = toIconEditorErrorInfo(error, "Failed to load icon sheet.");
+        const parsed = toIconEditorErrorInfo(
+          error,
+          t("errors:iconEditor.loadSheetFailed"),
+        );
         setToolbarError(parsed.message);
         setToolbarErrorDetail(parsed.detail);
       } finally {
@@ -1729,14 +1739,14 @@ export function IconEditorToolPanel() {
 
   const openSheet = useCallback(async () => {
     if (!isTauriRuntime()) {
-      setToolbarError("Icon editor is available only in Tauri runtime.");
-      setToolbarErrorDetail("Icon editor is available only in Tauri runtime.");
+      setToolbarError(t("errors:iconEditor.runtimeUnavailable"));
+      setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
       return;
     }
     const selected = await open({
       directory: false,
       multiple: false,
-      title: "Select plist sheet",
+      title: t("dialogs.selectPlistSheet"),
       filters: [{ name: "Plist", extensions: ["plist"] }],
     });
     if (typeof selected !== "string" || !selected.trim()) {
@@ -1779,7 +1789,10 @@ export function IconEditorToolPanel() {
       clearIconEditorHistory(sheetInfo.plistPath);
       await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
-      const parsed = toIconEditorErrorInfo(error, "Failed to save plist changes.");
+      const parsed = toIconEditorErrorInfo(
+        error,
+        t("errors:iconEditor.savePlistFailed"),
+      );
       setToolbarError(parsed.message);
       setToolbarErrorDetail(parsed.detail);
     } finally {
@@ -1804,7 +1817,10 @@ export function IconEditorToolPanel() {
         setRenameConflict({ targetStem: renameValue.trim() });
         return;
       }
-      const parsed = toIconEditorErrorInfo(error, "Failed to rename sheet files.");
+      const parsed = toIconEditorErrorInfo(
+        error,
+        t("errors:iconEditor.renameSheetFailed"),
+      );
       setToolbarError(parsed.message);
       setToolbarErrorDetail(parsed.detail);
     } finally {
@@ -1828,7 +1844,10 @@ export function IconEditorToolPanel() {
       setRenameConflict(null);
       await loadSheet(renamed.plistPath, { omitBusy: true });
     } catch (error) {
-      const parsed = toIconEditorErrorInfo(error, "Failed to swap sheet names.");
+      const parsed = toIconEditorErrorInfo(
+        error,
+        t("errors:iconEditor.swapNamesFailed"),
+      );
       setToolbarError(parsed.message);
       setToolbarErrorDetail(parsed.detail);
     } finally {
@@ -1870,7 +1889,10 @@ export function IconEditorToolPanel() {
       );
       await loadSheet(copied.plistPath, { omitBusy: true });
     } catch (error) {
-      const parsed = toIconEditorErrorInfo(error, "Failed to save sheet copy.");
+      const parsed = toIconEditorErrorInfo(
+        error,
+        t("errors:iconEditor.saveCopyFailed"),
+      );
       setToolbarError(parsed.message);
       setToolbarErrorDetail(parsed.detail);
     } finally {
@@ -1893,8 +1915,8 @@ export function IconEditorToolPanel() {
         return;
       }
       if (!isTauriRuntime()) {
-        setToolbarError("Texture import is available only in Tauri runtime.");
-        setToolbarErrorDetail("Texture import is available only in Tauri runtime.");
+        setToolbarError(t("errors:iconEditor.textureImportUnavailable"));
+        setToolbarErrorDetail(t("errors:iconEditor.textureImportUnavailable"));
         return;
       }
       const selected = await open({
@@ -1913,7 +1935,7 @@ export function IconEditorToolPanel() {
       const stem = stemFromPrimary ?? inferStemFromFrames(sheetInfo.frames);
       if (!stem) {
         const message =
-          "Could not infer icon stem from plist. Expected frame names like {type}_{number}_001, {type}_{number}_2_001, {type}_{number}_3_001, {type}_{number}_glow_001, or {type}_{number}_extra_001.";
+          t("errors:iconEditor.inferStemFailed");
         setToolbarError(message);
         setToolbarErrorDetail(message);
         return;
@@ -1926,7 +1948,7 @@ export function IconEditorToolPanel() {
             const robotStemMatch = stem.match(/^(robot_\d+)_0[1-4]$/i);
             const robotStem = robotStemMatch ? robotStemMatch[1] : stem;
             if (role === "extra" && selectedRobotPartId !== "01") {
-              throw new Error("Extra is only supported on robot head.");
+              throw new Error(t("errors:iconEditor.robotExtraUnsupported"));
             }
             const suffix =
               role === "primary"
@@ -1945,7 +1967,7 @@ export function IconEditorToolPanel() {
               const spiderStemMatch = stem.match(/^(spider_\d+)_0[1-4]$/i);
               const spiderStem = spiderStemMatch ? spiderStemMatch[1] : stem;
               if (role === "extra" && selectedSpiderPartId !== "01") {
-                throw new Error("Extra is only supported on spider body (part 01).");
+                throw new Error(t("errors:iconEditor.spiderExtraUnsupported"));
               }
               const suffix =
                 role === "primary"
@@ -1993,7 +2015,10 @@ export function IconEditorToolPanel() {
         );
         setRoleMap((previous) => ({ ...previous, [role]: plistFrameKey }));
       } catch (error) {
-        const parsed = toIconEditorErrorInfo(error, "Failed to import texture.");
+        const parsed = toIconEditorErrorInfo(
+          error,
+          t("errors:iconEditor.importTextureFailed"),
+        );
         setToolbarError(parsed.message);
         setToolbarErrorDetail(parsed.detail);
       }
@@ -2352,14 +2377,14 @@ export function IconEditorToolPanel() {
       return;
     }
     if (layers.length === 0) {
-      setToolbarError("No visible icon layers available to export.");
-      setToolbarErrorDetail("Assign at least one frame (for example, primary) before downloading.");
+      setToolbarError(t("errors:iconEditor.noVisibleLayers"));
+      setToolbarErrorDetail(t("errors:iconEditor.noVisibleLayersDetail"));
       return;
     }
     const stageElement = stageElementRef.current;
     if (!stageElement) {
-      setToolbarError("Failed to access icon stage for export.");
-      setToolbarErrorDetail("Stage element ref was null while preparing download.");
+      setToolbarError(t("errors:iconEditor.stageUnavailable"));
+      setToolbarErrorDetail(t("errors:iconEditor.stageUnavailableDetail"));
       return;
     }
     const stageRect = stageElement.getBoundingClientRect();
@@ -2368,8 +2393,8 @@ export function IconEditorToolPanel() {
       .filter((element) => element.offsetParent !== null)
       .map((element) => element.getBoundingClientRect());
     if (visibleLayerRects.length === 0) {
-      setToolbarError("No rendered icon layers available to export.");
-      setToolbarErrorDetail("Layer DOM bounds were empty while preparing icon PNG.");
+      setToolbarError(t("errors:iconEditor.noRenderedLayers"));
+      setToolbarErrorDetail(t("errors:iconEditor.noRenderedLayersDetail"));
       return;
     }
     let minLeft = Number.POSITIVE_INFINITY;
@@ -2489,7 +2514,7 @@ export function IconEditorToolPanel() {
       const defaultFileName = `${stem}-icon.png`;
       if (isTauriRuntime()) {
         const savePath = await save({
-          title: "Save icon PNG",
+          title: t("dialogs.saveIconPng"),
           defaultPath: defaultFileName,
           filters: [{ name: "PNG", extensions: ["png"] }],
         });
@@ -2506,7 +2531,10 @@ export function IconEditorToolPanel() {
         link.click();
       }
     } catch (error) {
-      const parsed = toIconEditorErrorInfo(error, "Failed to export icon PNG.");
+      const parsed = toIconEditorErrorInfo(
+        error,
+        t("errors:iconEditor.exportPngFailed"),
+      );
       setToolbarError(parsed.message);
       setToolbarErrorDetail(parsed.detail);
     }
@@ -2663,131 +2691,143 @@ export function IconEditorToolPanel() {
     [buildEditSnapshot, commitEditSnapshot],
   );
 
-  const roleControls = roleOrder.map((role) => (
-    <div
-      className={`tm-icon-editor-role-card tm-icon-editor-role-card-${role}${
-        inspectorRole === role ? " tm-icon-editor-role-card-active" : ""
-      }`}
-      key={role}
-      onClick={(event) => {
-        const target = event.target as HTMLElement;
-        if (target.closest("select") || target.closest("button")) {
+  const roleControls = roleOrder.map((role) => {
+    const roleValue = isRobotIcon
+      ? role === "extra" && selectedRobotPartId === "01"
+        ? roleMap.extra
+        : robotPartRoleMap[selectedRobotPartId][role] ?? ""
+      : isSpiderIcon
+        ? role === "extra" && selectedSpiderPartId === "01"
+          ? roleMap.extra
+          : spiderPartRoleMap[selectedSpiderPartId][role] ?? ""
+        : roleMap[role];
+
+    const frameOptions: AppSelectOption[] = [
+      { value: "", label: t("frames.none") },
+      ...(sheetInfo?.frames ?? [])
+        .filter((frame) => {
+          if (isRobotIcon) {
+            const parsed = parseRobotPartFrame(frame.name);
+            if (!parsed) {
+              return false;
+            }
+            return parsed.partId === selectedRobotPartId && parsed.role === role;
+          }
+          if (isSpiderIcon) {
+            const parsed = parseSpiderPartFrame(frame.name);
+            if (!parsed) {
+              return false;
+            }
+            return parsed.partId === selectedSpiderPartId && parsed.role === role;
+          }
+          return true;
+        })
+        .map((frame) => ({
+          value: frame.name,
+          label: frame.name,
+        })),
+    ];
+
+    const handleRoleFrameChange = (nextFrame: string) => {
+      if (isRobotIcon) {
+        if (role === "extra" && selectedRobotPartId === "01") {
+          commitRoleMapExtra(nextFrame);
+          setInspectorFrameOverride(nextFrame || null);
+          setInspectorRole(role);
           return;
         }
+        setInspectorFrameOverride(nextFrame || null);
         setInspectorRole(role);
-        setInspectorFrameOverride(null);
-      }}
-    >
-      <div className="tm-icon-editor-role-card-head">
-        <span className="tm-icon-editor-role-chip">{ROLE_LABELS[role]}</span>
-        <span className="tm-icon-editor-role-card-hint">Layer frame</span>
-      </div>
-      <div className="tm-icon-editor-role-actions">
-        <div className="tm-select-wrap">
-          <select
-            className="tm-select"
-              value={
-                isRobotIcon
-                  ? role === "extra" && selectedRobotPartId === "01"
-                    ? roleMap.extra
-                    : robotPartRoleMap[selectedRobotPartId][role] ?? ""
-                  : isSpiderIcon
-                    ? role === "extra" && selectedSpiderPartId === "01"
-                      ? roleMap.extra
-                      : spiderPartRoleMap[selectedSpiderPartId][role] ?? ""
-                    : roleMap[role]
-              }
-              onChange={(event) => {
-                const nextFrame = event.target.value;
-                if (isRobotIcon) {
-                  if (role === "extra" && selectedRobotPartId === "01") {
-                    commitRoleMapExtra(nextFrame);
-                    setInspectorFrameOverride(nextFrame || null);
-                    setInspectorRole(role);
-                    return;
-                  }
-                  setInspectorFrameOverride(nextFrame || null);
-                  setInspectorRole(role);
-                  return;
-                }
-                if (isSpiderIcon) {
-                  if (role === "extra" && selectedSpiderPartId === "01") {
-                    commitRoleMapExtra(nextFrame);
-                    setInspectorFrameOverride(nextFrame || null);
-                    setInspectorRole(role);
-                    return;
-                  }
-                  setInspectorFrameOverride(nextFrame || null);
-                  setInspectorRole(role);
-                  return;
-                }
-                if (role === "extra") {
-                  commitRoleMapExtra(nextFrame);
-                  return;
-                }
-                setRoleMap((previous) => ({ ...previous, [role]: nextFrame }));
-              }}
-            >
-              <option value="">None</option>
-              {(sheetInfo?.frames ?? [])
-                .filter((frame) => {
-                  if (isRobotIcon) {
-                    const parsed = parseRobotPartFrame(frame.name);
-                    if (!parsed) {
-                      return false;
-                    }
-                    return parsed.partId === selectedRobotPartId && parsed.role === role;
-                  }
-                  if (isSpiderIcon) {
-                    const parsed = parseSpiderPartFrame(frame.name);
-                    if (!parsed) {
-                      return false;
-                    }
-                    return parsed.partId === selectedSpiderPartId && parsed.role === role;
-                  }
-                  return true;
-                })
-                .map((frame) => (
-                <option value={frame.name} key={frame.name}>
-                  {frame.name}
-                </option>
-                ))}
-            </select>
-          </div>
+        return;
+      }
+      if (isSpiderIcon) {
+        if (role === "extra" && selectedSpiderPartId === "01") {
+          commitRoleMapExtra(nextFrame);
+          setInspectorFrameOverride(nextFrame || null);
+          setInspectorRole(role);
+          return;
+        }
+        setInspectorFrameOverride(nextFrame || null);
+        setInspectorRole(role);
+        return;
+      }
+      if (role === "extra") {
+        commitRoleMapExtra(nextFrame);
+        return;
+      }
+      setRoleMap((previous) => ({ ...previous, [role]: nextFrame }));
+    };
+
+    return (
+      <div
+        className={`tm-icon-editor-role-card tm-icon-editor-role-card-${role}${
+          inspectorRole === role ? " tm-icon-editor-role-card-active" : ""
+        }`}
+        key={role}
+        onClick={(event) => {
+          const target = event.target as HTMLElement;
+          if (
+            target.closest("select") ||
+            target.closest("button") ||
+            target.closest(".tm-app-select")
+          ) {
+            return;
+          }
+          setInspectorRole(role);
+          setInspectorFrameOverride(null);
+        }}
+      >
+        <div className="tm-icon-editor-role-card-head">
+          <span className="tm-icon-editor-role-chip">{t(`roles.${role}`)}</span>
+          <span className="tm-icon-editor-role-card-hint">
+            {t("frames.layerFrame")}
+          </span>
+        </div>
+        <div className="tm-icon-editor-role-actions">
+          <AppSelect
+            className="tm-icon-editor-role-select"
+            value={roleValue}
+            options={frameOptions}
+            onChange={handleRoleFrameChange}
+            disabled={!sheetInfo || isBusy}
+            aria-label={`${t(`roles.${role}`)}: ${t("frames.layerFrame")}`}
+            portal
+          />
           <button
             type="button"
             className="tm-icon-editor-import-icon-btn"
-            aria-label={`Import ${role} frame`}
-            title={`Import ${role} frame`}
+            aria-label={t("frames.importAria", { role: t(`roles.${role}`) })}
+            title={t("frames.importAria", { role: t(`roles.${role}`) })}
             onClick={() => importFrame(role)}
             disabled={!sheetInfo || isBusy}
           >
             <Upload size={14} strokeWidth={2} aria-hidden />
           </button>
-      </div>
-      {role === "extra" &&
-      (!(isRobotIcon || isSpiderIcon) ||
-        (isRobotIcon && selectedRobotPartId === "01") ||
-        (isSpiderIcon && selectedSpiderPartId === "01")) ? (
-        <div className="tm-icon-editor-role-extra-actions">
-          <button
-            type="button"
-            className="tm-primary-btn tm-icon-editor-remove-extra-btn"
-            title="Clear extra frame mapping"
-            disabled={!roleMap.extra.trim() || isBusy}
-            onClick={() => {
-              commitRoleMapExtra("");
-              setInspectorFrameOverride(null);
-              setInspectorRole((current) => (current === "extra" ? "primary" : current));
-            }}
-          >
-            <Trash2 size={14} />
-            Remove
-          </button>
         </div>
-      ) : null}
-    </div>
-  ));
+        {role === "extra" &&
+        (!(isRobotIcon || isSpiderIcon) ||
+          (isRobotIcon && selectedRobotPartId === "01") ||
+          (isSpiderIcon && selectedSpiderPartId === "01")) ? (
+          <div className="tm-icon-editor-role-extra-actions">
+            <button
+              type="button"
+              className="tm-primary-btn tm-icon-editor-remove-extra-btn"
+              title={t("frames.clearExtraTooltip")}
+              disabled={!roleMap.extra.trim() || isBusy}
+              onClick={() => {
+                commitRoleMapExtra("");
+                setInspectorFrameOverride(null);
+                setInspectorRole((current) => (current === "extra" ? "primary" : current));
+              }}
+            >
+              <Trash2 size={14} />
+              {t("common:remove")}
+            </button>
+          </div>
+        ) : null}
+      </div>
+    );
+  });
 
   return (
     <div className="tm-icon-editor">
@@ -2795,26 +2835,26 @@ export function IconEditorToolPanel() {
         <div className="tm-icon-editor-top-bar-track">
         <div className="tm-icon-editor-top-bar-brand">
           <Palette size={18} strokeWidth={1.75} />
-          <span>Icon Editor</span>
+          <span>{t("navigation:tools.iconEditor.label")}</span>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group tm-icon-editor-toolbar-group--file">
-          <IconEditorToolbarTip label="Reload the current gamesheet from disk">
+          <IconEditorToolbarTip label={t("toolbar.reloadTooltip")}>
             <button
               className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
               type="button"
-              aria-label="Reload sheet"
+              aria-label={t("toolbar.reloadAria")}
               onClick={() => reloadSheet().catch(() => {})}
               disabled={!sheetInfo || isBusy}
             >
               <RefreshCw size={15} aria-hidden />
             </button>
           </IconEditorToolbarTip>
-          <IconEditorToolbarTip label="Open plist sheet">
+          <IconEditorToolbarTip label={t("toolbar.openTooltip")}>
             <button
               className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
               type="button"
-              aria-label="Open sheet"
+              aria-label={t("toolbar.openAria")}
               onClick={() => openSheet().catch(() => {})}
               disabled={isBusy}
             >
@@ -2829,64 +2869,64 @@ export function IconEditorToolPanel() {
                   onChange={(event) => setRenameValue(event.target.value)}
                   placeholder="icons-hd"
                 />
-                <IconEditorToolbarTip label="Rename plist and atlas files">
+                <IconEditorToolbarTip label={t("toolbar.renameTooltip")}>
                   <button
                     type="button"
                     className="tm-icon-editor-toolbar-btn"
-                    aria-label="Rename sheet"
+                    aria-label={t("toolbar.renameAria")}
                     onClick={() => renameSheet().catch(() => {})}
                     disabled={!sheetInfo || isBusy}
                   >
                     <PencilLine size={14} aria-hidden />
-                    Rename
+                    {t("common:rename")}
                   </button>
                 </IconEditorToolbarTip>
-                <IconEditorToolbarTip label="Save a copy with the new name and current settings">
+                <IconEditorToolbarTip label={t("toolbar.saveCopyTooltip")}>
                   <button
                     type="button"
                     className="tm-icon-editor-toolbar-btn"
-                    aria-label="Save copy"
+                    aria-label={t("toolbar.saveCopyAria")}
                     onClick={() => saveCopy().catch(() => {})}
                     disabled={!canSaveCopy || isBusy}
                   >
                     <Copy size={14} aria-hidden />
-                    Save Copy
+                    {t("common:saveCopy")}
                   </button>
                 </IconEditorToolbarTip>
               </div>
             </label>
           </div>
-          <IconEditorToolbarTip label="Download current icon preview as PNG">
+          <IconEditorToolbarTip label={t("toolbar.downloadTooltip")}>
             <button
               className="tm-icon-editor-toolbar-btn"
               type="button"
-              aria-label="Download PNG"
+              aria-label={t("toolbar.downloadAria")}
               onClick={() => downloadCurrentIconPng().catch(() => {})}
               disabled={!sheetInfo || isBusy}
             >
               <Download size={15} aria-hidden />
-              Download PNG
+              {t("toolbar.download")}
             </button>
           </IconEditorToolbarTip>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip label="Undo (Ctrl+Z)">
+          <IconEditorToolbarTip label={t("toolbar.undoTooltip")}>
             <button
               type="button"
               className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              aria-label="Undo"
+              aria-label={t("toolbar.undo")}
               onClick={undoEdits}
               disabled={!sheetInfo || isBusy || !canUndoEdits}
             >
               <Undo2 size={15} aria-hidden />
             </button>
           </IconEditorToolbarTip>
-          <IconEditorToolbarTip label="Redo (Ctrl+Shift+Z)">
+          <IconEditorToolbarTip label={t("toolbar.redoTooltip")}>
             <button
               type="button"
               className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              aria-label="Redo"
+              aria-label={t("toolbar.redo")}
               onClick={redoEdits}
               disabled={!sheetInfo || isBusy || !canRedoEdits}
             >
@@ -2905,41 +2945,43 @@ export function IconEditorToolPanel() {
               disabled={!sheetInfo || isBusy}
             >
               <Save size={15} aria-hidden />
-              {isBusy ? "Saving..." : saveStatusLabel}
+              {isBusy ? t("saveStatus.saving") : saveStatusLabel}
             </button>
           </IconEditorToolbarTip>
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
           <div className="tm-icon-editor-zoom-row">
-            <IconEditorToolbarTip label="Zoom out">
+            <IconEditorToolbarTip label={t("toolbar.zoomOut")}>
               <button
                 type="button"
                 className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-                aria-label="Zoom out"
+                aria-label={t("toolbar.zoomOut")}
                 onClick={() => setZoom((value) => clampZoom(value - 0.1))}
               >
                 <ZoomOut size={15} aria-hidden />
               </button>
             </IconEditorToolbarTip>
             <span className="chip">{Math.round(zoom * 100)}%</span>
-            <IconEditorToolbarTip label="Zoom in">
+            <IconEditorToolbarTip label={t("toolbar.zoomIn")}>
               <button
                 type="button"
                 className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-                aria-label="Zoom in"
+                aria-label={t("toolbar.zoomIn")}
                 onClick={() => setZoom((value) => clampZoom(value + 0.1))}
               >
                 <ZoomIn size={15} aria-hidden />
               </button>
             </IconEditorToolbarTip>
             <IconEditorToolbarTip
-              label={`Reset zoom to display default (${Math.round(autoResolutionZoom * 100)}% at this viewport height)`}
+              label={t("toolbar.resetZoomTooltip", {
+                percent: Math.round(autoResolutionZoom * 100),
+              })}
             >
               <button
                 type="button"
                 className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-                aria-label="Reset zoom"
+                aria-label={t("toolbar.resetZoom")}
                 onClick={() => setZoom(autoResolutionZoom)}
               >
                 <RotateCcw size={15} aria-hidden />
@@ -2949,24 +2991,24 @@ export function IconEditorToolPanel() {
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip label="Hide glow layers in the icon preview">
+          <IconEditorToolbarTip label={t("toolbar.hideGlowTooltip")}>
             <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
               <input
                 type="checkbox"
                 checked={hideGlow}
                 onChange={(event) => setHideGlow(event.target.checked)}
               />
-              Hide glow
+              {t("toolbar.hideGlow")}
             </label>
           </IconEditorToolbarTip>
-          <IconEditorToolbarTip label="Hide selection borders on icon layers">
+          <IconEditorToolbarTip label={t("toolbar.hideBorderTooltip")}>
             <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
               <input
                 type="checkbox"
                 checked={hideLayerBorders}
                 onChange={(event) => setHideLayerBorders(event.target.checked)}
               />
-              Hide border
+              {t("toolbar.hideBorder")}
             </label>
           </IconEditorToolbarTip>
         </div>
@@ -2979,7 +3021,7 @@ export function IconEditorToolPanel() {
             type="button"
             className="tm-icon-editor-error-link"
             onClick={() => setIsErrorDetailOpen(true)}
-            title="Open detailed error information"
+            title={t("dialogs.openErrorDetails")}
           >
             {toolbarError}
           </button>
@@ -2995,18 +3037,19 @@ export function IconEditorToolPanel() {
             className="tm-icon-editor-confirm-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label="Rename conflict"
+            aria-label={t("dialogs.renameConflictAria")}
             onClick={(event) => event.stopPropagation()}
           >
-            <h3>Name already in use</h3>
+            <h3>{t("dialogs.nameAlreadyInUse")}</h3>
             <p>
-              <strong>{renameConflict.targetStem}</strong> already exists. Swap names so the current
-              sheet becomes <strong>{renameConflict.targetStem}</strong> and the existing sheet
-              becomes <strong>{currentSheetStem}</strong>, or cancel the rename.
+              {t("dialogs.renameConflictDescription", {
+                targetName: renameConflict.targetStem,
+                currentName: currentSheetStem,
+              })}
             </p>
             <div className="tm-icon-editor-confirm-dialog-actions">
               <button type="button" onClick={() => setRenameConflict(null)} disabled={isBusy}>
-                Cancel
+                {t("common:cancel")}
               </button>
               <button
                 type="button"
@@ -3014,7 +3057,7 @@ export function IconEditorToolPanel() {
                 onClick={() => swapRenameSheet().catch(() => {})}
                 disabled={isBusy}
               >
-                Swap Names
+                {t("dialogs.swapNames")}
               </button>
             </div>
           </div>
@@ -3030,14 +3073,14 @@ export function IconEditorToolPanel() {
             className="tm-icon-editor-error-dialog"
             role="dialog"
             aria-modal="true"
-            aria-label="Icon editor error details"
+            aria-label={t("dialogs.errorDetailsAria")}
             onClick={(event) => event.stopPropagation()}
           >
-            <h3>Error Details</h3>
+            <h3>{t("dialogs.errorDetailsTitle")}</h3>
             <pre>{toolbarErrorDetail}</pre>
             <div className="tm-icon-editor-error-dialog-actions">
               <button type="button" onClick={() => setIsErrorDetailOpen(false)}>
-                Close
+                {t("common:close")}
               </button>
             </div>
           </div>
@@ -3056,7 +3099,7 @@ export function IconEditorToolPanel() {
                 onPointerMove={onScrollPortPointerMove}
                 onPointerUp={endScrollPortPan}
                 onPointerCancel={endScrollPortPan}
-                title="Scroll to pan. Ctrl+wheel to zoom. Middle-click drag to pan."
+                title={t("viewport.panAndZoomHelp")}
               >
                 <div
                   className="tm-icon-editor-stage-zoom-track"
@@ -3766,23 +3809,33 @@ export function IconEditorToolPanel() {
               className={`tm-icon-editor-roles-overlay${
                 framesPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
               }`}
-              aria-label="Frame role mapping"
+              aria-label={t("frames.panelAria")}
             >
               <div className="tm-icon-editor-side-panel-head">
                 <div className="tm-icon-editor-side-panel-head-copy">
                   <h3>
                     <Layers3 size={14} strokeWidth={2} aria-hidden />
-                    Frames
+                    {t("frames.title")}
                   </h3>
-                  <p className="tm-icon-editor-side-panel-subtitle">Assign frames to layers</p>
+                  <p className="tm-icon-editor-side-panel-subtitle">
+                    {t("frames.subtitle")}
+                  </p>
                 </div>
                 <button
                   type="button"
                   className="tm-icon-editor-side-panel-toggle"
                   onClick={() => setFramesPanelCollapsed((value) => !value)}
                   aria-expanded={!framesPanelCollapsed}
-                  aria-label={framesPanelCollapsed ? "Expand frames panel" : "Collapse frames panel"}
-                  title={framesPanelCollapsed ? "Show frames" : "Hide frames"}
+                  aria-label={
+                    framesPanelCollapsed
+                      ? t("frames.expandPanelAria")
+                      : t("frames.collapsePanelAria")
+                  }
+                  title={
+                    framesPanelCollapsed
+                      ? t("frames.showPanel")
+                      : t("frames.hidePanel")
+                  }
                 >
                   <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
                     <ChevronLeft size={15} />
@@ -3792,7 +3845,10 @@ export function IconEditorToolPanel() {
               <div className="tm-icon-editor-side-panel-body" aria-hidden={framesPanelCollapsed}>
                 <div className="tm-icon-editor-side-panel-body-inner">
               {isRobotIcon ? (
-                <div className="tm-icon-editor-part-tabs" aria-label="Visual frame selector">
+                <div
+                  className="tm-icon-editor-part-tabs"
+                  aria-label={t("frames.visualSelectorAria")}
+                >
                   {ROBOT_PART_DRAW_ORDER.map((partId) => (
                     <button
                       key={partId}
@@ -3805,12 +3861,15 @@ export function IconEditorToolPanel() {
                         setInspectorFrameOverride(null);
                       }}
                     >
-                      {ROBOT_PART_LABELS[partId]}
+                      {t(ROBOT_PART_KEYS[partId])}
                     </button>
                   ))}
                 </div>
               ) : isSpiderIcon ? (
-                <div className="tm-icon-editor-part-tabs" aria-label="Visual frame selector">
+                <div
+                  className="tm-icon-editor-part-tabs"
+                  aria-label={t("frames.visualSelectorAria")}
+                >
                   {SPIDER_PART_DRAW_ORDER.map((partId) => (
                     <button
                       key={partId}
@@ -3823,7 +3882,7 @@ export function IconEditorToolPanel() {
                         setInspectorFrameOverride(null);
                       }}
                     >
-                      {SPIDER_PART_LABELS[partId]}
+                      {t(SPIDER_PART_KEYS[partId])}
                     </button>
                   ))}
                 </div>
@@ -3838,23 +3897,33 @@ export function IconEditorToolPanel() {
               className={`tm-icon-editor-plist-overlay${
                 plistPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
               }`}
-              aria-label="Frame plist properties"
+              aria-label={t("plist.panelAria")}
             >
               <div className="tm-icon-editor-side-panel-head">
                 <div className="tm-icon-editor-side-panel-head-copy">
                   <h3>
                     <FileCode2 size={14} strokeWidth={2} aria-hidden />
-                    Plist
+                    {t("plist.title")}
                   </h3>
-                  <p className="tm-icon-editor-side-panel-subtitle">Frame properties and offsets</p>
+                  <p className="tm-icon-editor-side-panel-subtitle">
+                    {t("plist.subtitle")}
+                  </p>
                 </div>
                 <button
                   type="button"
                   className="tm-icon-editor-side-panel-toggle"
                   onClick={() => setPlistPanelCollapsed((value) => !value)}
                   aria-expanded={!plistPanelCollapsed}
-                  aria-label={plistPanelCollapsed ? "Expand plist panel" : "Collapse plist panel"}
-                  title={plistPanelCollapsed ? "Show plist" : "Hide plist"}
+                  aria-label={
+                    plistPanelCollapsed
+                      ? t("plist.expandPanelAria")
+                      : t("plist.collapsePanelAria")
+                  }
+                  title={
+                    plistPanelCollapsed
+                      ? t("plist.showPanel")
+                      : t("plist.hidePanel")
+                  }
                 >
                   <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
                     <ChevronRight size={15} />
@@ -3864,7 +3933,10 @@ export function IconEditorToolPanel() {
               <div className="tm-icon-editor-side-panel-body" aria-hidden={plistPanelCollapsed}>
                 <div className="tm-icon-editor-side-panel-body-inner">
               {isRobotIcon ? (
-                <div className="tm-icon-editor-part-tabs" aria-label="Visual frame selector">
+                <div
+                  className="tm-icon-editor-part-tabs"
+                  aria-label={t("frames.visualSelectorAria")}
+                >
                   {ROBOT_PART_DRAW_ORDER.map((partId) => (
                     <button
                       key={partId}
@@ -3877,12 +3949,15 @@ export function IconEditorToolPanel() {
                         setInspectorFrameOverride(null);
                       }}
                     >
-                      {ROBOT_PART_LABELS[partId]}
+                      {t(ROBOT_PART_KEYS[partId])}
                     </button>
                   ))}
                 </div>
               ) : isSpiderIcon ? (
-                <div className="tm-icon-editor-part-tabs" aria-label="Visual frame selector">
+                <div
+                  className="tm-icon-editor-part-tabs"
+                  aria-label={t("frames.visualSelectorAria")}
+                >
                   {SPIDER_PART_DRAW_ORDER.map((partId) => (
                     <button
                       key={partId}
@@ -3895,12 +3970,16 @@ export function IconEditorToolPanel() {
                         setInspectorFrameOverride(null);
                       }}
                     >
-                      {SPIDER_PART_LABELS[partId]}
+                      {t(SPIDER_PART_KEYS[partId])}
                     </button>
                   ))}
                 </div>
               ) : null}
-              <div className="tm-icon-editor-plist-role-tabs" role="tablist" aria-label="Plist role">
+              <div
+                className="tm-icon-editor-plist-role-tabs"
+                role="tablist"
+                aria-label={t("plist.roleTabsAria")}
+              >
                 {roleOrder.map((role) => (
                   <button
                     key={role}
@@ -3915,7 +3994,7 @@ export function IconEditorToolPanel() {
                       setInspectorFrameOverride(null);
                     }}
                   >
-                    {ROLE_LABELS[role]}
+                    {t(`roles.${role}`)}
                   </button>
                 ))}
               </div>
@@ -3923,24 +4002,31 @@ export function IconEditorToolPanel() {
                 {!effectiveInspectorFrameName ? (
                   <div className="tm-icon-editor-panel-empty">
                     <FileCode2 size={20} strokeWidth={1.75} aria-hidden />
-                    <p className="tm-icon-editor-panel-empty-title">No frame selected</p>
+                    <p className="tm-icon-editor-panel-empty-title">
+                      {t("plist.noFrameSelected")}
+                    </p>
                     <p className="tm-icon-editor-panel-empty-hint">
-                      Choose a frame for this role to inspect plist values.
+                      {t("plist.noFrameSelectedHint")}
                     </p>
                   </div>
                 ) : !inspectorFrame || !inspectorEffectiveOffset || !inspectorTrim ? (
                   <div className="tm-icon-editor-panel-empty tm-icon-editor-panel-empty-warning">
                     <FileCode2 size={20} strokeWidth={1.75} aria-hidden />
-                    <p className="tm-icon-editor-panel-empty-title">Frame data unavailable</p>
+                    <p className="tm-icon-editor-panel-empty-title">
+                      {t("plist.frameUnavailable")}
+                    </p>
                     <p className="tm-icon-editor-panel-empty-hint">
-                      Could not load plist data for{" "}
-                      <code>{effectiveInspectorFrameName}</code>.
+                      {t("plist.frameUnavailableHint", {
+                        frameName: effectiveInspectorFrameName,
+                      })}
                     </p>
                   </div>
                 ) : (
                   <div className="tm-icon-editor-plist-content">
                     <div className="tm-icon-editor-plist-frame-head">
-                      <span className="tm-icon-editor-plist-section-label">Active frame</span>
+                      <span className="tm-icon-editor-plist-section-label">
+                        {t("plist.activeFrame")}
+                      </span>
                       <div className="tm-icon-editor-plist-frame-row">
                         <code className="tm-icon-editor-plist-frame-name" title={effectiveInspectorFrameName}>
                           {effectiveInspectorFrameName}
@@ -3949,8 +4035,8 @@ export function IconEditorToolPanel() {
                           <button
                             type="button"
                             className="tm-icon-editor-plist-rotate-btn"
-                            aria-label="Rotate sprite 90 degrees counter-clockwise"
-                            title="Rotate 90° counter-clockwise"
+                            aria-label={t("plist.rotateCounterClockwiseAria")}
+                            title={t("plist.rotateCounterClockwiseTooltip")}
                             onClick={() => rotateFrame("counterClockwise")}
                             disabled={isBusy}
                           >
@@ -3959,8 +4045,8 @@ export function IconEditorToolPanel() {
                           <button
                             type="button"
                             className="tm-icon-editor-plist-rotate-btn"
-                            aria-label="Rotate sprite 90 degrees clockwise"
-                            title="Rotate 90° clockwise"
+                            aria-label={t("plist.rotateClockwiseAria")}
+                            title={t("plist.rotateClockwiseTooltip")}
                             onClick={() => rotateFrame("clockwise")}
                             disabled={isBusy}
                           >
@@ -3972,23 +4058,31 @@ export function IconEditorToolPanel() {
 
                     <section className="tm-icon-editor-plist-section" aria-labelledby="plist-trim-title">
                       <h4 id="plist-trim-title" className="tm-icon-editor-plist-section-title">
-                        Trim insets
+                        {t("plist.trimInsets")}
                       </h4>
                       <div className="tm-icon-editor-plist-trim-grid">
                         <div className="tm-icon-editor-plist-metric">
-                          <span className="tm-icon-editor-plist-metric-label">Left</span>
+                          <span className="tm-icon-editor-plist-metric-label">
+                            {t("plist.left")}
+                          </span>
                           <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.left}</span>
                         </div>
                         <div className="tm-icon-editor-plist-metric">
-                          <span className="tm-icon-editor-plist-metric-label">Top</span>
+                          <span className="tm-icon-editor-plist-metric-label">
+                            {t("plist.top")}
+                          </span>
                           <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.top}</span>
                         </div>
                         <div className="tm-icon-editor-plist-metric">
-                          <span className="tm-icon-editor-plist-metric-label">Right</span>
+                          <span className="tm-icon-editor-plist-metric-label">
+                            {t("plist.right")}
+                          </span>
                           <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.right}</span>
                         </div>
                         <div className="tm-icon-editor-plist-metric">
-                          <span className="tm-icon-editor-plist-metric-label">Bottom</span>
+                          <span className="tm-icon-editor-plist-metric-label">
+                            {t("plist.bottom")}
+                          </span>
                           <span className="tm-icon-editor-plist-metric-value">{inspectorTrim.bottom}</span>
                         </div>
                       </div>
@@ -3996,7 +4090,7 @@ export function IconEditorToolPanel() {
 
                     <section className="tm-icon-editor-plist-section" aria-labelledby="plist-offset-title">
                       <h4 id="plist-offset-title" className="tm-icon-editor-plist-section-title">
-                        Sprite offset
+                        {t("plist.spriteOffset")}
                       </h4>
                       <div className="tm-icon-editor-plist-offset-grid">
                         <SpriteOffsetAxisControls
@@ -4016,15 +4110,15 @@ export function IconEditorToolPanel() {
                       </div>
                       <dl className="tm-icon-editor-plist-kv-list">
                         <div className="tm-icon-editor-plist-row">
-                          <dt>Merged offset</dt>
-                          <dd title="Offset after merge when pre-merge offset is {0,0}">
+                          <dt>{t("plist.mergedOffset")}</dt>
+                          <dd title={t("plist.mergedOffsetTooltip")}>
                             {mergeOffsetFromNullifiedInput
                               ? formatPairF32(mergeOffsetFromNullifiedInput)
                               : "—"}
                           </dd>
                         </div>
                         <div className="tm-icon-editor-plist-row">
-                          <dt>Plist offset</dt>
+                          <dt>{t("plist.plistOffset")}</dt>
                           <dd>{formatPairF32(inspectorEffectiveOffset)}</dd>
                         </div>
                       </dl>
@@ -4032,17 +4126,17 @@ export function IconEditorToolPanel() {
 
                     <section className="tm-icon-editor-plist-section" aria-labelledby="plist-atlas-title">
                       <h4 id="plist-atlas-title" className="tm-icon-editor-plist-section-title">
-                        Atlas
+                        {t("plist.atlas")}
                       </h4>
                       <dl className="tm-icon-editor-plist-kv-list">
                         <div className="tm-icon-editor-plist-row">
-                          <dt>spriteSize</dt>
+                          <dt>{t("plist.spriteSize")}</dt>
                           <dd>
                             {formatIntPair(inspectorFrame.spriteSize.width, inspectorFrame.spriteSize.height)}
                           </dd>
                         </div>
                         <div className="tm-icon-editor-plist-row">
-                          <dt>spriteSourceSize</dt>
+                          <dt>{t("plist.spriteSourceSize")}</dt>
                           <dd>
                             {formatIntPair(
                               inspectorFrame.spriteSourceSize.width,
@@ -4051,7 +4145,7 @@ export function IconEditorToolPanel() {
                           </dd>
                         </div>
                         <div className="tm-icon-editor-plist-row">
-                          <dt>textureRect</dt>
+                          <dt>{t("plist.textureRect")}</dt>
                           <dd>{formatTextureRect(inspectorFrame.textureRect)}</dd>
                         </div>
                       </dl>
@@ -4080,8 +4174,7 @@ export function IconEditorToolPanel() {
                     setInspectorRole(target);
                   }}
                 >
-                  {target[0].toUpperCase()}
-                  {target.slice(1)}
+                  {t(`roles.${target}`)}
                 </button>
               ))}
             </div>

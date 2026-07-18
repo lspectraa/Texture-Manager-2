@@ -1,4 +1,5 @@
 import { FolderInput, FolderOutput } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "../types";
 import { FolderPathField } from "./FolderPathField";
 import { ToolSection } from "./ToolSection";
@@ -24,15 +25,17 @@ export function ToolPathsSection({
   outputPlaceholder = "C:/path/to/output",
   mirrorOutputOnInputBrowse = true,
 }: ToolPathsSectionProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolSection
-      title="Source & Output"
-      subtitle="Choose where the operation reads from and writes results"
+      title={t("common.sourceAndOutput")}
+      subtitle={t("common.sourceAndOutputDescription")}
       icon={FolderInput}
       columns={2}
     >
       <FolderPathField
-        label="Input directory"
+        label={t("common.inputDirectory")}
         value={inputDir}
         onChange={onInputDirChange}
         pickFolder={pickFolder}
@@ -49,7 +52,7 @@ export function ToolPathsSection({
         }
       />
       <FolderPathField
-        label="Output directory"
+        label={t("common.outputDirectory")}
         value={outputDir}
         onChange={onOutputDirChange}
         pickFolder={pickFolder}
@@ -57,7 +60,7 @@ export function ToolPathsSection({
       />
       <p className="tm-tool-section-note">
         <FolderOutput size={14} aria-hidden />
-        Output stays separate unless you browse input into an empty output path.
+        {t("common.outputMirroringNote")}
       </p>
     </ToolSection>
   );

@@ -1,4 +1,5 @@
 import { Gauge } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
   ToolNumberField,
@@ -27,6 +28,8 @@ export function SplitterToolPanel({
   onSheetConcurrencyChange,
   pickFolder,
 }: SplitterToolPanelProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolPage accent="sky">
       <ToolPageHeader toolId="splitter" />
@@ -39,13 +42,13 @@ export function SplitterToolPanel({
         inputPlaceholder="C:/path/to/texturepack"
       />
       <ToolSection
-        title="Performance"
-        subtitle="Control how many gamesheets are processed in parallel"
+        title={t("splitter.performance")}
+        subtitle={t("splitter.performanceDescription")}
         icon={Gauge}
       >
         <ToolNumberField
-          label="Concurrent gamesheets"
-          hint="1–64"
+          label={t("splitter.concurrentGamesheets")}
+          hint={t("common.range1To64")}
           value={sheetConcurrency}
           min={1}
           max={64}

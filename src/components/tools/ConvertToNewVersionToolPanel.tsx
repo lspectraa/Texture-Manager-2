@@ -1,4 +1,5 @@
 import { RefreshCw } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
   ToolNumberField,
@@ -34,6 +35,8 @@ export function ConvertToNewVersionToolPanel({
   onSheetConcurrencyChange,
   pickFolder,
 }: ConvertToNewVersionToolPanelProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolPage accent="amber">
       <ToolPageHeader toolId="convertToNewVersion" />
@@ -45,20 +48,20 @@ export function ConvertToNewVersionToolPanel({
         pickFolder={pickFolder}
       />
       <ToolSection
-        title="Version Target"
-        subtitle="Pick the destination game version and processing concurrency"
+        title={t("convertToNewVersion.versionTarget")}
+        subtitle={t("convertToNewVersion.versionTargetDescription")}
         icon={RefreshCw}
         columns={2}
       >
         <ToolSelectField
-          label="Previous game version"
+          label={t("convertToNewVersion.previousGameVersion")}
           value={gameVersion}
           options={versionOptions}
           onChange={onGameVersionChange}
         />
         <ToolNumberField
-          label="Concurrent gamesheets"
-          hint="1–64"
+          label={t("convertToNewVersion.concurrentGamesheets")}
+          hint={t("common.range1To64")}
           value={sheetConcurrency}
           min={1}
           max={64}

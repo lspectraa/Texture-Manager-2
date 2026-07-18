@@ -1,4 +1,5 @@
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 type ToolFilePathFieldProps = {
   label: string;
@@ -15,12 +16,16 @@ export function ToolFilePathField({
   label,
   hint,
   value,
-  placeholder = "Select file",
-  browseLabel = "Browse",
+  placeholder,
+  browseLabel,
   browseIcon: BrowseIcon,
   disabled = false,
   onBrowse,
 }: ToolFilePathFieldProps) {
+  const { t } = useTranslation("common");
+  const resolvedPlaceholder = placeholder ?? t("selectFile");
+  const resolvedBrowseLabel = browseLabel ?? t("browse");
+
   return (
     <label className="tm-tool-field">
       <span className="tm-tool-field-label">
@@ -28,7 +33,12 @@ export function ToolFilePathField({
         {hint ? <span className="tm-tool-field-hint">{hint}</span> : null}
       </span>
       <div className="tm-tool-path-input">
-        <input value={value} readOnly placeholder={placeholder} disabled={disabled} />
+        <input
+          value={value}
+          readOnly
+          placeholder={resolvedPlaceholder}
+          disabled={disabled}
+        />
         <button
           type="button"
           className="tm-tool-path-browse"
@@ -36,7 +46,7 @@ export function ToolFilePathField({
           disabled={disabled}
         >
           {BrowseIcon ? <BrowseIcon size={15} /> : null}
-          {browseLabel}
+          {resolvedBrowseLabel}
         </button>
       </div>
     </label>

@@ -1,4 +1,5 @@
 import { Palette, SlidersHorizontal } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -40,6 +41,8 @@ export function GlowMakerToolPanel({
   onCompositeLayersChange,
   pickFolder,
 }: GlowMakerToolPanelProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolPage accent="cyan">
       <ToolPageHeader toolId="glowMaker" />
@@ -51,22 +54,22 @@ export function GlowMakerToolPanel({
         pickFolder={pickFolder}
       />
       <ToolSection
-        title="Glow Parameters"
-        subtitle="Adjust stroke width and alpha filtering thresholds"
+        title={t("glowMaker.parameters")}
+        subtitle={t("glowMaker.parametersDescription")}
         icon={SlidersHorizontal}
         columns={2}
       >
         <ToolNumberField
-          label="Glow thickness"
-          hint="1–128"
+          label={t("glowMaker.thickness")}
+          hint={t("glowMaker.thicknessRange")}
           value={thickness}
           min={1}
           max={128}
           onChange={onThicknessChange}
         />
         <ToolNumberField
-          label="Outline alpha minimum"
-          hint="0–255"
+          label={t("glowMaker.outlineAlphaMinimum")}
+          hint={t("glowMaker.alphaRange")}
           value={tolerance}
           min={0}
           max={255}
@@ -74,18 +77,18 @@ export function GlowMakerToolPanel({
         />
       </ToolSection>
       <ToolSection
-        title="Generation Mode"
-        subtitle="Choose compositing and color spectrum behavior"
+        title={t("glowMaker.generationMode")}
+        subtitle={t("glowMaker.generationModeDescription")}
         icon={Palette}
         columns={2}
       >
         <ToolCheckboxField
-          label="Composite icon layers before glow (primary + secondary + extra)"
+          label={t("glowMaker.compositeLayers")}
           checked={compositeLayers}
           onChange={onCompositeLayersChange}
         />
         <ToolCheckboxField
-          label="Rainbow glow (extended spectrum, cyan → purple → reddish-violet)"
+          label={t("glowMaker.rainbowGlow")}
           checked={rainbowGlow}
           onChange={onRainbowGlowChange}
         />

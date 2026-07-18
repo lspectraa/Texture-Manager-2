@@ -1,0 +1,67 @@
+import type { AppLocaleResources } from "../../types";
+
+const settings: AppLocaleResources["settings"] = {
+  title: "Настройки",
+  description:
+    "Общие настройки внешнего вида, поиска установленной игры и параметров инструментов по умолчанию.",
+  statusAria: "Состояние настроек",
+  themeChip: "Тема: {{theme}}",
+  concurrentChip: "Параллельно: {{count}}",
+  gdChip: "GD: {{status}}",
+  appearance: {
+    title: "Внешний вид",
+    subtitle:
+      "Выберите оформление — этот же выбор будет доступен при первом запуске",
+  },
+  theme: "Тема",
+  language: {
+    title: "Язык",
+    subtitle: "Выберите язык интерфейса приложения",
+    label: "Язык",
+    aria: "Язык",
+  },
+  background: {
+    label: "Фон приложения",
+    aria: "Фон приложения",
+    random: "Случайный",
+    defaultMeta: "По умолчанию",
+    opacity: "Прозрачность фона",
+    noneFound:
+      "Изображения Geometry Dash game_bg_* пока не найдены — укажите правильный путь установки GD, чтобы обнаружить их.",
+  },
+  performance: {
+    title: "Производительность",
+    subtitle:
+      "Количество атласов, обрабатываемых инструментами одновременно по умолчанию",
+    concurrentGamesheets: "Одновременно обрабатываемых атласов",
+    rangeHint: "1–64",
+  },
+  cache: {
+    title: "Кэш и данные",
+    subtitle: "Корневая папка игровых файлов и кэш разделения",
+    gameFilesRoot: "Корневая папка игровых файлов",
+    splitCache: "Кэш разделения",
+    openCacheFolder: "Открыть папку кэша",
+    resetDefaults: "Сбросить настройки",
+  },
+  geometryDash: {
+    title: "Geometry Dash",
+    subtitle:
+      "Установка Steam, используемая для стандартных Resources и путей Geode",
+    notFound: "Не найдено",
+    manualOverride: "Указано вручную",
+    autoDetected: "Обнаружено автоматически",
+    overrideActive: "Используется путь, указанный вручную",
+    detectedPathAvailable: "Обнаруженный путь доступен",
+    noAutoDetect: "Автоматический поиск не дал результатов",
+    installLocation: "Расположение установки",
+    browseHint:
+      "Выберите папку Geometry Dash либо установите игру через Steam и повторите поиск.",
+    applyPath: "Применить путь",
+    clearOverride: "Сбросить указанный путь",
+    redetect: "Найти снова",
+  },
+  saveFailed: "Не удалось сохранить языковые настройки. {{error}}",
+};
+
+export default settings;

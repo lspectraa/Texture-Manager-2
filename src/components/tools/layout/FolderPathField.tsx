@@ -1,4 +1,5 @@
 import { FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "../types";
 import { ToolField } from "./ToolField";
 
@@ -19,6 +20,8 @@ export function FolderPathField({
   placeholder = "C:/path/to/folder",
   onBrowse,
 }: FolderPathFieldProps) {
+  const { t } = useTranslation("common");
+
   return (
     <ToolField label={label}>
       <div className="tm-tool-path-input">
@@ -41,7 +44,7 @@ export function FolderPathField({
           }
         >
           <FolderOpen size={15} />
-          Browse
+          {t("browse")}
         </button>
       </div>
     </ToolField>

@@ -4,27 +4,19 @@ import {
   ArrowRight,
   CheckCircle2,
   FolderOpen,
-  Globe,
   RefreshCw,
 } from "lucide-react";
-import type { AppSettingsView } from "../domain/settings";
+import { useTranslation } from "react-i18next";
+import type { AppLanguage, AppSettingsView } from "../domain/settings";
+import { APP_LANGUAGES } from "../i18n/languages";
 import type { AppTheme } from "../utils/theme";
 import { applyTheme, setStoredTheme } from "../utils/theme";
 import { shortenPathForDisplay } from "../utils/pathDisplay";
 import type { PickFolderFn } from "./tools/types";
 import { FolderPathField } from "./tools/layout";
 import { GlassFrost } from "./GlassFrost";
+import { LanguageFlag } from "./LanguageFlag";
 import { ThemeStylePicker } from "./ThemeStylePicker";
-
-export type OnboardingLanguageOption = {
-  id: string;
-  label: string;
-  available: boolean;
-};
-
-const LANGUAGE_OPTIONS: OnboardingLanguageOption[] = [
-  { id: "en", label: "English", available: true },
-];
 
 type OnboardingStepId = "language" | "theme" | "geometryDash";
 
@@ -44,17 +36,20 @@ function StatusChip({
   );
 }
 
-function geometryDashStatus(settings: AppSettingsView): {
+function geometryDashStatus(
+  settings: AppSettingsView,
+  t: (key: string) => string,
+): {
   tone: StatusChipTone;
   label: string;
 } {
   if (!settings.geometryDashFound) {
-    return { tone: "danger", label: "Not found" };
+    return { tone: "danger", label: t("gd.notFound") };
   }
   if (settings.geometryDashOverrideActive) {
-    return { tone: "warning", label: "Manual override" };
+    return { tone: "warning", label: t("gd.manualOverride") };
   }
-  return { tone: "success", label: "Auto-detected" };
+  return { tone: "success", label: t("gd.autoDetected") };
 }
 
 export type OnboardingFlowProps = {
@@ -63,9 +58,10 @@ export type OnboardingFlowProps = {
   error?: string | null;
   pickFolder: PickFolderFn;
   onThemeChange: (theme: AppTheme) => void;
+  onLanguagePreview?: (language: AppLanguage) => void;
   onGeometryDashPathSelected: (path: string) => void;
   onRedetectGeometryDash: () => void;
-  onComplete: (choices: { language: string; theme: AppTheme }) => void;
+  onComplete: (choices: { language: AppLanguage; theme: AppTheme }) => void;
 };
 
 export function OnboardingFlow({
@@ -74,15 +70,15 @@ export function OnboardingFlow({
   error = null,
   pickFolder,
   onThemeChange,
+  onLanguagePreview,
   onGeometryDashPathSelected,
   onRedetectGeometryDash,
   onComplete,
 }: OnboardingFlowProps) {
+  const { t } = useTranslation("onboarding");
   const titleId = useId();
   const [stepIndex, setStepIndex] = useState(0);
-  const [language, setLanguage] = useState(
-    () => settings.language?.trim() || "en",
-  );
+  const [language, setLanguage] = useState<AppLanguage>(() => settings.language);
   const [theme, setTheme] = useState<AppTheme>(() => settings.theme);
   const [draftPath, setDraftPath] = useState(
     () => settings.geometryDashResolved || settings.geometryDashDetected || "",
@@ -97,27 +93,28 @@ export function OnboardingFlow({
   const stepId = STEPS[stepIndex] ?? "language";
   const isFirst = stepIndex === 0;
   const isLast = stepIndex === STEPS.length - 1;
-  const gdStatus = geometryDashStatus(settings);
+  const gdStatus = geometryDashStatus(settings, t);
   const displayPath = useMemo(() => {
     const path =
       settings.geometryDashResolved ||
       settings.geometryDashDetected ||
       draftPath.trim();
-    return path ? shortenPathForDisplay(path) : "No install found yet";
+    return path ? shortenPathForDisplay(path) : t("gd.noInstallYet");
   }, [
     draftPath,
     settings.geometryDashDetected,
     settings.geometryDashResolved,
+    t,
   ]);
 
   const stepTitle = (() => {
     switch (stepId) {
       case "language":
-        return "Choose your language";
+        return t("steps.language");
       case "theme":
-        return "Pick your style";
+        return t("steps.theme");
       case "geometryDash":
-        return "Confirm Geometry Dash";
+        return t("steps.geometryDash");
       default: {
         const _exhaustive: never = stepId;
         return _exhaustive;
@@ -163,38 +160,44 @@ export function OnboardingFlow({
             <div
               className="tm-onboarding-language-grid"
               role="radiogroup"
-              aria-label="Language"
+              aria-label={t("languageAria")}
             >
-              {LANGUAGE_OPTIONS.map((option) => {
-                const selected = language === option.id;
+              {APP_LANGUAGES.map((option) => {
+                const selected = language === option.code;
                 return (
                   <button
-                    key={option.id}
+                    key={option.code}
                     type="button"
                     role="radio"
                     aria-checked={selected}
-                    disabled={!option.available || busy}
+                    disabled={busy}
                     className={`tm-onboarding-language-card${
                       selected ? " selected" : ""
                     }`}
-                    onClick={() => setLanguage(option.id)}
+                    onClick={() => {
+                      setLanguage(option.code);
+                      onLanguagePreview?.(option.code);
+                    }}
                   >
                     <span className="tm-onboarding-language-icon" aria-hidden>
-                      <Globe size={22} strokeWidth={1.85} />
+                      <LanguageFlag code={option.code} size={28} />
                     </span>
-                    <span className="tm-onboarding-language-label">
-                      {option.label}
+                    <span className="tm-onboarding-language-copy">
+                      <span className="tm-onboarding-language-label">
+                        {option.nativeName}
+                      </span>
+                      {option.englishName !== option.nativeName ? (
+                        <span className="tm-onboarding-language-meta">
+                          {option.englishName}
+                        </span>
+                      ) : null}
                     </span>
-                    {option.available ? (
-                      <StatusChip tone="success">Available</StatusChip>
-                    ) : (
-                      <StatusChip tone="neutral">Coming soon</StatusChip>
-                    )}
+                    <StatusChip tone="success">{t("common:available")}</StatusChip>
                   </button>
                 );
               })}
               <p className="tm-onboarding-hint">
-                More languages will appear here as translations are added.
+                {t("languageHint")}
               </p>
             </div>
           ) : null}
@@ -214,7 +217,7 @@ export function OnboardingFlow({
               <div className="tm-onboarding-gd-status">
                 <StatusChip tone={gdStatus.tone}>{gdStatus.label}</StatusChip>
                 {settings.geometryDashOverrideActive ? (
-                  <StatusChip tone="warning">Override active</StatusChip>
+                  <StatusChip tone="warning">{t("gd.overrideActive")}</StatusChip>
                 ) : null}
               </div>
 
@@ -223,7 +226,7 @@ export function OnboardingFlow({
               </p>
 
               <FolderPathField
-                label="Install location"
+                label={t("gd.installLocation")}
                 value={draftPath}
                 onChange={setDraftPath}
                 pickFolder={pickFolder}
@@ -242,7 +245,7 @@ export function OnboardingFlow({
                   onClick={() => onGeometryDashPathSelected(draftPath.trim())}
                 >
                   <FolderOpen size={14} strokeWidth={1.9} />
-                  Apply path
+                  {t("gd.applyPath")}
                 </button>
                 <button
                   type="button"
@@ -251,19 +254,18 @@ export function OnboardingFlow({
                   onClick={onRedetectGeometryDash}
                 >
                   <RefreshCw size={14} strokeWidth={1.9} />
-                  Re-detect
+                  {t("gd.redetect")}
                 </button>
               </div>
 
               {!settings.geometryDashFound ? (
                 <p className="tm-onboarding-warning" role="status">
-                  Geometry Dash was not found. You can finish setup now and set
-                  the install path later in Settings.
+                  {t("gd.notFoundWarning")}
                 </p>
               ) : (
                 <p className="tm-onboarding-hint">
                   <CheckCircle2 size={14} strokeWidth={2.1} aria-hidden />
-                  Looks good — this path will be used for game files and tools.
+                  {t("gd.looksGood")}
                 </p>
               )}
             </div>
@@ -285,7 +287,7 @@ export function OnboardingFlow({
               onClick={goBack}
             >
               <ArrowLeft size={16} strokeWidth={2.1} aria-hidden />
-              Back
+              {t("common:back")}
             </button>
             <button
               type="button"
@@ -293,7 +295,7 @@ export function OnboardingFlow({
               disabled={busy || (stepId === "language" && !language)}
               onClick={goNext}
             >
-              {isLast ? "Finish" : "Next"}
+              {isLast ? t("common:finish") : t("common:next")}
               {isLast ? (
                 <CheckCircle2 size={16} strokeWidth={2.1} aria-hidden />
               ) : (
@@ -305,7 +307,7 @@ export function OnboardingFlow({
           <div
             className="tm-onboarding-progress"
             role="tablist"
-            aria-label="Setup progress"
+            aria-label={t("progressAria")}
           >
             {STEPS.map((id, index) => {
               const active = index === stepIndex;
@@ -316,7 +318,7 @@ export function OnboardingFlow({
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  aria-label={`Step ${index + 1}: ${id}`}
+                  aria-label={t("stepAria", { number: index + 1, id })}
                   className={`tm-onboarding-dot${active ? " is-active" : ""}${
                     complete ? " is-complete" : ""
                   }`}

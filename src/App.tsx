@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
 import {
   Sparkles,
   Activity,
@@ -60,7 +61,7 @@ import {
   shortenPathForDisplay,
 } from "./utils/pathDisplay";
 import convertVersionMap from "./config/convertVersionMap.json";
-import type { AppSettingsView } from "./domain/settings";
+import type { AppLanguage, AppSettingsView } from "./domain/settings";
 import {
   CURRENT_ONBOARDING_VERSION,
   DEFAULT_APP_SETTINGS_VIEW,
@@ -74,6 +75,8 @@ import {
   setGeometryDashDir,
 } from "./services/tauriSettings";
 import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
+import { changeAppLanguage } from "./i18n";
+import { resolveInitialAppLanguage } from "./i18n/languages";
 
 type PrimaryTool =
   | "home"
@@ -135,6 +138,7 @@ function readStoredCollapsed(key: string): boolean {
 }
 
 function App() {
+  const { t } = useTranslation();
   const [selectedTool, setSelectedTool] = useState<PrimaryTool>("home");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
@@ -260,7 +264,15 @@ function App() {
     const loadDefaults = async (): Promise<void> => {
       try {
         const settings = await getAppSettings();
-        setAppSettings(settings);
+        const language = resolveInitialAppLanguage({
+          persistedLanguage: settings.language,
+          onboardingComplete:
+            settings.onboardingVersion >= CURRENT_ONBOARDING_VERSION,
+        });
+        const resolvedSettings =
+          settings.language === language ? settings : { ...settings, language };
+        await changeAppLanguage(language);
+        setAppSettings(resolvedSettings);
         applyTheme(settings.theme);
         setStoredTheme(settings.theme);
 
@@ -282,7 +294,7 @@ function App() {
         setLoadError(
           error instanceof Error
             ? error.message
-            : "Failed to load phase defaults from backend.",
+            : t("errors:defaults.loadFailed"),
         );
       } finally {
         setSettingsHydrated(true);
@@ -293,7 +305,7 @@ function App() {
       const message =
         error instanceof Error
           ? error.message
-          : "Unexpected error while loading defaults.";
+          : t("errors:defaults.unexpectedLoadFailure");
       setLoadError(message);
       setSettingsHydrated(true);
     });
@@ -304,6 +316,9 @@ function App() {
       if (prev.theme !== view.theme) {
         applyTheme(view.theme);
         setStoredTheme(view.theme);
+      }
+      if (prev.language !== view.language) {
+        void changeAppLanguage(view.language);
       }
       const optimisticOpacity = optimisticBackgroundOpacityRef.current;
       if (optimisticOpacity !== null) {
@@ -363,13 +378,13 @@ function App() {
 
   const pickFolder = async (assign: (path: string) => void): Promise<void> => {
     if (!isTauriRuntime()) {
-      setRunError("Folder picker is available in Tauri runtime.");
+      setRunError(t("errors:runtime.folderPickerUnavailable"));
       return;
     }
     const selected = await open({
       directory: true,
       multiple: false,
-      title: "Select folder",
+      title: t("common:selectFolder"),
     });
     if (typeof selected === "string" && selected.trim().length > 0) {
       assign(selected);
@@ -395,12 +410,13 @@ function App() {
   );
 
   const completeOnboarding = useCallback(
-    async (choices: { language: string; theme: AppTheme }): Promise<void> => {
+    async (choices: { language: AppLanguage; theme: AppTheme }): Promise<void> => {
       setOnboardingError(null);
       setOnboardingBusy(true);
       try {
         applyTheme(choices.theme);
         setStoredTheme(choices.theme);
+        await changeAppLanguage(choices.language);
         const view = await saveAppSettings({
           language: choices.language,
           theme: choices.theme,
@@ -418,6 +434,34 @@ function App() {
     [applySettingsView],
   );
 
+  const handleLanguageChange = useCallback(
+    async (language: AppLanguage): Promise<void> => {
+      const previousLanguage = appSettings.language;
+      if (language === previousLanguage) {
+        return;
+      }
+      setSettingsError(null);
+      setAppSettings((previous) => ({ ...previous, language }));
+      await changeAppLanguage(language);
+      try {
+        const view = await saveAppSettings({ language });
+        applySettingsView(view);
+      } catch (error) {
+        await changeAppLanguage(previousLanguage);
+        setAppSettings((previous) => ({
+          ...previous,
+          language: previousLanguage,
+        }));
+        setSettingsError(
+          t("settings:saveFailed", {
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        );
+      }
+    },
+    [appSettings.language, applySettingsView, t],
+  );
+
   const needsOnboarding =
     settingsHydrated &&
     appSettings.onboardingVersion < CURRENT_ONBOARDING_VERSION;
@@ -430,7 +474,7 @@ function App() {
 
     if (selectedTool === "splitter") {
       if (!splitterInputDir || !splitterOutputDir) {
-        setRunError("Splitter requires both input and output directories.");
+        setRunError(t("errors:validation.splitterPathsRequired"));
         return;
       }
       request = {
@@ -446,7 +490,7 @@ function App() {
 
     if (selectedTool === "porter") {
       if (!porterInputDir || !porterOutputDir) {
-        setRunError("Porter requires both input and output directories.");
+        setRunError(t("errors:validation.porterPathsRequired"));
         return;
       }
 
@@ -465,7 +509,7 @@ function App() {
 
     if (selectedTool === "merger") {
       if (!mergerInputDir || !mergerOutputDir) {
-        setRunError("Merger requires both input and output directories.");
+        setRunError(t("errors:validation.mergerPathsRequired"));
         return;
       }
       request = {
@@ -483,7 +527,7 @@ function App() {
 
     if (selectedTool === "glowMaker") {
       if (!glowInputDir || !glowOutputDir) {
-        setRunError("Glow Maker requires both input and output directories.");
+        setRunError(t("errors:validation.glowMakerPathsRequired"));
         return;
       }
       request = {
@@ -503,11 +547,11 @@ function App() {
 
     if (selectedTool === "convertToNewVersion") {
       if (!convertInputDir || !convertOutputDir) {
-        setRunError("Convert to New Version requires both input and output directories.");
+        setRunError(t("errors:validation.convertPathsRequired"));
         return;
       }
       if (!convertGameVersion.trim()) {
-        setRunError("Convert to New Version requires a previous game version.");
+        setRunError(t("errors:validation.convertVersionRequired"));
         return;
       }
       request = {
@@ -523,7 +567,7 @@ function App() {
     }
     if (selectedTool === "randomizer") {
       if (!randomizerInputDir || !randomizerOutputDir) {
-        setRunError("Randomizer requires both input and output directories.");
+        setRunError(t("errors:validation.randomizerPathsRequired"));
         return;
       }
       request = {
@@ -539,7 +583,7 @@ function App() {
 
     if (selectedTool === "geodeButtons") {
       if (!geodeButtonsInputDir || !geodeButtonsOutputDir) {
-        setRunError("Create Geode Buttons requires both input and output directories.");
+        setRunError(t("errors:validation.geodeButtonsPathsRequired"));
         return;
       }
       request = {
@@ -554,7 +598,7 @@ function App() {
     }
 
     if (!request) {
-      setRunError("No operation request was built.");
+      setRunError(t("errors:validation.operationRequestMissing"));
       return;
     }
 
@@ -585,8 +629,10 @@ function App() {
         /cancelled/i.test(raw) || /operation cancelled/i.test(raw);
       setRunError(
         cancelled
-          ? "Operation cancelled."
-          : `Failed to execute operation through backend. ${redactAbsolutePathsInText(raw)}`,
+          ? t("errors:operation.cancelled")
+          : t("errors:operation.backendExecutionFailed", {
+              error: redactAbsolutePathsInText(raw),
+            }),
       );
     } finally {
       setIsRunning(false);
@@ -693,16 +739,16 @@ function App() {
         : "idle";
   const reportStatusLabel =
     reportState === "running"
-      ? "Running"
+      ? t("reports:status.running")
       : reportState === "success"
-        ? "Complete"
+        ? t("reports:status.complete")
         : reportState === "warning"
-          ? "Warnings"
+          ? t("reports:status.warnings")
           : reportState === "error"
             ? runError
-              ? "Run failed"
-              : "Errors found"
-            : "Ready";
+              ? t("reports:status.runFailed")
+              : t("reports:status.errorsFound")
+            : t("reports:status.ready");
   const isIconEditor = selectedTool === "iconEditor";
   const isHome = selectedTool === "home";
   const isSettings = selectedTool === "settings";
@@ -743,6 +789,9 @@ function App() {
               }).catch(() => {
                 // Error surfaced via settingsError.
               });
+            }}
+            onLanguageChange={(language) => {
+              void handleLanguageChange(language);
             }}
             onConcurrencyChange={(value) => {
               setAppSettings((prev) =>
@@ -1006,6 +1055,10 @@ function App() {
               prev.theme === theme ? prev : { ...prev, theme },
             );
           }}
+          onLanguagePreview={(language) => {
+            void changeAppLanguage(language);
+            setAppSettings((previous) => ({ ...previous, language }));
+          }}
           onGeometryDashPathSelected={(path) => {
             runOnboardingAction(() => setGeometryDashDir(path)).catch(() => {
               // Error surfaced via onboardingError.
@@ -1045,7 +1098,7 @@ function App() {
           role="alertdialog"
           aria-busy="true"
           aria-live="polite"
-          aria-label="Operation in progress"
+          aria-label={t("reports:progress.aria")}
         >
           <div
             className={`tm-progress-card ${overlayState !== "working" ? "tm-progress-complete" : ""}`}
@@ -1070,35 +1123,45 @@ function App() {
             )}
             <p className="tm-progress-title">
               {isCancelling
-                ? "Cancelling…"
+                ? t("reports:progress.cancelling")
                 : overlayState === "success"
-                  ? "Completed"
+                  ? t("reports:progress.completed")
                   : overlayState === "warning"
-                    ? "Completed with warnings"
+                    ? t("reports:progress.completedWithWarnings")
                     : overlayState === "error"
-                      ? "Completed with errors"
-                      : "Working…"}
+                      ? t("reports:progress.completedWithErrors")
+                      : t("reports:progress.working")}
             </p>
             {showProgressDetails && operationProgress ? (
               <>
                 <p className="tm-progress-sheet">
-                  <span className="tm-progress-label">Gamesheet</span>{" "}
+                  <span className="tm-progress-label">
+                    {t("reports:progress.gamesheet")}
+                  </span>{" "}
                   {operationProgress.gamesheetName.trim() || "—"}
                 </p>
                 <p className="tm-progress-count">
-                  {operationProgress.spritesCompleted} /{" "}
-                  {operationProgress.spritesTotal} sprites
+                  {t("reports:progress.sprites", {
+                    count: operationProgress.spritesTotal,
+                    completed: operationProgress.spritesCompleted,
+                    total: operationProgress.spritesTotal,
+                  })}
                 </p>
                 {(operationProgress.plistsTotal ?? 0) > 0 ? (
                   <p className="tm-progress-count">
-                    {operationProgress.plistsCompleted ?? 0} /{" "}
-                    {operationProgress.plistsTotal} plists
+                    {t("reports:progress.plists", {
+                      count: operationProgress.plistsTotal,
+                      completed: operationProgress.plistsCompleted ?? 0,
+                      total: operationProgress.plistsTotal,
+                    })}
                   </p>
                 ) : null}
               </>
             ) : null}
             {showProgressDetails && !operationProgress ? (
-              <p className="tm-progress-muted">Preparing operation…</p>
+              <p className="tm-progress-muted">
+                {t("reports:progress.preparing")}
+              </p>
             ) : null}
             {showProgressDetails && isTauriRuntime() ? (
               <button
@@ -1114,7 +1177,7 @@ function App() {
                   });
                 }}
               >
-                Cancel
+                {t("reports:progress.cancel")}
               </button>
             ) : null}
           </div>
@@ -1166,7 +1229,7 @@ function App() {
                 disabled={isRunning}
               >
                 <Sparkles size={16} />
-                {isRunning ? "Running..." : "Run Operation"}
+                {isRunning ? t("tools:common.running") : t("tools:common.runOperation")}
               </button>
             </div>
           ) : null}
@@ -1196,11 +1259,13 @@ function App() {
               aria-expanded={!isReportCollapsed}
               aria-label={
                 isReportCollapsed
-                  ? "Expand run output panel"
-                  : "Collapse run output panel"
+                  ? t("reports:expandPanelAria")
+                  : t("reports:collapsePanelAria")
               }
               title={
-                isReportCollapsed ? "Show run output" : "Hide run output"
+                isReportCollapsed
+                  ? t("reports:showPanel")
+                  : t("reports:hidePanel")
               }
               disabled={reportPanelTransition.animating}
             >
@@ -1208,7 +1273,9 @@ function App() {
                 <Activity size={16} strokeWidth={1.85} />
               </span>
               <span className="tm-nav-btn-copy">
-                <span className="tm-nav-btn-label">Run Output</span>
+                <span className="tm-nav-btn-label">
+                  {t("reports:panelTitle")}
+                </span>
               </span>
               <span className="tm-shell-panel-title-chevron" aria-hidden>
                 <ChevronRight size={15} />
@@ -1220,7 +1287,9 @@ function App() {
               <div className="tm-report-alert tm-report-alert-error" role="alert">
                 <AlertCircle size={15} strokeWidth={2} />
                 <div className="tm-report-alert-copy">
-                  <span className="tm-report-alert-title">Defaults load error</span>
+                  <span className="tm-report-alert-title">
+                    {t("reports:alerts.defaultsLoadError")}
+                  </span>
                   <span className="tm-report-alert-message">{loadError}</span>
                 </div>
               </div>
@@ -1229,7 +1298,9 @@ function App() {
               <div className="tm-report-alert tm-report-alert-error" role="alert">
                 <AlertCircle size={15} strokeWidth={2} />
                 <div className="tm-report-alert-copy">
-                  <span className="tm-report-alert-title">Run error</span>
+                  <span className="tm-report-alert-title">
+                    {t("reports:alerts.runError")}
+                  </span>
                   <span className="tm-report-alert-message">{runError}</span>
                 </div>
               </div>
@@ -1239,9 +1310,11 @@ function App() {
                 <span className="tm-report-empty-icon" aria-hidden>
                   <Activity size={22} strokeWidth={1.75} />
                 </span>
-                <p className="tm-report-empty-title">No operation has run yet</p>
+                <p className="tm-report-empty-title">
+                  {t("reports:empty.title")}
+                </p>
                 <p className="tm-report-empty-hint">
-                  Run a tool to see results, timing, and issues here.
+                  {t("reports:empty.hint")}
                 </p>
               </div>
             ) : null}
@@ -1270,7 +1343,9 @@ function App() {
                         <Files size={14} strokeWidth={1.9} />
                       </span>
                       <span className="tm-report-stat-copy">
-                        <span className="tm-report-stat-label">Processed</span>
+                        <span className="tm-report-stat-label">
+                          {t("reports:summary.processed")}
+                        </span>
                         <span className="tm-report-stat-value">
                           {report.filesProcessed}
                           <span className="tm-report-stat-value-dim">
@@ -1285,7 +1360,9 @@ function App() {
                         <Clock3 size={14} strokeWidth={1.9} />
                       </span>
                       <span className="tm-report-stat-copy">
-                        <span className="tm-report-stat-label">Elapsed</span>
+                        <span className="tm-report-stat-label">
+                          {t("reports:summary.elapsed")}
+                        </span>
                         <span className="tm-report-stat-value">
                           {(report.elapsedMs / 1000).toFixed(2)} s
                         </span>
@@ -1298,7 +1375,9 @@ function App() {
                       <FolderOutput size={14} strokeWidth={1.9} />
                     </span>
                     <span className="tm-report-output-path-copy">
-                      <span className="tm-report-output-path-label">Output</span>
+                      <span className="tm-report-output-path-label">
+                        {t("reports:summary.output")}
+                      </span>
                       <span className="tm-report-output-path-value">
                         {shortenPathForDisplay(report.outputDir)}
                       </span>
@@ -1309,7 +1388,9 @@ function App() {
                 <section className="tm-report-issues" aria-labelledby="tm-report-issues-title">
                   <div className="tm-report-issues-head">
                     <div className="tm-report-issues-head-main">
-                      <h4 id="tm-report-issues-title">Issues</h4>
+                      <h4 id="tm-report-issues-title">
+                        {t("reports:issues.title")}
+                      </h4>
                       <span className="tm-report-issues-count">{report.issues.length}</span>
                     </div>
                     {report.issues.length > 0 ? (
@@ -1322,21 +1403,25 @@ function App() {
                               setIssuesCsvCopied(false);
                             });
                           }}
-                          title="Copy issues as CSV"
-                          aria-label="Copy issues as CSV"
+                          title={t("reports:issues.copyCsvTooltip")}
+                          aria-label={t("reports:issues.copyCsvAria")}
                         >
                           <Copy size={13} strokeWidth={2} />
-                          <span>{issuesCsvCopied ? "Copied" : "Copy CSV"}</span>
+                          <span>
+                            {issuesCsvCopied
+                              ? t("reports:issues.copied")
+                              : t("reports:issues.copyCsv")}
+                          </span>
                         </button>
                         <button
                           type="button"
                           className="tm-report-issues-action-btn"
                           onClick={handleDownloadIssuesCsv}
-                          title="Download issues as CSV"
-                          aria-label="Download issues as CSV"
+                          title={t("reports:issues.downloadCsvTooltip")}
+                          aria-label={t("reports:issues.downloadCsvAria")}
                         >
                           <Download size={13} strokeWidth={2} />
-                          <span>Download</span>
+                          <span>{t("reports:issues.download")}</span>
                         </button>
                       </div>
                     ) : null}
@@ -1344,7 +1429,7 @@ function App() {
                   {report.issues.length === 0 ? (
                     <div className="tm-report-issues-empty">
                       <CheckCircle2 size={15} strokeWidth={2} />
-                      <span>No issues reported</span>
+                      <span>{t("reports:issues.noIssues")}</span>
                     </div>
                   ) : null}
                   {report.issues.length > 0 ? (
@@ -1355,12 +1440,16 @@ function App() {
                           key={`${issue.level}-${issue.sheet}-${index}`}
                         >
                           <span className={`tm-issue-chip tm-issue-chip-${issue.level}`}>
-                            {issue.level}
+                            {t(`reports:severity.${issue.level}`)}
                           </span>
                           <span className="tm-issue-sheet">{issue.sheet}</span>
                           <span className="tm-issue-message">{issue.message}</span>
                           {issue.count > 1 ? (
-                            <span className="chip tm-issue-count">x{issue.count}</span>
+                            <span className="chip tm-issue-count">
+                              {t("reports:issues.occurrence", {
+                                count: issue.count,
+                              })}
+                            </span>
                           ) : null}
                         </div>
                       ))}

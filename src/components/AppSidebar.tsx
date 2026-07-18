@@ -1,4 +1,6 @@
 import { ChevronLeft, Compass, House, Settings2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { COPYRIGHT_HOLDER, COPYRIGHT_YEAR } from "../config/appMeta";
 import { AppToolId, TOOL_NAV_SECTIONS } from "../config/toolNavigation";
 import { GlassFrost } from "./GlassFrost";
 
@@ -21,12 +23,18 @@ export function AppSidebar({
   onNavigate,
   onCopyrightClick,
 }: AppSidebarProps) {
+  const { t } = useTranslation("navigation");
+  const copyrightTitle = t("copyrightTitle", {
+    holder: COPYRIGHT_HOLDER,
+    year: COPYRIGHT_YEAR,
+  });
+
   return (
     <aside
       className={`tm-sidebar tm-glass-card${collapsed ? " tm-sidebar--collapsed" : ""}${
         animating ? " tm-sidebar--animating" : ""
       }`}
-      aria-label="Application navigation"
+      aria-label={t("applicationAria")}
     >
       <GlassFrost />
       <div className="tm-sidebar-scroll">
@@ -38,17 +46,17 @@ export function AppSidebar({
           onClick={animating ? undefined : collapsed ? onExpand : onCollapse}
           aria-expanded={!collapsed}
           aria-label={
-            collapsed ? "Expand navigation panel" : "Collapse navigation panel"
+            collapsed ? t("expandPanelAria") : t("collapsePanelAria")
           }
-          title={collapsed ? "Show navigation" : "Hide navigation"}
+          title={collapsed ? t("showPanel") : t("hidePanel")}
           disabled={animating}
         >
           <span className="tm-nav-btn-icon" aria-hidden>
             <Compass size={16} strokeWidth={1.85} />
           </span>
           <span className="tm-nav-btn-copy">
-            <span className="tm-shell-panel-title-eyebrow">Navigation</span>
-            <span className="tm-shell-panel-title-name">Texture Manager 2</span>
+            <span className="tm-shell-panel-title-eyebrow">{t("title")}</span>
+            <span className="tm-shell-panel-title-name">{t("common:productName")}</span>
           </span>
           <span className="tm-shell-panel-title-chevron" aria-hidden>
             <ChevronLeft size={15} />
@@ -60,14 +68,14 @@ export function AppSidebar({
           className={`tm-nav-btn tm-nav-btn-home${selectedTool === "home" ? " active" : ""}`}
           onClick={() => onNavigate("home")}
           aria-current={selectedTool === "home" ? "page" : undefined}
-          title="Home"
+          title={t("home")}
         >
           <span className="tm-nav-btn-icon" aria-hidden>
             <House size={17} strokeWidth={1.85} />
           </span>
           <span className="tm-nav-btn-copy">
-            <span className="tm-nav-btn-label">Home</span>
-            <span className="tm-nav-btn-hint">Launcher</span>
+            <span className="tm-nav-btn-label">{t("home")}</span>
+            <span className="tm-nav-btn-hint">{t("homeHint")}</span>
           </span>
         </button>
 
@@ -83,7 +91,7 @@ export function AppSidebar({
                 <span className="tm-sidebar-group-icon" aria-hidden>
                   <SectionIcon size={14} strokeWidth={2} />
                 </span>
-                <span className="tm-sidebar-group-title">{section.title}</span>
+                <span className="tm-sidebar-group-title">{t(section.title)}</span>
               </div>
 
               <div className="tm-sidebar-group-items" role="list">
@@ -110,18 +118,20 @@ export function AppSidebar({
                       role="listitem"
                       aria-current={isActive ? "page" : undefined}
                       title={
-                        isUpcoming ? `${tool.label} — coming soon` : tool.label
+                        isUpcoming
+                          ? t("comingSoonTitle", { tool: t(tool.label) })
+                          : t(tool.label)
                       }
                     >
                       <span className="tm-nav-btn-icon" aria-hidden>
                         <ToolIcon size={16} strokeWidth={1.85} />
                       </span>
                       <span className="tm-nav-btn-label">
-                        {tool.shortLabel ?? tool.label}
+                        {t(tool.shortLabel ?? tool.label)}
                       </span>
                       {isUpcoming ? (
                         <span className="tm-nav-btn-upcoming-badge" aria-hidden>
-                          Soon
+                          {t("comingSoonBadge")}
                         </span>
                       ) : null}
                     </button>
@@ -139,29 +149,31 @@ export function AppSidebar({
           className={`tm-nav-btn tm-nav-btn-sky tm-sidebar-settings${
             selectedTool === "settings" ? " active" : ""
           }`}
-          title="Settings"
-          aria-label="Settings"
+          title={t("settings")}
+          aria-label={t("settings")}
           aria-current={selectedTool === "settings" ? "page" : undefined}
           onClick={() => onNavigate("settings")}
         >
           <span className="tm-nav-btn-icon" aria-hidden>
             <Settings2 size={16} strokeWidth={1.85} />
           </span>
-          <span className="tm-nav-btn-label">Settings</span>
+          <span className="tm-nav-btn-label">{t("settings")}</span>
         </button>
 
         <button
           type="button"
           className="tm-nav-btn tm-nav-btn-sky tm-sidebar-copyright"
-          title="© Spectra 2026"
-          aria-label="Copyright and about"
+          title={copyrightTitle}
+          aria-label={t("copyrightAria")}
           aria-haspopup="dialog"
           onClick={onCopyrightClick}
         >
           <span className="tm-nav-btn-icon" aria-hidden>
             <span className="tm-sidebar-copyright-glyph">©</span>
           </span>
-          <span className="tm-nav-btn-label">Spectra 2026</span>
+          <span className="tm-nav-btn-label">
+            {COPYRIGHT_HOLDER} {COPYRIGHT_YEAR}
+          </span>
         </button>
       </div>
     </aside>

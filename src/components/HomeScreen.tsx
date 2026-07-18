@@ -1,33 +1,38 @@
 import { ArrowRight, Clock3, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { AppToolId, TOOL_COUNT, TOOL_NAV_SECTIONS, UPCOMING_TOOL_COUNT } from "../config/toolNavigation";
 import { GlassFrost } from "./GlassFrost";
+import { TranslationQualityNotice } from "./TranslationQualityNotice";
 
 type HomeScreenProps = {
   onSelectTool: (toolId: AppToolId) => void;
 };
 
 export function HomeScreen({ onSelectTool }: HomeScreenProps) {
+  const { t } = useTranslation("navigation");
+
   return (
     <div className="tm-home">
+      <TranslationQualityNotice variant="banner" />
       <header className="tm-home-hero">
         <GlassFrost className="tm-home-hero-frost" />
         <div className="tm-home-hero-copy">
           <p className="tm-home-eyebrow">
             <Sparkles size={14} aria-hidden />
-            Texture workflow hub
+            {t("homeScreen.eyebrow")}
           </p>
-          <h2 className="tm-home-title">What would you like to work on?</h2>
-          <p className="tm-home-lead">
-            Pick a tool below to open its workspace. Tools are grouped by workflow so you can jump
-            straight to the task at hand.
-          </p>
+          <h2 className="tm-home-title">{t("homeScreen.title")}</h2>
+          <p className="tm-home-lead">{t("homeScreen.lead")}</p>
         </div>
-        <div className="tm-home-hero-stats" aria-label={`${TOOL_COUNT} tools available`}>
+        <div
+          className="tm-home-hero-stats"
+          aria-label={t("homeScreen.toolsAvailableAria", { count: TOOL_COUNT })}
+        >
           <span className="tm-home-stat-value">{TOOL_COUNT}</span>
-          <span className="tm-home-stat-label">tools ready</span>
+          <span className="tm-home-stat-label">{t("homeScreen.toolsReady")}</span>
           {UPCOMING_TOOL_COUNT > 0 ? (
             <span className="tm-home-stat-upcoming">
-              +{UPCOMING_TOOL_COUNT} coming soon
+              {t("homeScreen.comingSoonCount", { count: UPCOMING_TOOL_COUNT })}
             </span>
           ) : null}
         </div>
@@ -48,9 +53,9 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
                 </span>
                 <div>
                   <h3 id={`home-section-${section.id}`} className="tm-home-section-title">
-                    {section.title}
+                    {t(section.title)}
                   </h3>
-                  <p className="tm-home-section-subtitle">{section.subtitle}</p>
+                  <p className="tm-home-section-subtitle">{t(section.subtitle)}</p>
                 </div>
               </div>
 
@@ -83,14 +88,16 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
                     >
                       <GlassFrost className="tm-home-card-frost" />
                       {isUpcoming ? (
-                        <span className="tm-home-card-badge">Coming soon</span>
+                        <span className="tm-home-card-badge">
+                          {t("homeScreen.cardComingSoon")}
+                        </span>
                       ) : null}
                       <span className="tm-home-card-icon" aria-hidden>
                         <ToolIcon size={tool.featured ? 30 : 22} strokeWidth={1.75} />
                       </span>
                       <span className="tm-home-card-body">
-                        <span className="tm-home-card-label">{tool.label}</span>
-                        <span className="tm-home-card-desc">{tool.description}</span>
+                        <span className="tm-home-card-label">{t(tool.label)}</span>
+                        <span className="tm-home-card-desc">{t(tool.description)}</span>
                       </span>
                       <span className="tm-home-card-action" aria-hidden>
                         {isUpcoming ? (

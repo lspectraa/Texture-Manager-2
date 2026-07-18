@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "Run Output",
+  expandPanelAria: "Expand run output panel",
+  collapsePanelAria: "Collapse run output panel",
+  showPanel: "Show run output",
+  hidePanel: "Hide run output",
+  status: {
+    running: "Running",
+    complete: "Complete",
+    warnings: "Warnings",
+    runFailed: "Run failed",
+    errorsFound: "Errors found",
+    ready: "Ready",
+  },
+  progress: {
+    aria: "Operation in progress",
+    cancelling: "Cancelling…",
+    completed: "Completed",
+    completedWithWarnings: "Completed with warnings",
+    completedWithErrors: "Completed with errors",
+    working: "Working…",
+    gamesheet: "Gamesheet",
+    sprites_one: "{{completed}} / {{total}} sprite",
+    sprites_other: "{{completed}} / {{total}} sprites",
+    plists_one: "{{completed}} / {{total}} plist",
+    plists_other: "{{completed}} / {{total}} plists",
+    preparing: "Preparing operation…",
+    cancel: "Cancel",
+  },
+  alerts: {
+    defaultsLoadError: "Defaults load error",
+    runError: "Run error",
+  },
+  empty: {
+    title: "No operation has run yet",
+    hint: "Run a tool to see results, timing, and issues here.",
+  },
+  summary: {
+    processed: "Processed",
+    elapsed: "Elapsed",
+    output: "Output",
+  },
+  issues: {
+    title: "Issues",
+    noIssues: "No issues reported",
+    copyCsv: "Copy CSV",
+    copied: "Copied",
+    copyCsvTooltip: "Copy issues as CSV",
+    copyCsvAria: "Copy issues as CSV",
+    download: "Download",
+    downloadCsvTooltip: "Download issues as CSV",
+    downloadCsvAria: "Download issues as CSV",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "error",
+    warning: "warning",
+  },
+} as const;
+
+export default reports;

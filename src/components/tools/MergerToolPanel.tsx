@@ -1,4 +1,5 @@
 import { Settings2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -32,6 +33,8 @@ export function MergerToolPanel({
   onSheetConcurrencyChange,
   pickFolder,
 }: MergerToolPanelProps) {
+  const { t } = useTranslation("tools");
+
   return (
     <ToolPage accent="sky">
       <ToolPageHeader toolId="merger" />
@@ -44,19 +47,19 @@ export function MergerToolPanel({
         inputPlaceholder="C:/path/to/split/folders"
       />
       <ToolSection
-        title="Merge Options"
-        subtitle="Tune merge behavior and throughput"
+        title={t("merger.options")}
+        subtitle={t("merger.optionsDescription")}
         icon={Settings2}
         columns={2}
       >
         <ToolCheckboxField
-          label="Include files outside plist (phase 2 compatible flag)"
+          label={t("merger.includeOutsidePlist")}
           checked={includeOutsideFiles}
           onChange={onIncludeOutsideFilesChange}
         />
         <ToolNumberField
-          label="Concurrent merge folders"
-          hint="1–64"
+          label={t("merger.concurrentFolders")}
+          hint={t("common.range1To64")}
           value={sheetConcurrency}
           min={1}
           max={64}

@@ -3,8 +3,14 @@ import {
   APP_BACKGROUND_RANDOM,
   DEFAULT_APP_BACKGROUND_OPACITY,
 } from "../config/appBackground";
+import {
+  DEFAULT_APP_LANGUAGE,
+  type AppLanguage,
+} from "../i18n/languages";
 
 export type AppTheme = "dark" | "light";
+
+export type { AppLanguage };
 
 /** `"random"` (default) or a discovered `game_bg_*_001-uhd.png` filename. */
 export type AppBackgroundSetting = typeof APP_BACKGROUND_RANDOM | string;
@@ -20,7 +26,7 @@ export type AppSettingsView = {
   geometryDashOverrideActive: boolean;
   defaultSheetConcurrency: number;
   theme: AppTheme;
-  language: string;
+  language: AppLanguage;
   /** `"random"` or a `game_bg_*_001-uhd.png` id from `availableAppBackgrounds`. */
   appBackground: AppBackgroundSetting;
   /** Opacity applied only to the game background image layer, from 0.1 to 1. */
@@ -37,7 +43,7 @@ export type SaveAppSettingsRequest = {
   clearGeometryDashDir?: boolean;
   defaultSheetConcurrency?: number;
   theme?: AppTheme;
-  language?: string;
+  language?: AppLanguage;
   appBackground?: AppBackgroundSetting;
   appBackgroundOpacity?: number;
   onboardingVersion?: number;
@@ -51,7 +57,7 @@ export const DEFAULT_APP_SETTINGS_VIEW: AppSettingsView = {
   geometryDashOverrideActive: false,
   defaultSheetConcurrency: 5,
   theme: "dark",
-  language: "en",
+  language: DEFAULT_APP_LANGUAGE,
   appBackground: APP_BACKGROUND_RANDOM,
   appBackgroundOpacity: DEFAULT_APP_BACKGROUND_OPACITY,
   onboardingVersion: 0,

@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { AppTheme } from "../utils/theme";
 
 export type ThemeStylePickerProps = {
@@ -17,12 +18,12 @@ export type ThemeStylePickerProps = {
 
 type ThemeOption = {
   id: AppTheme;
-  label: string;
+  labelKey: "light" | "dark";
 };
 
 const THEME_OPTIONS: ThemeOption[] = [
-  { id: "light", label: "Light" },
-  { id: "dark", label: "Dark" },
+  { id: "light", labelKey: "light" },
+  { id: "dark", labelKey: "dark" },
 ];
 
 function ThemeMiniPreview({ theme }: { theme: AppTheme }) {
@@ -72,10 +73,14 @@ export function ThemeStylePicker({
   showTitle,
   className,
 }: ThemeStylePickerProps) {
+  const { t } = useTranslation("common");
   const resolvedShowTitle =
     showTitle ?? (variant === "onboarding" ? true : false);
   const resolvedTitle =
-    title ?? (variant === "onboarding" ? "Pick your style" : "Theme");
+    title ??
+    (variant === "onboarding"
+      ? t("onboarding:pickYourStyle")
+      : t("settings:theme"));
 
   return (
     <div
@@ -119,7 +124,9 @@ export function ThemeStylePicker({
               <div className="tm-theme-style-card-frame">
                 <ThemeMiniPreview theme={option.id} />
               </div>
-              <span className="tm-theme-style-card-label">{option.label}</span>
+              <span className="tm-theme-style-card-label">
+                {t(option.labelKey)}
+              </span>
             </button>
           );
         })}
