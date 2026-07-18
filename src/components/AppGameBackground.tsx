@@ -49,7 +49,7 @@ export function AppGameBackground({
       }
 
       try {
-        const dataUrl = await getAppBackgroundImageDataUrl(resolved.id);
+        const dataUrl = await getAppBackgroundImageDataUrl(resolved);
         if (!cancelled) {
           setImageUrl(dataUrl);
         }

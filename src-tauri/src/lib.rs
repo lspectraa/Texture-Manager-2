@@ -8,7 +8,8 @@ use tauri::{AppHandle, Emitter, Manager};
 use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
 use crate::core::executor::execute_operation_plan;
 use crate::core::game_files::{
-    bootstrap_game_files, refresh_game_files_layout, GameFilesLayoutDto, GameFilesState,
+    bootstrap_game_files, invalidate_geometry_dash_detection_cache, refresh_game_files_layout,
+    GameFilesLayoutDto, GameFilesState,
 };
 use crate::core::geode_buttons::{
     geode_buttons_target_index, geode_buttons_template_preview_data_url,
@@ -67,96 +68,130 @@ fn save_settings_and_refresh(
     Ok(refresh_layout_from_settings(game_files, &saved))
 }
 
+/// Run blocking filesystem / image work off the async runtime so the webview stays responsive.
+async fn run_blocking<T, F>(work: F) -> Result<T, String>
+where
+    T: Send + 'static,
+    F: FnOnce() -> Result<T, String> + Send + 'static,
+{
+    tauri::async_runtime::spawn_blocking(work)
+        .await
+        .map_err(|err| format!("blocking task join: {err}"))?
+}
+
 #[tauri::command]
 fn get_phase_defaults() -> PhaseDefaults {
     phase_defaults_from_settings()
 }
 
 #[tauri::command]
-fn get_app_settings(game_files: tauri::State<'_, GameFilesState>) -> AppSettingsView {
-    let settings = load_settings();
-    settings_view(&settings, &game_files.snapshot())
+async fn get_app_settings(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<AppSettingsView, String> {
+    let game_files = game_files.inner().clone();
+    run_blocking(move || {
+        let settings = load_settings();
+        Ok(settings_view(&settings, &game_files.snapshot()))
+    })
+    .await
 }
 
 #[tauri::command]
-fn app_background_png_data_url(
+async fn app_background_png_data_url(
     game_files: tauri::State<'_, GameFilesState>,
     id: String,
 ) -> Result<String, String> {
     let layout = game_files.snapshot();
-    if !layout.geometry_dash_found() {
-        return Err(
-            "Geometry Dash is not configured. Open Settings and set or detect the install path."
-                .to_string(),
-        );
-    }
-    app_background_png_data_url_core(&layout.resources, &id).map_err(|err| err.to_string())
+    run_blocking(move || {
+        if !layout.geometry_dash_found() {
+            return Err(
+                "Geometry Dash is not configured. Open Settings and set or detect the install path."
+                    .to_string(),
+            );
+        }
+        app_background_png_data_url_core(&layout.resources, &id).map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn save_app_settings(
+async fn save_app_settings(
     game_files: tauri::State<'_, GameFilesState>,
     request: SaveAppSettingsRequest,
 ) -> Result<AppSettingsView, String> {
-    save_settings_and_refresh(&game_files, request)
+    let game_files = game_files.inner().clone();
+    run_blocking(move || save_settings_and_refresh(&game_files, request)).await
 }
 
 #[tauri::command]
-fn set_geometry_dash_dir(
+async fn set_geometry_dash_dir(
     game_files: tauri::State<'_, GameFilesState>,
     path: String,
 ) -> Result<AppSettingsView, String> {
-    save_settings_and_refresh(
-        &game_files,
-        SaveAppSettingsRequest {
-            geometry_dash_dir: Some(path),
-            clear_geometry_dash_dir: false,
-            default_sheet_concurrency: None,
-            theme: None,
-            language: None,
-            app_background: None,
-            app_background_opacity: None,
-            onboarding_version: None,
-        },
-    )
+    let game_files = game_files.inner().clone();
+    run_blocking(move || {
+        save_settings_and_refresh(
+            &game_files,
+            SaveAppSettingsRequest {
+                geometry_dash_dir: Some(path),
+                clear_geometry_dash_dir: false,
+                default_sheet_concurrency: None,
+                theme: None,
+                language: None,
+                app_background: None,
+                app_background_opacity: None,
+                onboarding_version: None,
+            },
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-fn clear_geometry_dash_dir(
+async fn clear_geometry_dash_dir(
     game_files: tauri::State<'_, GameFilesState>,
 ) -> Result<AppSettingsView, String> {
-    save_settings_and_refresh(
-        &game_files,
-        SaveAppSettingsRequest {
-            geometry_dash_dir: None,
-            clear_geometry_dash_dir: true,
-            default_sheet_concurrency: None,
-            theme: None,
-            language: None,
-            app_background: None,
-            app_background_opacity: None,
-            onboarding_version: None,
-        },
-    )
+    let game_files = game_files.inner().clone();
+    run_blocking(move || {
+        save_settings_and_refresh(
+            &game_files,
+            SaveAppSettingsRequest {
+                geometry_dash_dir: None,
+                clear_geometry_dash_dir: true,
+                default_sheet_concurrency: None,
+                theme: None,
+                language: None,
+                app_background: None,
+                app_background_opacity: None,
+                onboarding_version: None,
+            },
+        )
+    })
+    .await
 }
 
 #[tauri::command]
-fn redetect_geometry_dash_dir(
+async fn redetect_geometry_dash_dir(
     game_files: tauri::State<'_, GameFilesState>,
 ) -> Result<AppSettingsView, String> {
-    save_settings_and_refresh(
-        &game_files,
-        SaveAppSettingsRequest {
-            geometry_dash_dir: None,
-            clear_geometry_dash_dir: true,
-            default_sheet_concurrency: None,
-            theme: None,
-            language: None,
-            app_background: None,
-            app_background_opacity: None,
-            onboarding_version: None,
-        },
-    )
+    let game_files = game_files.inner().clone();
+    run_blocking(move || {
+        invalidate_geometry_dash_detection_cache();
+        save_settings_and_refresh(
+            &game_files,
+            SaveAppSettingsRequest {
+                geometry_dash_dir: None,
+                clear_geometry_dash_dir: true,
+                default_sheet_concurrency: None,
+                theme: None,
+                language: None,
+                app_background: None,
+                app_background_opacity: None,
+                onboarding_version: None,
+            },
+        )
+    })
+    .await
 }
 
 #[tauri::command]
@@ -234,123 +269,165 @@ async fn run_operation(
 }
 
 #[tauri::command]
-fn icon_editor_sheet_info(plist_path: String) -> Result<IconEditorSheetInfo, String> {
-    icon_editor_sheet_info_core(std::path::Path::new(&plist_path)).map_err(|err| err.to_string())
+async fn icon_editor_sheet_info(plist_path: String) -> Result<IconEditorSheetInfo, String> {
+    run_blocking(move || {
+        icon_editor_sheet_info_core(std::path::Path::new(&plist_path)).map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_save_plist(
+async fn icon_editor_save_plist(
     plist_path: String,
     updates: Vec<IconEditorFrameUpdate>,
     removed_frame_names: Option<Vec<String>>,
     frame_texture_updates: Option<Vec<IconEditorFrameTextureUpdate>>,
 ) -> Result<(), String> {
-    let removed = removed_frame_names.unwrap_or_default();
-    let texture_updates = frame_texture_updates.unwrap_or_default();
-    icon_editor_save_plist_core(
-        std::path::Path::new(&plist_path),
-        &updates,
-        removed.as_slice(),
-        texture_updates.as_slice(),
-    )
-    .map_err(|err| err.to_string())
+    run_blocking(move || {
+        let removed = removed_frame_names.unwrap_or_default();
+        let texture_updates = frame_texture_updates.unwrap_or_default();
+        icon_editor_save_plist_core(
+            std::path::Path::new(&plist_path),
+            &updates,
+            removed.as_slice(),
+            texture_updates.as_slice(),
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_import_frame(
+async fn icon_editor_import_frame(
     plist_path: String,
     frame_name: String,
     texture_path: String,
 ) -> Result<(), String> {
-    icon_editor_import_frame_core(
-        std::path::Path::new(&plist_path),
-        frame_name.as_str(),
-        std::path::Path::new(&texture_path),
-    )
-    .map_err(|err| err.to_string())
+    run_blocking(move || {
+        icon_editor_import_frame_core(
+            std::path::Path::new(&plist_path),
+            frame_name.as_str(),
+            std::path::Path::new(&texture_path),
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_rotate_frame(
+async fn icon_editor_rotate_frame(
     plist_path: String,
     frame_name: String,
     direction: String,
 ) -> Result<(), String> {
-    icon_editor_rotate_frame_core(
-        std::path::Path::new(&plist_path),
-        frame_name.as_str(),
-        direction.as_str(),
-    )
-    .map_err(|err| err.to_string())
+    run_blocking(move || {
+        icon_editor_rotate_frame_core(
+            std::path::Path::new(&plist_path),
+            frame_name.as_str(),
+            direction.as_str(),
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_add_frame(
+async fn icon_editor_add_frame(
     plist_path: String,
     frame_name: String,
     texture_path: String,
 ) -> Result<(), String> {
-    icon_editor_add_frame_core(
-        std::path::Path::new(&plist_path),
-        frame_name.as_str(),
-        std::path::Path::new(&texture_path),
-    )
-    .map_err(|err| err.to_string())
-}
-
-#[tauri::command]
-fn icon_editor_extract_frames(plist_path: String) -> Result<Vec<IconEditorExtractedFrame>, String> {
-    icon_editor_extract_frames_core(std::path::Path::new(&plist_path))
+    run_blocking(move || {
+        icon_editor_add_frame_core(
+            std::path::Path::new(&plist_path),
+            frame_name.as_str(),
+            std::path::Path::new(&texture_path),
+        )
         .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_rename_sheet(
+async fn icon_editor_extract_frames(
+    plist_path: String,
+) -> Result<Vec<IconEditorExtractedFrame>, String> {
+    run_blocking(move || {
+        icon_editor_extract_frames_core(std::path::Path::new(&plist_path))
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn icon_editor_rename_sheet(
     plist_path: String,
     new_stem: String,
 ) -> Result<IconEditorRenameResult, String> {
-    icon_editor_rename_sheet_core(std::path::Path::new(&plist_path), new_stem.as_str())
-        .map_err(|err| err.to_string())
+    run_blocking(move || {
+        icon_editor_rename_sheet_core(std::path::Path::new(&plist_path), new_stem.as_str())
+            .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_swap_rename_sheet(
+async fn icon_editor_swap_rename_sheet(
     plist_path: String,
     new_stem: String,
 ) -> Result<IconEditorRenameResult, String> {
-    icon_editor_swap_rename_sheet_core(std::path::Path::new(&plist_path), new_stem.as_str())
-        .map_err(|err| err.to_string())
+    run_blocking(move || {
+        icon_editor_swap_rename_sheet_core(std::path::Path::new(&plist_path), new_stem.as_str())
+            .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn icon_editor_copy_sheet(
+async fn icon_editor_copy_sheet(
     plist_path: String,
     new_stem: String,
     updates: Vec<IconEditorFrameUpdate>,
     removed_frame_names: Option<Vec<String>>,
     frame_texture_updates: Option<Vec<IconEditorFrameTextureUpdate>>,
 ) -> Result<IconEditorRenameResult, String> {
-    let removed = removed_frame_names.unwrap_or_default();
-    let texture_updates = frame_texture_updates.unwrap_or_default();
-    icon_editor_copy_sheet_core(
-        std::path::Path::new(&plist_path),
-        new_stem.as_str(),
-        &updates,
-        removed.as_slice(),
-        texture_updates.as_slice(),
-    )
-    .map_err(|err| err.to_string())
-}
-
-#[tauri::command]
-fn icon_editor_png_data_url(texture_path: String) -> Result<String, String> {
-    icon_editor_png_data_url_core(std::path::Path::new(&texture_path)).map_err(|err| err.to_string())
-}
-
-#[tauri::command]
-fn icon_editor_save_png_data_url(output_path: String, png_data_url: String) -> Result<(), String> {
-    icon_editor_save_png_data_url_core(std::path::Path::new(&output_path), png_data_url.as_str())
+    run_blocking(move || {
+        let removed = removed_frame_names.unwrap_or_default();
+        let texture_updates = frame_texture_updates.unwrap_or_default();
+        icon_editor_copy_sheet_core(
+            std::path::Path::new(&plist_path),
+            new_stem.as_str(),
+            &updates,
+            removed.as_slice(),
+            texture_updates.as_slice(),
+        )
         .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn icon_editor_png_data_url(texture_path: String) -> Result<String, String> {
+    run_blocking(move || {
+        icon_editor_png_data_url_core(std::path::Path::new(&texture_path))
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn icon_editor_save_png_data_url(
+    output_path: String,
+    png_data_url: String,
+) -> Result<(), String> {
+    run_blocking(move || {
+        icon_editor_save_png_data_url_core(
+            std::path::Path::new(&output_path),
+            png_data_url.as_str(),
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
@@ -359,45 +436,51 @@ fn get_game_files_layout(game_files: tauri::State<'_, GameFilesState>) -> GameFi
 }
 
 #[tauri::command]
-fn geode_buttons_target_index_cmd(
+async fn geode_buttons_target_index_cmd(
     game_files: tauri::State<'_, GameFilesState>,
     plist_path: String,
     use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
     let layout = game_files.snapshot();
-    if use_game_files_cache && !layout.geometry_dash_found() {
-        return Err(
-            "Geometry Dash is not configured. Open Settings and set or detect the install path."
-                .to_string(),
-        );
-    }
-    let plist = crate::core::safe_fs::parse_user_absolute_path(&plist_path)
-        .map_err(|err| err.to_string())?;
-    geode_buttons_target_index(&plist, &layout, use_game_files_cache).map_err(|err| err.to_string())
+    run_blocking(move || {
+        if use_game_files_cache && !layout.geometry_dash_found() {
+            return Err(
+                "Geometry Dash is not configured. Open Settings and set or detect the install path."
+                    .to_string(),
+            );
+        }
+        let plist = crate::core::safe_fs::parse_user_absolute_path(&plist_path)
+            .map_err(|err| err.to_string())?;
+        geode_buttons_target_index(&plist, &layout, use_game_files_cache).map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[tauri::command]
-fn geode_buttons_autoselect_plist_cmd(
+async fn geode_buttons_autoselect_plist_cmd(
     game_files: tauri::State<'_, GameFilesState>,
     input_dir: String,
 ) -> Result<Option<String>, String> {
-    let trimmed = input_dir.trim();
-    if !trimmed.is_empty() {
-        let dir =
-            crate::core::safe_fs::parse_user_absolute_path(trimmed).map_err(|err| err.to_string())?;
-        if let Some(path) =
-            resolve_geode_buttons_plist(&dir).map_err(|err| err.to_string())?
-        {
-            return Ok(Some(path));
-        }
-    }
     let layout = game_files.snapshot();
-    if !layout.geometry_dash_found() {
-        return Ok(None);
-    }
-    Ok(resolve_geode_buttons_default_sheet(&layout)
-        .map_err(|err| err.to_string())?
-        .map(|pair| pair.plist_path.to_string_lossy().to_string()))
+    run_blocking(move || {
+        let trimmed = input_dir.trim();
+        if !trimmed.is_empty() {
+            let dir = crate::core::safe_fs::parse_user_absolute_path(trimmed)
+                .map_err(|err| err.to_string())?;
+            if let Some(path) =
+                resolve_geode_buttons_plist(&dir).map_err(|err| err.to_string())?
+            {
+                return Ok(Some(path));
+            }
+        }
+        if !layout.geometry_dash_found() {
+            return Ok(None);
+        }
+        Ok(resolve_geode_buttons_default_sheet(&layout)
+            .map_err(|err| err.to_string())?
+            .map(|pair| pair.plist_path.to_string_lossy().to_string()))
+    })
+    .await
 }
 
 #[tauri::command]
@@ -406,8 +489,11 @@ fn geode_buttons_default_input_dir_cmd(game_files: tauri::State<'_, GameFilesSta
 }
 
 #[tauri::command]
-fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<String, String> {
-    geode_buttons_template_preview_data_url(path.as_str()).map_err(|err| err.to_string())
+async fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<String, String> {
+    run_blocking(move || {
+        geode_buttons_template_preview_data_url(path.as_str()).map_err(|err| err.to_string())
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -418,6 +504,11 @@ pub fn run() {
         .setup(|app| {
             let layout = bootstrap_game_files().map_err(|err| err.to_string())?;
             app.manage(GameFilesState::new(layout));
+            // Window starts hidden so bootstrap / Steam detection never flash a blank frame.
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
             Ok(())
         })
         .manage(OperationCancel::default())

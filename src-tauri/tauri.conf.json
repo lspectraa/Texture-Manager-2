@@ -12,16 +12,22 @@
   "app": {
     "windows": [
       {
+        "label": "main",
         "title": "Texture Manager 2",
-        "width": 1920,
-        "height": 1080
+        "width": 1440,
+        "height": 900,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "center": true,
+        "visible": false,
+        "dragDropEnabled": true
       }
     ],
     "security": {
       "csp": {
         "default-src": "'self' customprotocol: asset:",
         "connect-src": "ipc: http://ipc.localhost",
-        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "img-src": "'self' asset: http://asset.localhost https://asset.localhost blob: data:",
         "style-src": "'unsafe-inline' 'self'",
         "script-src": "'self'",
         "object-src": "'none'",
@@ -31,12 +37,16 @@
       "devCsp": {
         "default-src": "'self' customprotocol: asset:",
         "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420",
-        "img-src": "'self' asset: http://asset.localhost blob: data:",
+        "img-src": "'self' asset: http://asset.localhost https://asset.localhost blob: data:",
         "style-src": "'unsafe-inline' 'self'",
         "script-src": "'self' 'unsafe-eval'",
         "object-src": "'none'",
         "base-uri": "'self'",
         "form-action": "'self'"
+      },
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["**"]
       }
     }
   },

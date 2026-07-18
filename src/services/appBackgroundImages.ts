@@ -1,42 +1,50 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { AppBackgroundOption } from "../config/appBackground";
 import { isTauriRuntime } from "./tauriOperations";
 
-const imageDataUrlCache = new Map<string, Promise<string>>();
+const imageUrlCache = new Map<string, Promise<string>>();
 
 /**
- * Loads only a background id that the Rust side re-validates against the
- * discovered Geometry Dash Resources directory. The shared promise cache keeps
- * the shell and Settings thumbnails from transferring the same PNG repeatedly.
+ * Resolve a shell/Settings background URL without pulling UHD PNGs through IPC as
+ * base64. Prefer the asset protocol (`convertFileSrc`); fall back to the Rust
+ * data-URL command only when that is unavailable.
  */
-export function getAppBackgroundImageDataUrl(id: string): Promise<string> {
+export function getAppBackgroundImageDataUrl(
+  optionOrId: AppBackgroundOption | string,
+): Promise<string> {
   if (!isTauriRuntime()) {
     return Promise.reject(new Error("App backgrounds require the Tauri runtime."));
   }
 
-  const cached = imageDataUrlCache.get(id);
+  const id = typeof optionOrId === "string" ? optionOrId : optionOrId.id;
+  const path = typeof optionOrId === "string" ? "" : optionOrId.path.trim();
+
+  const cached = imageUrlCache.get(id);
   if (cached) {
     return cached;
   }
 
-  const pending = invoke<string>("app_background_png_data_url", { id }).catch(
-    (error: unknown) => {
-      imageDataUrlCache.delete(id);
-      throw error;
-    },
-  );
-  imageDataUrlCache.set(id, pending);
+  const pending = (async (): Promise<string> => {
+    if (path) {
+      return convertFileSrc(path);
+    }
+    return invoke<string>("app_background_png_data_url", { id });
+  })().catch((error: unknown) => {
+    imageUrlCache.delete(id);
+    throw error;
+  });
+
+  imageUrlCache.set(id, pending);
   return pending;
 }
 
 /**
- * Starts loading every discovered background into the shared image cache.
- * Individual failures are ignored so one unreadable file cannot block startup.
+ * Intentionally a no-op. Eagerly loading every `game_bg_*` UHD PNG (via IPC or
+ * the network stack) freezes the release build on startup. Callers load the
+ * active background and Settings thumbnails on demand instead.
  */
 export async function preloadAppBackgroundImages(
-  options: readonly AppBackgroundOption[],
+  _options: readonly AppBackgroundOption[],
 ): Promise<void> {
-  await Promise.allSettled(
-    options.map((option) => getAppBackgroundImageDataUrl(option.id)),
-  );
+  // no-op — see docstring
 }

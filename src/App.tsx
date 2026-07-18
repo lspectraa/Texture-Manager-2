@@ -43,7 +43,6 @@ import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
-import { preloadAppBackgroundImages } from "./services/appBackgroundImages";
 import {
   APP_BACKGROUND_RANDOM,
   DEFAULT_APP_BACKGROUND_OPACITY,
@@ -189,10 +188,6 @@ function App() {
       // Ignore storage failures in restricted environments.
     }
   }, [isReportCollapsed]);
-
-  useEffect(() => {
-    void preloadAppBackgroundImages(appSettings.availableAppBackgrounds);
-  }, [appSettings.availableAppBackgrounds]);
 
   const [splitterInputDir, setSplitterInputDir] = useState("");
   const [splitterOutputDir, setSplitterOutputDir] = useState("");

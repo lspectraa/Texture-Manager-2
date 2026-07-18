@@ -330,11 +330,17 @@ pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSet
         .as_ref()
         .map(|path| !path.trim().is_empty())
         .unwrap_or(false);
-    let detected = detect_geometry_dash_dir()
-        .map(|path| path.to_string_lossy().to_string())
-        .unwrap_or_default();
-    let resolved = layout.geometry_dash_dir.to_string_lossy().to_string();
     let found = layout.geometry_dash_found();
+    let resolved = layout.geometry_dash_dir.to_string_lossy().to_string();
+    // When the live layout already resolved GD without a user override, that path *is*
+    // the auto-detect result — skip a redundant Steam walk on every settings IPC call.
+    let detected = if found && !override_active {
+        resolved.clone()
+    } else {
+        detect_geometry_dash_dir()
+            .map(|path| path.to_string_lossy().to_string())
+            .unwrap_or_default()
+    };
     let available_app_backgrounds = if found {
         discover_app_backgrounds(&layout.resources)
     } else {

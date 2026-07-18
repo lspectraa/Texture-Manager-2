@@ -73,7 +73,7 @@ function AppBackgroundThumbnail({
       setSrc(null);
       return;
     }
-    void getAppBackgroundImageDataUrl(option.id)
+    void getAppBackgroundImageDataUrl(option)
       .then((dataUrl) => {
         if (!cancelled) {
           setSrc(dataUrl);
@@ -89,7 +89,7 @@ function AppBackgroundThumbnail({
     };
   }, [option]);
 
-  return src ? <img src={src} alt={alt} draggable={false} /> : null;
+  return src ? <img src={src} alt={alt} draggable={false} loading="lazy" /> : null;
 }
 
 type StatusChipTone = "success" | "warning" | "danger" | "info" | "neutral";

@@ -3,7 +3,7 @@ pub mod sync;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -298,40 +298,57 @@ fn parse_steam_library_paths(vdf_text: &str) -> Vec<PathBuf> {
     out
 }
 
+/// Read Steam InstallPath via the Windows registry API (no `reg.exe` — that flashes a
+/// console window under `windows_subsystem = "windows"`).
 #[cfg(windows)]
 fn steam_install_from_registry() -> Vec<PathBuf> {
-    use std::process::Command;
+    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
+    use winreg::RegKey;
 
     let mut out = Vec::new();
     let keys = [
-        r"HKLM\SOFTWARE\WOW6432Node\Valve\Steam",
-        r"HKLM\SOFTWARE\Valve\Steam",
-        r"HKCU\SOFTWARE\Valve\Steam",
+        (HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Valve\Steam"),
+        (HKEY_LOCAL_MACHINE, r"SOFTWARE\Valve\Steam"),
+        (HKEY_CURRENT_USER, r"SOFTWARE\Valve\Steam"),
     ];
-    for key in keys {
-        let Ok(output) = Command::new("reg")
-            .args(["query", key, "/v", "InstallPath"])
-            .output()
-        else {
+    for (hive, subkey) in keys {
+        let Ok(key) = RegKey::predef(hive).open_subkey(subkey) else {
             continue;
         };
-        if !output.status.success() {
+        let Ok(path) = key.get_value::<String, _>("InstallPath") else {
             continue;
-        }
-        let text = String::from_utf8_lossy(&output.stdout);
-        for line in text.lines() {
-            let trimmed = line.trim();
-            // InstallPath    REG_SZ    C:\Program Files (x86)\Steam
-            let Some((_, value)) = trimmed.split_once("REG_SZ") else {
-                continue;
-            };
-            let path = value.trim();
-            if !path.is_empty() {
-                out.push(PathBuf::from(path));
-            }
+        };
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            out.push(PathBuf::from(trimmed));
         }
     }
     out
+}
+
+/// Skip optical / empty / network roots — probing them can hang the UI thread for seconds.
+#[cfg(windows)]
+fn is_fixed_drive_letter(letter: char) -> bool {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn GetDriveTypeW(root_path_name: *const u16) -> u32;
+    }
+
+    const DRIVE_FIXED: u32 = 3;
+    let root = format!("{letter}:\\");
+    let wide: Vec<u16> = OsStr::new(&root)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    unsafe { GetDriveTypeW(wide.as_ptr()) == DRIVE_FIXED }
+}
+
+#[cfg(not(windows))]
+fn is_fixed_drive_letter(_letter: char) -> bool {
+    true
 }
 
 #[cfg(not(windows))]
@@ -355,6 +372,9 @@ fn candidate_steam_roots() -> Vec<PathBuf> {
 
     for drive in [b'D', b'E', b'F', b'G'] {
         let letter = drive as char;
+        if !is_fixed_drive_letter(letter) {
+            continue;
+        }
         push_unique(
             &mut roots,
             PathBuf::from(format!(r"{letter}:\Steam")),
@@ -457,9 +477,45 @@ fn steam_library_roots() -> Vec<PathBuf> {
     roots
 }
 
+fn geometry_dash_detection_cache() -> &'static Mutex<Option<Result<PathBuf, String>>> {
+    static CACHE: OnceLock<Mutex<Option<Result<PathBuf, String>>>> = OnceLock::new();
+    CACHE.get_or_init(|| Mutex::new(None))
+}
+
+/// Clear cached Steam/GD auto-detect results (e.g. after an explicit redetect).
+pub fn invalidate_geometry_dash_detection_cache() {
+    let mut guard = geometry_dash_detection_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *guard = None;
+}
+
 /// Auto-detect Geometry Dash without user override (still honors `TM_GEOMETRY_DASH_DIR`).
+///
+/// Results are cached for the process lifetime so Settings / startup IPC does not
+/// re-walk Steam libraries on every `get_app_settings` call.
 pub fn detect_geometry_dash_dir() -> Result<PathBuf, AppError> {
-    resolve_geometry_dash_dir_with_override(None)
+    {
+        let guard = geometry_dash_detection_cache()
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(cached) = guard.as_ref() {
+            return match cached {
+                Ok(path) => Ok(path.clone()),
+                Err(message) => Err(AppError::IoError(message.clone())),
+            };
+        }
+    }
+
+    let result = resolve_geometry_dash_dir_with_override(None);
+    let mut guard = geometry_dash_detection_cache()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    *guard = Some(match &result {
+        Ok(path) => Ok(path.clone()),
+        Err(err) => Err(err.to_string()),
+    });
+    result
 }
 
 pub fn resolve_geometry_dash_dir_with_override(
@@ -567,8 +623,13 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     fs::create_dir_all(&legacy)?;
 
     let override_path = read_settings_geometry_dash_override(&root);
-    let geometry_dash_dir = resolve_geometry_dash_dir_with_override(override_path.as_deref())
-        .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME));
+    let geometry_dash_dir = if override_path.as_ref().is_some_and(|path| !path.trim().is_empty()) {
+        resolve_geometry_dash_dir_with_override(override_path.as_deref())
+            .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+    } else {
+        // Populate the detection cache so the first Settings IPC does not walk Steam again.
+        detect_geometry_dash_dir().unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+    };
 
     let layout = layout_from_parts(root, geometry_dash_dir);
     // Soft-fail: sync is best-effort and must not block launch when GD is missing.
