@@ -1,5 +1,6 @@
 import { ArrowRight, Clock3, Sparkles } from "lucide-react";
 import { AppToolId, TOOL_COUNT, TOOL_NAV_SECTIONS, UPCOMING_TOOL_COUNT } from "../config/toolNavigation";
+import { GlassFrost } from "./GlassFrost";
 
 type HomeScreenProps = {
   onSelectTool: (toolId: AppToolId) => void;
@@ -9,6 +10,7 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
   return (
     <div className="tm-home">
       <header className="tm-home-hero">
+        <GlassFrost className="tm-home-hero-frost" />
         <div className="tm-home-hero-copy">
           <p className="tm-home-eyebrow">
             <Sparkles size={14} aria-hidden />
@@ -79,6 +81,7 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
                       aria-disabled={isUpcoming || undefined}
                       role="listitem"
                     >
+                      <GlassFrost className="tm-home-card-frost" />
                       {isUpcoming ? (
                         <span className="tm-home-card-badge">Coming soon</span>
                       ) : null}

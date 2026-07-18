@@ -7,6 +7,7 @@ import {
   COPYRIGHT_YEAR,
 } from "../config/appMeta";
 import { openExternalUrl } from "../utils/openExternalUrl";
+import { GlassFrost } from "./GlassFrost";
 
 type CopyrightDialogProps = {
   open: boolean;
@@ -74,6 +75,7 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
         aria-labelledby={titleId}
         onClick={(event) => event.stopPropagation()}
       >
+        <GlassFrost />
         <div className="tm-copyright-dialog-head">
           <div className="tm-copyright-dialog-title-wrap">
             <p className="tm-copyright-dialog-eyebrow">Texture Manager 2</p>

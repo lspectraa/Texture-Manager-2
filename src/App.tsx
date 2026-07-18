@@ -38,7 +38,14 @@ import { SettingsToolPanel } from "./components/tools/SettingsToolPanel";
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
+import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
+import { GlassFrost } from "./components/GlassFrost";
+import { preloadAppBackgroundImages } from "./services/appBackgroundImages";
+import {
+  APP_BACKGROUND_RANDOM,
+  DEFAULT_APP_BACKGROUND_OPACITY,
+} from "./config/appBackground";
 import { isUpcomingTool } from "./config/toolNavigation";
 import {
   buildIssuesCsvFromReport,
@@ -162,6 +169,10 @@ function App() {
       // Ignore storage failures in restricted environments.
     }
   }, [isReportCollapsed]);
+
+  useEffect(() => {
+    void preloadAppBackgroundImages(appSettings.availableAppBackgrounds);
+  }, [appSettings.availableAppBackgrounds]);
 
   const [splitterInputDir, setSplitterInputDir] = useState("");
   const [splitterOutputDir, setSplitterOutputDir] = useState("");
@@ -688,6 +699,31 @@ function App() {
                 );
               });
             }}
+            onAppBackgroundChange={(appBackground) => {
+              setAppSettings((prev) =>
+                prev.appBackground === appBackground
+                  ? prev
+                  : { ...prev, appBackground },
+              );
+              runSettingsAction(() => saveAppSettings({ appBackground }), {
+                blockUi: false,
+              }).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onAppBackgroundOpacityChange={(appBackgroundOpacity) => {
+              setAppSettings((prev) =>
+                prev.appBackgroundOpacity === appBackgroundOpacity
+                  ? prev
+                  : { ...prev, appBackgroundOpacity },
+              );
+              runSettingsAction(
+                () => saveAppSettings({ appBackgroundOpacity }),
+                { blockUi: false },
+              ).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
             onResetDefaults={() => {
               runSettingsAction(() =>
                 saveAppSettings({
@@ -695,6 +731,8 @@ function App() {
                   defaultSheetConcurrency: DEFAULT_SHEET_CONCURRENCY,
                   theme: "dark",
                   language: "en",
+                  appBackground: APP_BACKGROUND_RANDOM,
+                  appBackgroundOpacity: DEFAULT_APP_BACKGROUND_OPACITY,
                 }),
               ).catch(() => {
                 // Error surfaced via settingsError.
@@ -819,6 +857,11 @@ function App() {
         <span className="tm-bg-orb tm-bg-orb-c" />
         <span className="tm-bg-orb tm-bg-orb-d" />
       </div>
+      <AppGameBackground
+        setting={appSettings.appBackground}
+        options={appSettings.availableAppBackgrounds}
+        opacity={appSettings.appBackgroundOpacity}
+      />
       {isRunning ? (
         <div
           className={`tm-progress-overlay tm-progress-state-${overlayState}`}
@@ -934,6 +977,7 @@ function App() {
             isGeodeButtons ? " tm-panel-geode" : ""
           }`}
         >
+          <GlassFrost />
           <div className="tm-panel-body">{toolPanel}</div>
 
           {showRunAction ? (
@@ -957,6 +1001,7 @@ function App() {
               isReportCollapsed ? " tm-report--collapsed" : ""
             }${reportPanelTransition.animating ? " tm-report--animating" : ""}`}
           >
+            <GlassFrost />
             <button
               type="button"
               className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${

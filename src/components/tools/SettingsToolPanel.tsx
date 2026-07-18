@@ -5,13 +5,22 @@ import {
   Gauge,
   Globe,
   HardDrive,
+  Image,
   RefreshCw,
   RotateCcw,
   Settings2,
+  Shuffle,
   Sparkles,
 } from "lucide-react";
 import { APP_VERSION } from "../../config/appMeta";
-import type { AppSettingsView } from "../../domain/settings";
+import {
+  APP_BACKGROUND_RANDOM,
+  MAX_APP_BACKGROUND_OPACITY,
+  MIN_APP_BACKGROUND_OPACITY,
+  type AppBackgroundOption,
+} from "../../config/appBackground";
+import type { AppBackgroundSetting, AppSettingsView } from "../../domain/settings";
+import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
 import { ThemeStylePicker } from "../ThemeStylePicker";
@@ -29,6 +38,8 @@ type SettingsToolPanelProps = {
   error: string | null;
   onThemeChange: (theme: AppTheme) => void;
   onConcurrencyChange: (value: number) => void;
+  onAppBackgroundChange: (value: AppBackgroundSetting) => void;
+  onAppBackgroundOpacityChange: (value: number) => void;
   onGeometryDashPathSelected: (path: string) => void;
   onClearGeometryDashOverride: () => void;
   onRedetectGeometryDash: () => void;
@@ -36,6 +47,40 @@ type SettingsToolPanelProps = {
   onResetDefaults: () => void;
   pickFolder: PickFolderFn;
 };
+
+function AppBackgroundThumbnail({
+  option,
+  alt,
+}: {
+  option: AppBackgroundOption | undefined;
+  alt: string;
+}) {
+  const [src, setSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!option) {
+      setSrc(null);
+      return;
+    }
+    void getAppBackgroundImageDataUrl(option.id)
+      .then((dataUrl) => {
+        if (!cancelled) {
+          setSrc(dataUrl);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSrc(null);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [option]);
+
+  return src ? <img src={src} alt={alt} draggable={false} /> : null;
+}
 
 type StatusChipTone = "success" | "warning" | "danger" | "info" | "neutral";
 
@@ -70,6 +115,8 @@ export function SettingsToolPanel({
   error,
   onThemeChange,
   onConcurrencyChange,
+  onAppBackgroundChange,
+  onAppBackgroundOpacityChange,
   onGeometryDashPathSelected,
   onClearGeometryDashOverride,
   onRedetectGeometryDash,
@@ -147,6 +194,87 @@ export function SettingsToolPanel({
             variant="settings"
             showTitle={false}
           />
+
+          <div className="tm-tool-field tm-settings-background-field">
+            <span className="tm-tool-field-label">
+              <Image size={14} strokeWidth={1.9} aria-hidden />
+              App background
+            </span>
+            <div
+              className="tm-settings-background-grid"
+              role="radiogroup"
+              aria-label="App background"
+            >
+              <button
+                type="button"
+                className={`tm-settings-background-tile${
+                  settings.appBackground === APP_BACKGROUND_RANDOM
+                    ? " is-selected"
+                    : ""
+                }`}
+                role="radio"
+                aria-checked={settings.appBackground === APP_BACKGROUND_RANDOM}
+                disabled={busy}
+                onClick={() => onAppBackgroundChange(APP_BACKGROUND_RANDOM)}
+              >
+                <span className="tm-settings-background-preview">
+                  <AppBackgroundThumbnail
+                    option={settings.availableAppBackgrounds[0]}
+                    alt=""
+                  />
+                  <span className="tm-settings-background-random-icon" aria-hidden>
+                    <Shuffle size={18} strokeWidth={2.2} />
+                  </span>
+                </span>
+                <span className="tm-settings-background-name">Random</span>
+                <span className="tm-settings-background-meta">Default</span>
+              </button>
+              {settings.availableAppBackgrounds.map((bg) => {
+                const selected = settings.appBackground === bg.id;
+                return (
+                  <button
+                    type="button"
+                    className={`tm-settings-background-tile${
+                      selected ? " is-selected" : ""
+                    }`}
+                    role="radio"
+                    aria-checked={selected}
+                    disabled={busy}
+                    key={bg.id}
+                    onClick={() => onAppBackgroundChange(bg.id)}
+                  >
+                    <span className="tm-settings-background-preview">
+                      <AppBackgroundThumbnail option={bg} alt="" />
+                    </span>
+                    <span className="tm-settings-background-name">{bg.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {settings.availableAppBackgrounds.length === 0 ? (
+              <p className="tm-tool-section-note">
+                No Geometry Dash game_bg_* images found yet — set a valid GD
+                install path to discover them.
+              </p>
+            ) : null}
+            <label className="tm-settings-background-opacity">
+              <span>
+                Background opacity
+                <output>{Math.round(settings.appBackgroundOpacity * 100)}%</output>
+              </span>
+              <input
+                type="range"
+                min={MIN_APP_BACKGROUND_OPACITY * 100}
+                max={MAX_APP_BACKGROUND_OPACITY * 100}
+                step={5}
+                value={Math.round(settings.appBackgroundOpacity * 100)}
+                disabled={busy || settings.availableAppBackgrounds.length === 0}
+                onChange={(event) =>
+                  onAppBackgroundOpacityChange(Number(event.target.value) / 100)
+                }
+              />
+            </label>
+          </div>
 
           <div className="tm-settings-language-row">
             <div className="tm-tool-field tm-settings-language-field">
@@ -235,75 +363,75 @@ export function SettingsToolPanel({
               </button>
             </div>
           </ToolSection>
-        </div>
 
-        <ToolSection
-          title="Geometry Dash"
-          subtitle="Steam install used for vanilla Resources and Geode paths"
-          icon={HardDrive}
-          className="tm-settings-section-gd"
-        >
-          <div className="tm-settings-gd-status">
-            <StatusChip tone={gdStatus.tone}>{gdStatus.label}</StatusChip>
-            {settings.geometryDashOverrideActive ? (
-              <StatusChip tone="warning">Override active</StatusChip>
+          <ToolSection
+            title="Geometry Dash"
+            subtitle="Steam install used for vanilla Resources and Geode paths"
+            icon={HardDrive}
+            className="tm-settings-section-gd"
+          >
+            <div className="tm-settings-gd-status">
+              <StatusChip tone={gdStatus.tone}>{gdStatus.label}</StatusChip>
+              {settings.geometryDashOverrideActive ? (
+                <StatusChip tone="warning">Override active</StatusChip>
+              ) : null}
+              {settings.geometryDashDetected ? (
+                <StatusChip tone="neutral">Detected path available</StatusChip>
+              ) : (
+                <StatusChip tone="danger">No auto-detect result</StatusChip>
+              )}
+            </div>
+
+            <FolderPathField
+              label="Install location"
+              value={draftPath}
+              onChange={setDraftPath}
+              pickFolder={pickFolder}
+              placeholder="C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
+              onBrowse={(path) => {
+                setDraftPath(path);
+                onGeometryDashPathSelected(path);
+              }}
+            />
+
+            {!settings.geometryDashDetected ? (
+              <p className="tm-settings-meta-path">
+                Browse to your Geometry Dash folder, or install via Steam and
+                re-detect.
+              </p>
             ) : null}
-            {settings.geometryDashDetected ? (
-              <StatusChip tone="neutral">Detected path available</StatusChip>
-            ) : (
-              <StatusChip tone="danger">No auto-detect result</StatusChip>
-            )}
-          </div>
 
-          <FolderPathField
-            label="Install location"
-            value={draftPath}
-            onChange={setDraftPath}
-            pickFolder={pickFolder}
-            placeholder="C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
-            onBrowse={(path) => {
-              setDraftPath(path);
-              onGeometryDashPathSelected(path);
-            }}
-          />
-
-          {!settings.geometryDashDetected ? (
-            <p className="tm-settings-meta-path">
-              Browse to your Geometry Dash folder, or install via Steam and
-              re-detect.
-            </p>
-          ) : null}
-
-          <div className="tm-settings-actions">
-            <button
-              type="button"
-              className="tm-settings-action-btn"
-              disabled={busy || !draftPath.trim()}
-              onClick={() => onGeometryDashPathSelected(draftPath.trim())}
-            >
-              <FolderOpen size={14} strokeWidth={1.9} />
-              Apply path
-            </button>
-            <button
-              type="button"
-              className="tm-settings-action-btn"
-              disabled={busy || !settings.geometryDashOverrideActive}
-              onClick={onClearGeometryDashOverride}
-            >
-              <RotateCcw size={14} strokeWidth={1.9} />
-              Clear override
-            </button>
-            <button
-              type="button"
-              className="tm-settings-action-btn"
-              disabled={busy}
-              onClick={onRedetectGeometryDash}
-            >
-              <RefreshCw size={14} strokeWidth={1.9} />
-              Re-detect
-            </button>
-          </div>
-        </ToolSection>
+            <div className="tm-settings-actions">
+              <button
+                type="button"
+                className="tm-settings-action-btn"
+                disabled={busy || !draftPath.trim()}
+                onClick={() => onGeometryDashPathSelected(draftPath.trim())}
+              >
+                <FolderOpen size={14} strokeWidth={1.9} />
+                Apply path
+              </button>
+              <button
+                type="button"
+                className="tm-settings-action-btn"
+                disabled={busy || !settings.geometryDashOverrideActive}
+                onClick={onClearGeometryDashOverride}
+              >
+                <RotateCcw size={14} strokeWidth={1.9} />
+                Clear override
+              </button>
+              <button
+                type="button"
+                className="tm-settings-action-btn"
+                disabled={busy}
+                onClick={onRedetectGeometryDash}
+              >
+                <RefreshCw size={14} strokeWidth={1.9} />
+                Re-detect
+              </button>
+            </div>
+          </ToolSection>
+        </div>
       </div>
     </ToolPage>
   );

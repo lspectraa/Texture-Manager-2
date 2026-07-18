@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -184,6 +185,88 @@ function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
       return [t, p, v];
     default:
       return [v, p, q];
+  }
+}
+
+type RgbColor = [number, number, number];
+type HsvChannel = keyof HsvDelta;
+
+const DEFAULT_TRACK_COLOR: RgbColor = [0.18, 0.72, 0.64];
+const TRACK_STOP_COUNT = 13;
+
+function applyHsvDeltaToRgb(color: RgbColor, hsv: HsvDelta): RgbColor {
+  let [h, s, v] = rgbToHsv(...color);
+  h = ((h + hsv.hueDeg / 360) % 1 + 1) % 1;
+  s = clamp01(s + hsv.satDelta);
+  v = clamp01(v);
+  return applyValueDeltaRgb(...hsvToRgb(h, s, v), hsv.valDelta);
+}
+
+function rgbCss(color: RgbColor): string {
+  return `rgb(${color.map((channel) => Math.round(clamp01(channel) * 255)).join(" ")})`;
+}
+
+function buildHsvTrackGradient(
+  baseColor: RgbColor,
+  selectedHsv: HsvDelta,
+  channel: HsvChannel,
+  min: number,
+  max: number,
+): string {
+  const stops = Array.from({ length: TRACK_STOP_COUNT }, (_, index) => {
+    const position = index / (TRACK_STOP_COUNT - 1);
+    const hsv = { ...selectedHsv, [channel]: min + (max - min) * position };
+    return `${rgbCss(applyHsvDeltaToRgb(baseColor, hsv))} ${Math.round(position * 100)}%`;
+  });
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
+function sliderTrackStyle(
+  gradient: string,
+  thumbColor: RgbColor,
+): CSSProperties & Record<"--tm-geode-track" | "--tm-geode-thumb", string> {
+  return {
+    "--tm-geode-track": gradient,
+    "--tm-geode-thumb": rgbCss(thumbColor),
+  };
+}
+
+async function sampleRepresentativeColor(src: string): Promise<RgbColor | null> {
+  if (!src.trim()) return null;
+  try {
+    const resolvedSrc = await resolvePreviewImageSrc(src);
+    const img = await loadImageElement(resolvedSrc);
+    const size = 32;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, size, size);
+    const pixels = ctx.getImageData(0, 0, size, size).data;
+    let totalWeight = 0;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3] / 255;
+      if (alpha < 0.15) continue;
+      const color: RgbColor = [
+        pixels[index] / 255,
+        pixels[index + 1] / 255,
+        pixels[index + 2] / 255,
+      ];
+      const [, saturation, value] = rgbToHsv(...color);
+      const weight = alpha * (0.25 + saturation) * (0.35 + value);
+      red += color[0] * weight;
+      green += color[1] * weight;
+      blue += color[2] * weight;
+      totalWeight += weight;
+    }
+    if (totalWeight <= 1e-6) return null;
+    return [red / totalWeight, green / totalWeight, blue / totalWeight];
+  } catch {
+    return null;
   }
 }
 
@@ -419,6 +502,7 @@ export function GeodeButtonsToolPanel({
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
   const [previewByFamily, setPreviewByFamily] = useState<Record<string, string>>({});
   const [basePreviewByFamily, setBasePreviewByFamily] = useState<Record<string, string>>({});
+  const [trackBaseColor, setTrackBaseColor] = useState<RgbColor>(DEFAULT_TRACK_COLOR);
   const prevFamilyTemplatesRef = useRef<Record<string, string>>(options.templates.familyTemplates);
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -471,6 +555,45 @@ export function GeodeButtonsToolPanel({
     if (!selectedFamilyId) return "";
     return options.templates.familyTemplates[selectedFamilyId] ?? "";
   }, [options.templates.familyTemplates, selectedFamilyId]);
+
+  useEffect(() => {
+    const source =
+      selectedTemplatePath ||
+      (selectedFamilyId ? basePreviewByFamily[selectedFamilyId] ?? "" : "");
+    if (!source) {
+      setTrackBaseColor(DEFAULT_TRACK_COLOR);
+      return;
+    }
+    let alive = true;
+    sampleRepresentativeColor(source)
+      .then((color) => {
+        if (alive) setTrackBaseColor(color ?? DEFAULT_TRACK_COLOR);
+      })
+      .catch(() => {
+        if (alive) setTrackBaseColor(DEFAULT_TRACK_COLOR);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [basePreviewByFamily, selectedFamilyId, selectedTemplatePath]);
+
+  const sliderStyles = useMemo(() => {
+    const thumbColor = applyHsvDeltaToRgb(trackBaseColor, selectedHsv);
+    return {
+      hue: sliderTrackStyle(
+        buildHsvTrackGradient(trackBaseColor, selectedHsv, "hueDeg", -180, 180),
+        thumbColor,
+      ),
+      saturation: sliderTrackStyle(
+        buildHsvTrackGradient(trackBaseColor, selectedHsv, "satDelta", -1, 1),
+        thumbColor,
+      ),
+      value: sliderTrackStyle(
+        buildHsvTrackGradient(trackBaseColor, selectedHsv, "valDelta", -1, 1),
+        thumbColor,
+      ),
+    };
+  }, [selectedHsv, trackBaseColor]);
 
   const pickTemplate = useCallback(
     async (assign: (path: string) => void) => {
@@ -879,12 +1002,13 @@ export function GeodeButtonsToolPanel({
               <label className="tm-geode-hsv-label">
                 Hue (deg)
                 <input
-                  className="tm-geode-slider"
+                  className="tm-geode-slider tm-geode-slider--hue"
                   type="range"
                   min={-180}
                   max={180}
                   step={1}
                   value={selectedHsv.hueDeg}
+                  style={sliderStyles.hue}
                   onChange={(e) => setHsvField({ hueDeg: Number(e.target.value) })}
                   onInput={(e) =>
                     setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
@@ -907,12 +1031,13 @@ export function GeodeButtonsToolPanel({
               <label className="tm-geode-hsv-label">
                 Saturation
                 <input
-                  className="tm-geode-slider"
+                  className="tm-geode-slider tm-geode-slider--sat"
                   type="range"
                   min={-1}
                   max={1}
                   step={0.01}
                   value={selectedHsv.satDelta}
+                  style={sliderStyles.saturation}
                   onChange={(e) => setHsvField({ satDelta: Number(e.target.value) })}
                   onInput={(e) =>
                     setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
@@ -935,12 +1060,13 @@ export function GeodeButtonsToolPanel({
               <label className="tm-geode-hsv-label">
                 Value
                 <input
-                  className="tm-geode-slider"
+                  className="tm-geode-slider tm-geode-slider--val"
                   type="range"
                   min={-1}
                   max={1}
                   step={0.01}
                   value={selectedHsv.valDelta}
+                  style={sliderStyles.value}
                   onChange={(e) => setHsvField({ valDelta: Number(e.target.value) })}
                   onInput={(e) =>
                     setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })

@@ -1,5 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import {
+  APP_BACKGROUND_RANDOM,
+  DEFAULT_APP_BACKGROUND_OPACITY,
+  MAX_APP_BACKGROUND_OPACITY,
+  MIN_APP_BACKGROUND_OPACITY,
+} from "../config/appBackground";
+import {
   AppSettingsView,
   DEFAULT_APP_SETTINGS_VIEW,
   SaveAppSettingsRequest,
@@ -8,11 +14,36 @@ import { isAppTheme } from "../utils/theme";
 import { isTauriRuntime } from "./tauriOperations";
 
 function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
+  const available = Array.isArray(raw.availableAppBackgrounds)
+    ? raw.availableAppBackgrounds.filter(
+        (item) =>
+          item &&
+          typeof item.id === "string" &&
+          typeof item.path === "string" &&
+          typeof item.label === "string",
+      )
+    : [];
+  const appBackgroundRaw =
+    typeof raw.appBackground === "string" ? raw.appBackground.trim() : "";
+  const appBackground =
+    !appBackgroundRaw || appBackgroundRaw.toLowerCase() === APP_BACKGROUND_RANDOM
+      ? APP_BACKGROUND_RANDOM
+      : appBackgroundRaw;
+
   return {
     ...DEFAULT_APP_SETTINGS_VIEW,
     ...raw,
     theme: isAppTheme(raw.theme) ? raw.theme : "dark",
     language: raw.language?.trim() || "en",
+    appBackground,
+    appBackgroundOpacity: Math.min(
+      MAX_APP_BACKGROUND_OPACITY,
+      Math.max(
+        MIN_APP_BACKGROUND_OPACITY,
+        Number(raw.appBackgroundOpacity) || DEFAULT_APP_BACKGROUND_OPACITY,
+      ),
+    ),
+    availableAppBackgrounds: available,
     defaultSheetConcurrency: Math.min(
       64,
       Math.max(1, Number(raw.defaultSheetConcurrency) || 5),
@@ -32,6 +63,7 @@ export const saveAppSettings = async (
   request: SaveAppSettingsRequest,
 ): Promise<AppSettingsView> => {
   if (!isTauriRuntime()) {
+    const nextBackground = request.appBackground ?? DEFAULT_APP_SETTINGS_VIEW.appBackground;
     return {
       ...DEFAULT_APP_SETTINGS_VIEW,
       theme: request.theme ?? DEFAULT_APP_SETTINGS_VIEW.theme,
@@ -39,6 +71,10 @@ export const saveAppSettings = async (
       defaultSheetConcurrency:
         request.defaultSheetConcurrency ??
         DEFAULT_APP_SETTINGS_VIEW.defaultSheetConcurrency,
+      appBackground: nextBackground,
+      appBackgroundOpacity:
+        request.appBackgroundOpacity ??
+        DEFAULT_APP_SETTINGS_VIEW.appBackgroundOpacity,
       geometryDashDir: request.clearGeometryDashDir
         ? null
         : (request.geometryDashDir ?? DEFAULT_APP_SETTINGS_VIEW.geometryDashDir),

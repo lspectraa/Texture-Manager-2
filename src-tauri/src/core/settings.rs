@@ -8,10 +8,18 @@ use crate::core::game_files::{
     detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root,
     resolve_geometry_dash_dir_with_override, GameFilesLayout,
 };
+use crate::core::safe_fs::{is_safe_path_segment, png_file_to_data_url};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const DEFAULT_SHEET_CONCURRENCY: u32 = 5;
 const DEFAULT_LANGUAGE: &str = "en";
+/// Default: pick a discovered `game_bg_*` once per frontend session.
+const DEFAULT_APP_BACKGROUND: &str = "random";
+const DEFAULT_APP_BACKGROUND_OPACITY: f32 = 0.75;
+const MIN_APP_BACKGROUND_OPACITY: f32 = 0.1;
+const MAX_APP_BACKGROUND_OPACITY: f32 = 1.0;
+const GAME_BG_PREFIX: &str = "game_bg_";
+const GAME_BG_UHD_SUFFIX: &str = "_001-uhd.png";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -54,6 +62,11 @@ pub struct AppSettings {
     pub theme: AppTheme,
     #[serde(default = "default_language")]
     pub language: String,
+    /// `"random"` (default) or a `game_bg_*_001-uhd.png` filename under GD Resources.
+    #[serde(default = "default_app_background")]
+    pub app_background: String,
+    #[serde(default = "default_app_background_opacity")]
+    pub app_background_opacity: f32,
 }
 
 fn default_sheet_concurrency() -> u32 {
@@ -64,6 +77,14 @@ fn default_language() -> String {
     DEFAULT_LANGUAGE.to_string()
 }
 
+fn default_app_background() -> String {
+    DEFAULT_APP_BACKGROUND.to_string()
+}
+
+fn default_app_background_opacity() -> f32 {
+    DEFAULT_APP_BACKGROUND_OPACITY
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -71,6 +92,8 @@ impl Default for AppSettings {
             default_sheet_concurrency: DEFAULT_SHEET_CONCURRENCY,
             theme: AppTheme::Dark,
             language: default_language(),
+            app_background: default_app_background(),
+            app_background_opacity: default_app_background_opacity(),
         }
     }
 }
@@ -81,6 +104,18 @@ impl AppSettings {
         if self.language.trim().is_empty() {
             self.language = default_language();
         }
+        let trimmed_bg = self.app_background.trim().to_string();
+        if trimmed_bg.is_empty() {
+            self.app_background = default_app_background();
+        } else {
+            self.app_background = trimmed_bg;
+        }
+        if !self.app_background_opacity.is_finite() {
+            self.app_background_opacity = default_app_background_opacity();
+        }
+        self.app_background_opacity = self
+            .app_background_opacity
+            .clamp(MIN_APP_BACKGROUND_OPACITY, MAX_APP_BACKGROUND_OPACITY);
         if let Some(path) = self.geometry_dash_dir.as_mut() {
             let trimmed = path.trim().to_string();
             if trimmed.is_empty() {
@@ -95,6 +130,14 @@ impl AppSettings {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AppBackgroundOption {
+    pub id: String,
+    pub label: String,
+    pub path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppSettingsView {
     pub geometry_dash_dir: Option<String>,
     pub geometry_dash_resolved: String,
@@ -104,6 +147,9 @@ pub struct AppSettingsView {
     pub default_sheet_concurrency: u32,
     pub theme: String,
     pub language: String,
+    pub app_background: String,
+    pub app_background_opacity: f32,
+    pub available_app_backgrounds: Vec<AppBackgroundOption>,
     pub game_files_root: String,
     pub split_cache_dir: String,
 }
@@ -123,6 +169,11 @@ pub struct SaveAppSettingsRequest {
     pub theme: Option<String>,
     #[serde(default)]
     pub language: Option<String>,
+    /// `"random"` or a discovered `game_bg_*_001-uhd.png` filename.
+    #[serde(default)]
+    pub app_background: Option<String>,
+    #[serde(default)]
+    pub app_background_opacity: Option<f32>,
 }
 
 pub fn settings_path(root: &Path) -> PathBuf {
@@ -154,6 +205,87 @@ pub fn save_settings(settings: &AppSettings) -> Result<AppSettings, AppError> {
     Ok(clamped)
 }
 
+/// Discover Geometry Dash `game_bg_{n}_001-uhd.png` files under Resources.
+/// Soft-fails to an empty list when the folder is missing or unreadable.
+pub fn discover_app_backgrounds(resources_dir: &Path) -> Vec<AppBackgroundOption> {
+    let Ok(entries) = fs::read_dir(resources_dir) else {
+        return Vec::new();
+    };
+
+    let mut options = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !is_game_bg_uhd_filename(name) {
+            continue;
+        }
+        let label = game_bg_label(name).unwrap_or_else(|| name.to_string());
+        options.push(AppBackgroundOption {
+            id: name.to_string(),
+            label,
+            path: path.to_string_lossy().to_string(),
+        });
+    }
+
+    options.sort_by(|a, b| a.id.cmp(&b.id));
+    options
+}
+
+/// Read only a background that is present in the validated discovery list.
+pub fn app_background_png_data_url(resources_dir: &Path, id: &str) -> Result<String, AppError> {
+    let normalized = normalize_app_background_setting(id)?;
+    if normalized == DEFAULT_APP_BACKGROUND {
+        return Err(AppError::IoError(
+            "Random is not a concrete app background.".to_string(),
+        ));
+    }
+    let option = discover_app_backgrounds(resources_dir)
+        .into_iter()
+        .find(|option| option.id == normalized)
+        .ok_or_else(|| {
+            AppError::IoError(format!(
+                "App background '{normalized}' was not found in Geometry Dash Resources."
+            ))
+        })?;
+    png_file_to_data_url(Path::new(&option.path))
+}
+
+fn is_game_bg_uhd_filename(name: &str) -> bool {
+    if !is_safe_path_segment(name) {
+        return false;
+    }
+    let lower = name.to_ascii_lowercase();
+    lower.starts_with(GAME_BG_PREFIX) && lower.ends_with(GAME_BG_UHD_SUFFIX)
+}
+
+fn game_bg_label(filename: &str) -> Option<String> {
+    let lower = filename.to_ascii_lowercase();
+    let stem = lower.strip_suffix(GAME_BG_UHD_SUFFIX)?;
+    let num = stem.strip_prefix(GAME_BG_PREFIX)?;
+    if num.is_empty() || !num.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("Background {num}"))
+}
+
+fn normalize_app_background_setting(raw: &str) -> Result<String, AppError> {
+    let trimmed = raw.trim();
+    if trimmed.eq_ignore_ascii_case(DEFAULT_APP_BACKGROUND) {
+        return Ok(DEFAULT_APP_BACKGROUND.to_string());
+    }
+    if !is_game_bg_uhd_filename(trimmed) {
+        return Err(AppError::IoError(format!(
+            "Invalid app background '{trimmed}'. Expected 'random' or a game_bg_*_001-uhd.png filename."
+        )));
+    }
+    Ok(trimmed.to_string())
+}
+
 pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSettingsView {
     let override_active = settings
         .geometry_dash_dir
@@ -165,6 +297,11 @@ pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSet
         .unwrap_or_default();
     let resolved = layout.geometry_dash_dir.to_string_lossy().to_string();
     let found = layout.geometry_dash_found();
+    let available_app_backgrounds = if found {
+        discover_app_backgrounds(&layout.resources)
+    } else {
+        Vec::new()
+    };
 
     AppSettingsView {
         geometry_dash_dir: settings.geometry_dash_dir.clone(),
@@ -175,6 +312,9 @@ pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSet
         default_sheet_concurrency: settings.default_sheet_concurrency,
         theme: settings.theme.as_str().to_string(),
         language: settings.language.clone(),
+        app_background: settings.app_background.clone(),
+        app_background_opacity: settings.app_background_opacity,
+        available_app_backgrounds,
         game_files_root: layout.root.to_string_lossy().to_string(),
         split_cache_dir: layout.current_split.to_string_lossy().to_string(),
     }
@@ -223,6 +363,14 @@ pub fn apply_save_request(
         }
     }
 
+    if let Some(app_background) = request.app_background {
+        next.app_background = normalize_app_background_setting(&app_background)?;
+    }
+
+    if let Some(app_background_opacity) = request.app_background_opacity {
+        next.app_background_opacity = app_background_opacity;
+    }
+
     Ok(next.clamp())
 }
 
@@ -249,5 +397,55 @@ mod tests {
         }
         .clamp();
         assert_eq!(settings.default_sheet_concurrency, 64);
+    }
+
+    #[test]
+    fn default_app_background_is_random() {
+        assert_eq!(AppSettings::default().app_background, "random");
+        assert_eq!(
+            AppSettings::default().app_background_opacity,
+            DEFAULT_APP_BACKGROUND_OPACITY
+        );
+    }
+
+    #[test]
+    fn old_settings_default_background_opacity() {
+        let settings: AppSettings =
+            serde_json::from_str(r#"{"appBackground":"random"}"#).expect("deserialize");
+        assert_eq!(
+            settings.app_background_opacity,
+            DEFAULT_APP_BACKGROUND_OPACITY
+        );
+    }
+
+    #[test]
+    fn game_bg_filename_detection() {
+        assert!(is_game_bg_uhd_filename("game_bg_01_001-uhd.png"));
+        assert!(is_game_bg_uhd_filename("game_bg_59_001-uhd.png"));
+        assert!(!is_game_bg_uhd_filename("game_bg_01_001-hd.png"));
+        assert!(!is_game_bg_uhd_filename("../game_bg_01_001-uhd.png"));
+    }
+
+    #[test]
+    fn discover_app_backgrounds_from_dir() {
+        let dir = std::env::temp_dir().join(format!(
+            "tm2-bg-test-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(&dir).expect("temp dir");
+        fs::write(dir.join("game_bg_02_001-uhd.png"), b"not-a-real-png").expect("write");
+        fs::write(dir.join("game_bg_01_001-uhd.png"), b"not-a-real-png").expect("write");
+        fs::write(dir.join("other.png"), b"x").expect("write");
+
+        let options = discover_app_backgrounds(&dir);
+        let _ = fs::remove_dir_all(&dir);
+
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].id, "game_bg_01_001-uhd.png");
+        assert_eq!(options[0].label, "Background 01");
+        assert_eq!(options[1].id, "game_bg_02_001-uhd.png");
     }
 }

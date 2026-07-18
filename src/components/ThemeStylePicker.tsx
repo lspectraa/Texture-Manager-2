@@ -34,14 +34,29 @@ function ThemeMiniPreview({ theme }: { theme: AppTheme }) {
     >
       <div className="tm-theme-mini-preview-shell">
         <aside className="tm-theme-mini-preview-sidebar">
-          <span className="tm-theme-mini-preview-rail" />
-          <span className="tm-theme-mini-preview-rail" />
-          <span className="tm-theme-mini-preview-rail short" />
+          <span className="tm-theme-mini-preview-brand" />
+          <span className="tm-theme-mini-preview-nav active">
+            <span className="tm-theme-mini-preview-nav-icon" />
+            <span className="tm-theme-mini-preview-nav-line" />
+          </span>
+          <span className="tm-theme-mini-preview-nav cyan">
+            <span className="tm-theme-mini-preview-nav-icon" />
+            <span className="tm-theme-mini-preview-nav-line" />
+          </span>
+          <span className="tm-theme-mini-preview-nav amber">
+            <span className="tm-theme-mini-preview-nav-icon" />
+            <span className="tm-theme-mini-preview-nav-line short" />
+          </span>
         </aside>
         <div className="tm-theme-mini-preview-main">
-          <span className="tm-theme-mini-preview-bar" />
-          <span className="tm-theme-mini-preview-bar mid" />
-          <span className="tm-theme-mini-preview-panel" />
+          <span className="tm-theme-mini-preview-eyebrow" />
+          <span className="tm-theme-mini-preview-heading" />
+          <span className="tm-theme-mini-preview-copy" />
+          <span className="tm-theme-mini-preview-panel">
+            <span className="tm-theme-mini-preview-card featured" />
+            <span className="tm-theme-mini-preview-card" />
+            <span className="tm-theme-mini-preview-card amber" />
+          </span>
         </div>
       </div>
     </div>

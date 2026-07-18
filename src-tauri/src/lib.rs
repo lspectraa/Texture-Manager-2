@@ -32,7 +32,8 @@ use crate::core::icon_editor::{
 use crate::core::operations::build_operation_plan;
 use crate::core::report::OperationReport;
 use crate::core::settings::{
-    apply_save_request, load_settings, save_settings, settings_view, AppSettings, AppSettingsView,
+    app_background_png_data_url as app_background_png_data_url_core, apply_save_request,
+    load_settings, save_settings, settings_view, AppSettings, AppSettingsView,
     SaveAppSettingsRequest,
 };
 
@@ -78,6 +79,15 @@ fn get_app_settings(game_files: tauri::State<'_, GameFilesState>) -> AppSettings
 }
 
 #[tauri::command]
+fn app_background_png_data_url(
+    game_files: tauri::State<'_, GameFilesState>,
+    id: String,
+) -> Result<String, String> {
+    let layout = game_files.snapshot();
+    app_background_png_data_url_core(&layout.resources, &id).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 fn save_app_settings(
     game_files: tauri::State<'_, GameFilesState>,
     request: SaveAppSettingsRequest,
@@ -98,6 +108,8 @@ fn set_geometry_dash_dir(
             default_sheet_concurrency: None,
             theme: None,
             language: None,
+            app_background: None,
+            app_background_opacity: None,
         },
     )
 }
@@ -114,6 +126,8 @@ fn clear_geometry_dash_dir(
             default_sheet_concurrency: None,
             theme: None,
             language: None,
+            app_background: None,
+            app_background_opacity: None,
         },
     )
 }
@@ -130,6 +144,8 @@ fn redetect_geometry_dash_dir(
             default_sheet_concurrency: None,
             theme: None,
             language: None,
+            app_background: None,
+            app_background_opacity: None,
         },
     )
 }
@@ -421,6 +437,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_phase_defaults,
             get_app_settings,
+            app_background_png_data_url,
             save_app_settings,
             set_geometry_dash_dir,
             clear_geometry_dash_dir,
