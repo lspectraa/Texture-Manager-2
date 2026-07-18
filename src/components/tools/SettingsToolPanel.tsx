@@ -297,6 +297,7 @@ export function SettingsToolPanel({
               </span>
               <input
                 type="range"
+                className="tm-settings-opacity-slider"
                 min={MIN_APP_BACKGROUND_OPACITY * 100}
                 max={MAX_APP_BACKGROUND_OPACITY * 100}
                 step={5}
