@@ -30,6 +30,12 @@ function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
       ? APP_BACKGROUND_RANDOM
       : appBackgroundRaw;
 
+  const onboardingVersionRaw = Number(raw.onboardingVersion);
+  const onboardingVersion =
+    Number.isFinite(onboardingVersionRaw) && onboardingVersionRaw >= 0
+      ? Math.floor(onboardingVersionRaw)
+      : 0;
+
   return {
     ...DEFAULT_APP_SETTINGS_VIEW,
     ...raw,
@@ -43,6 +49,7 @@ function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
         Number(raw.appBackgroundOpacity) || DEFAULT_APP_BACKGROUND_OPACITY,
       ),
     ),
+    onboardingVersion,
     availableAppBackgrounds: available,
     defaultSheetConcurrency: Math.min(
       64,
@@ -75,6 +82,8 @@ export const saveAppSettings = async (
       appBackgroundOpacity:
         request.appBackgroundOpacity ??
         DEFAULT_APP_SETTINGS_VIEW.appBackgroundOpacity,
+      onboardingVersion:
+        request.onboardingVersion ?? DEFAULT_APP_SETTINGS_VIEW.onboardingVersion,
       geometryDashDir: request.clearGeometryDashDir
         ? null
         : (request.geometryDashDir ?? DEFAULT_APP_SETTINGS_VIEW.geometryDashDir),

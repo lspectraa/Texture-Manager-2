@@ -116,6 +116,7 @@ fn set_geometry_dash_dir(
             language: None,
             app_background: None,
             app_background_opacity: None,
+            onboarding_version: None,
         },
     )
 }
@@ -134,6 +135,7 @@ fn clear_geometry_dash_dir(
             language: None,
             app_background: None,
             app_background_opacity: None,
+            onboarding_version: None,
         },
     )
 }
@@ -152,6 +154,7 @@ fn redetect_geometry_dash_dir(
             language: None,
             app_background: None,
             app_background_opacity: None,
+            onboarding_version: None,
         },
     )
 }

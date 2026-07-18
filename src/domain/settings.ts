@@ -9,6 +9,9 @@ export type AppTheme = "dark" | "light";
 /** `"random"` (default) or a discovered `game_bg_*_001-uhd.png` filename. */
 export type AppBackgroundSetting = typeof APP_BACKGROUND_RANDOM | string;
 
+/** Current first-run onboarding revision. Values below this show onboarding. */
+export const CURRENT_ONBOARDING_VERSION = 1;
+
 export type AppSettingsView = {
   geometryDashDir: string | null;
   geometryDashResolved: string;
@@ -22,6 +25,8 @@ export type AppSettingsView = {
   appBackground: AppBackgroundSetting;
   /** Opacity applied only to the game background image layer, from 0.1 to 1. */
   appBackgroundOpacity: number;
+  /** Completed first-run onboarding revision. `0` means incomplete. */
+  onboardingVersion: number;
   availableAppBackgrounds: AppBackgroundOption[];
   gameFilesRoot: string;
   splitCacheDir: string;
@@ -35,6 +40,7 @@ export type SaveAppSettingsRequest = {
   language?: string;
   appBackground?: AppBackgroundSetting;
   appBackgroundOpacity?: number;
+  onboardingVersion?: number;
 };
 
 export const DEFAULT_APP_SETTINGS_VIEW: AppSettingsView = {
@@ -48,6 +54,7 @@ export const DEFAULT_APP_SETTINGS_VIEW: AppSettingsView = {
   language: "en",
   appBackground: APP_BACKGROUND_RANDOM,
   appBackgroundOpacity: DEFAULT_APP_BACKGROUND_OPACITY,
+  onboardingVersion: 0,
   availableAppBackgrounds: [],
   gameFilesRoot: "",
   splitCacheDir: "",

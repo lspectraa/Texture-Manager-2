@@ -41,6 +41,7 @@ import { AppSidebar } from "./components/AppSidebar";
 import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { GlassFrost } from "./components/GlassFrost";
+import { OnboardingFlow } from "./components/OnboardingFlow";
 import { preloadAppBackgroundImages } from "./services/appBackgroundImages";
 import {
   APP_BACKGROUND_RANDOM,
@@ -60,7 +61,10 @@ import {
 } from "./utils/pathDisplay";
 import convertVersionMap from "./config/convertVersionMap.json";
 import type { AppSettingsView } from "./domain/settings";
-import { DEFAULT_APP_SETTINGS_VIEW } from "./domain/settings";
+import {
+  CURRENT_ONBOARDING_VERSION,
+  DEFAULT_APP_SETTINGS_VIEW,
+} from "./domain/settings";
 import {
   clearGeometryDashDir,
   getAppSettings,
@@ -153,8 +157,11 @@ function App() {
   const [appSettings, setAppSettings] = useState<AppSettingsView>(
     DEFAULT_APP_SETTINGS_VIEW,
   );
+  const [settingsHydrated, setSettingsHydrated] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [onboardingError, setOnboardingError] = useState<string | null>(null);
+  const [onboardingBusy, setOnboardingBusy] = useState(false);
   const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
   const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
 
@@ -272,6 +279,8 @@ function App() {
             ? error.message
             : "Failed to load phase defaults from backend.",
         );
+      } finally {
+        setSettingsHydrated(true);
       }
     };
 
@@ -281,6 +290,7 @@ function App() {
           ? error.message
           : "Unexpected error while loading defaults.";
       setLoadError(message);
+      setSettingsHydrated(true);
     });
   }, []);
 
@@ -338,6 +348,52 @@ function App() {
       assign(selected);
     }
   };
+
+  const runOnboardingAction = useCallback(
+    async (action: () => Promise<AppSettingsView>): Promise<void> => {
+      setOnboardingError(null);
+      setOnboardingBusy(true);
+      try {
+        const view = await action();
+        applySettingsView(view);
+      } catch (error) {
+        setOnboardingError(
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        setOnboardingBusy(false);
+      }
+    },
+    [applySettingsView],
+  );
+
+  const completeOnboarding = useCallback(
+    async (choices: { language: string; theme: AppTheme }): Promise<void> => {
+      setOnboardingError(null);
+      setOnboardingBusy(true);
+      try {
+        applyTheme(choices.theme);
+        setStoredTheme(choices.theme);
+        const view = await saveAppSettings({
+          language: choices.language,
+          theme: choices.theme,
+          onboardingVersion: CURRENT_ONBOARDING_VERSION,
+        });
+        applySettingsView(view);
+      } catch (error) {
+        setOnboardingError(
+          error instanceof Error ? error.message : String(error),
+        );
+      } finally {
+        setOnboardingBusy(false);
+      }
+    },
+    [applySettingsView],
+  );
+
+  const needsOnboarding =
+    settingsHydrated &&
+    appSettings.onboardingVersion < CURRENT_ONBOARDING_VERSION;
 
   const executeSelectedOperation = async (): Promise<void> => {
     setRunError(null);
@@ -852,6 +908,65 @@ function App() {
       }
     }
   })();
+
+  if (!settingsHydrated) {
+    return (
+      <main className="tm-shell tm-shell--boot">
+        <div className="tm-bg" aria-hidden="true">
+          <span className="tm-bg-orb tm-bg-orb-a" />
+          <span className="tm-bg-orb tm-bg-orb-b" />
+          <span className="tm-bg-orb tm-bg-orb-c" />
+          <span className="tm-bg-orb tm-bg-orb-d" />
+        </div>
+      </main>
+    );
+  }
+
+  if (needsOnboarding) {
+    return (
+      <main className="tm-shell tm-shell--onboarding">
+        <div className="tm-bg" aria-hidden="true">
+          <span className="tm-bg-orb tm-bg-orb-a" />
+          <span className="tm-bg-orb tm-bg-orb-b" />
+          <span className="tm-bg-orb tm-bg-orb-c" />
+          <span className="tm-bg-orb tm-bg-orb-d" />
+        </div>
+        <AppGameBackground
+          setting={appSettings.appBackground}
+          options={appSettings.availableAppBackgrounds}
+          opacity={appSettings.appBackgroundOpacity}
+        />
+        <OnboardingFlow
+          settings={appSettings}
+          busy={onboardingBusy}
+          error={onboardingError}
+          pickFolder={pickFolder}
+          onThemeChange={(theme: AppTheme) => {
+            applyTheme(theme);
+            setStoredTheme(theme);
+            setAppSettings((prev) =>
+              prev.theme === theme ? prev : { ...prev, theme },
+            );
+          }}
+          onGeometryDashPathSelected={(path) => {
+            runOnboardingAction(() => setGeometryDashDir(path)).catch(() => {
+              // Error surfaced via onboardingError.
+            });
+          }}
+          onRedetectGeometryDash={() => {
+            runOnboardingAction(() => redetectGeometryDashDir()).catch(() => {
+              // Error surfaced via onboardingError.
+            });
+          }}
+          onComplete={(choices) => {
+            completeOnboarding(choices).catch(() => {
+              // Error surfaced via onboardingError.
+            });
+          }}
+        />
+      </main>
+    );
+  }
 
   return (
     <main className="tm-shell">

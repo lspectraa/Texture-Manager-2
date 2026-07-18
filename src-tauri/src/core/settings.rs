@@ -19,6 +19,8 @@ const DEFAULT_APP_BACKGROUND: &str = "random";
 const DEFAULT_APP_BACKGROUND_OPACITY: f32 = 0.75;
 const MIN_APP_BACKGROUND_OPACITY: f32 = 0.1;
 const MAX_APP_BACKGROUND_OPACITY: f32 = 1.0;
+/// `0` = first-run onboarding incomplete; `1` = current onboarding flow completed.
+const DEFAULT_ONBOARDING_VERSION: u32 = 0;
 const GAME_BG_PREFIX: &str = "game_bg_";
 const GAME_BG_UHD_SUFFIX: &str = "_001-uhd.png";
 
@@ -68,6 +70,9 @@ pub struct AppSettings {
     pub app_background: String,
     #[serde(default = "default_app_background_opacity")]
     pub app_background_opacity: f32,
+    /// Completed first-run onboarding revision. `0` means incomplete.
+    #[serde(default = "default_onboarding_version")]
+    pub onboarding_version: u32,
 }
 
 fn default_sheet_concurrency() -> u32 {
@@ -86,6 +91,10 @@ fn default_app_background_opacity() -> f32 {
     DEFAULT_APP_BACKGROUND_OPACITY
 }
 
+fn default_onboarding_version() -> u32 {
+    DEFAULT_ONBOARDING_VERSION
+}
+
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
@@ -95,6 +104,7 @@ impl Default for AppSettings {
             language: default_language(),
             app_background: default_app_background(),
             app_background_opacity: default_app_background_opacity(),
+            onboarding_version: default_onboarding_version(),
         }
     }
 }
@@ -150,6 +160,7 @@ pub struct AppSettingsView {
     pub language: String,
     pub app_background: String,
     pub app_background_opacity: f32,
+    pub onboarding_version: u32,
     pub available_app_backgrounds: Vec<AppBackgroundOption>,
     pub game_files_root: String,
     pub split_cache_dir: String,
@@ -175,6 +186,8 @@ pub struct SaveAppSettingsRequest {
     pub app_background: Option<String>,
     #[serde(default)]
     pub app_background_opacity: Option<f32>,
+    #[serde(default)]
+    pub onboarding_version: Option<u32>,
 }
 
 pub fn settings_path(root: &Path) -> PathBuf {
@@ -315,6 +328,7 @@ pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSet
         language: settings.language.clone(),
         app_background: settings.app_background.clone(),
         app_background_opacity: settings.app_background_opacity,
+        onboarding_version: settings.onboarding_version,
         available_app_backgrounds,
         game_files_root: layout.root.to_string_lossy().to_string(),
         split_cache_dir: layout.current_split.to_string_lossy().to_string(),
@@ -374,6 +388,10 @@ pub fn apply_save_request(
         next.app_background_opacity = app_background_opacity;
     }
 
+    if let Some(onboarding_version) = request.onboarding_version {
+        next.onboarding_version = onboarding_version;
+    }
+
     Ok(next.clamp())
 }
 
@@ -415,6 +433,36 @@ mod tests {
             settings.app_background_opacity,
             DEFAULT_APP_BACKGROUND_OPACITY
         );
+    }
+
+    #[test]
+    fn old_settings_default_onboarding_incomplete() {
+        let settings: AppSettings =
+            serde_json::from_str(r#"{"theme":"dark","language":"en"}"#).expect("deserialize");
+        assert_eq!(settings.onboarding_version, 0);
+    }
+
+    #[test]
+    fn apply_save_request_sets_onboarding_version() {
+        let current = AppSettings::default();
+        assert_eq!(current.onboarding_version, 0);
+        let next = apply_save_request(
+            &current,
+            SaveAppSettingsRequest {
+                geometry_dash_dir: None,
+                clear_geometry_dash_dir: false,
+                default_sheet_concurrency: None,
+                theme: Some("light".to_string()),
+                language: Some("en".to_string()),
+                app_background: None,
+                app_background_opacity: None,
+                onboarding_version: Some(1),
+            },
+        )
+        .expect("apply save");
+        assert_eq!(next.onboarding_version, 1);
+        assert_eq!(next.theme, AppTheme::Light);
+        assert_eq!(next.language, "en");
     }
 
     #[test]
