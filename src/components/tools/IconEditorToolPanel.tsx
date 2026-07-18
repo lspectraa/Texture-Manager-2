@@ -8,11 +8,11 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { createPortal } from "react-dom";
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import html2canvas from "html2canvas";
 import { useTranslation } from "react-i18next";
+import { AppTooltip } from "../AppTooltip";
 import {
   FolderOpen,
   Save,
@@ -967,77 +967,14 @@ type IconEditorToolbarTipProps = {
 };
 
 function IconEditorToolbarTip({ label, children, className }: IconEditorToolbarTipProps) {
-  const anchorRef = useRef<HTMLSpanElement>(null);
-  const [visible, setVisible] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
-
-  const updatePosition = useCallback(() => {
-    const anchor = anchorRef.current;
-    if (!anchor) {
-      return;
-    }
-    const rect = anchor.getBoundingClientRect();
-    setPosition({
-      top: rect.bottom + 10,
-      left: rect.left + rect.width / 2,
-    });
-  }, []);
-
-  const showTip = useCallback(() => {
-    updatePosition();
-    setVisible(true);
-  }, [updatePosition]);
-
-  const hideTip = useCallback(() => {
-    setVisible(false);
-  }, []);
-
-  useEffect(() => {
-    if (!visible) {
-      return;
-    }
-    const syncPosition = (): void => {
-      updatePosition();
-    };
-    window.addEventListener("scroll", syncPosition, true);
-    window.addEventListener("resize", syncPosition);
-    return () => {
-      window.removeEventListener("scroll", syncPosition, true);
-      window.removeEventListener("resize", syncPosition);
-    };
-  }, [updatePosition, visible]);
-
   return (
-    <>
-      <span
-        ref={anchorRef}
-        className={`tm-icon-editor-toolbar-tip${className ? ` ${className}` : ""}`}
-        onMouseEnter={showTip}
-        onMouseLeave={hideTip}
-        onFocusCapture={showTip}
-        onBlurCapture={(event) => {
-          const nextTarget = event.relatedTarget;
-          if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
-            return;
-          }
-          hideTip();
-        }}
-      >
-        {children}
-      </span>
-      {visible &&
-        typeof document !== "undefined" &&
-        createPortal(
-          <span
-            className="tm-icon-editor-toolbar-tip-popup"
-            role="tooltip"
-            style={{ top: position.top, left: position.left }}
-          >
-            {label}
-          </span>,
-          document.body,
-        )}
-    </>
+    <AppTooltip
+      label={label}
+      className={`tm-icon-editor-toolbar-tip${className ? ` ${className}` : ""}`}
+      placement="bottom"
+    >
+      {children}
+    </AppTooltip>
   );
 }
 

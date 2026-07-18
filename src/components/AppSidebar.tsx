@@ -24,10 +24,6 @@ export function AppSidebar({
   onCopyrightClick,
 }: AppSidebarProps) {
   const { t } = useTranslation("navigation");
-  const copyrightTitle = t("copyrightTitle", {
-    holder: COPYRIGHT_HOLDER,
-    year: COPYRIGHT_YEAR,
-  });
 
   return (
     <aside
@@ -48,7 +44,6 @@ export function AppSidebar({
           aria-label={
             collapsed ? t("expandPanelAria") : t("collapsePanelAria")
           }
-          title={collapsed ? t("showPanel") : t("hidePanel")}
           disabled={animating}
         >
           <span className="tm-nav-btn-icon" aria-hidden>
@@ -68,7 +63,6 @@ export function AppSidebar({
           className={`tm-nav-btn tm-nav-btn-home${selectedTool === "home" ? " active" : ""}`}
           onClick={() => onNavigate("home")}
           aria-current={selectedTool === "home" ? "page" : undefined}
-          title={t("home")}
         >
           <span className="tm-nav-btn-icon" aria-hidden>
             <House size={17} strokeWidth={1.85} />
@@ -117,11 +111,6 @@ export function AppSidebar({
                       aria-disabled={isUpcoming || undefined}
                       role="listitem"
                       aria-current={isActive ? "page" : undefined}
-                      title={
-                        isUpcoming
-                          ? t("comingSoonTitle", { tool: t(tool.label) })
-                          : t(tool.label)
-                      }
                     >
                       <span className="tm-nav-btn-icon" aria-hidden>
                         <ToolIcon size={16} strokeWidth={1.85} />
@@ -149,7 +138,6 @@ export function AppSidebar({
           className={`tm-nav-btn tm-nav-btn-sky tm-sidebar-settings${
             selectedTool === "settings" ? " active" : ""
           }`}
-          title={t("settings")}
           aria-label={t("settings")}
           aria-current={selectedTool === "settings" ? "page" : undefined}
           onClick={() => onNavigate("settings")}
@@ -163,7 +151,6 @@ export function AppSidebar({
         <button
           type="button"
           className="tm-nav-btn tm-nav-btn-sky tm-sidebar-copyright"
-          title={copyrightTitle}
           aria-label={t("copyrightAria")}
           aria-haspopup="dialog"
           onClick={onCopyrightClick}
