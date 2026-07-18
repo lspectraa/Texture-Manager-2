@@ -1418,11 +1418,11 @@ where
         ));
     }
 
-    if !game_files.resources.is_dir() {
+    if !game_files.geometry_dash_found() || !game_files.resources.is_dir() {
         issues.push(ReportIssue {
             level: ReportLevel::Warning,
-            message: "Geometry Dash Resources directory was not found".to_string(),
-            file: Some(game_files.resources.to_string_lossy().to_string()),
+            message: "Geometry Dash is not configured or Resources was not found. Set the install path in Settings, then re-run Convert to New Version.".to_string(),
+            file: None,
         });
     }
     if sheet_pairs.is_empty() && unpaired_pngs.is_empty() {

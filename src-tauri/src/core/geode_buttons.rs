@@ -19,7 +19,7 @@ use crate::core::icon_editor::icon_editor_extract_frames;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::porter::save_merged_sheet;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
-use crate::core::safe_fs::ensure_readable_image_file;
+use crate::core::safe_fs::{ensure_readable_image_file, ensure_user_absolute_path};
 use crate::core::splitter::split_sheet_candidate_memory;
 use crate::core::{
     contracts::GeodeButtonsOptions,
@@ -212,6 +212,10 @@ pub fn geode_buttons_target_index(
     layout: &GameFilesLayout,
     use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, AppError> {
+    crate::core::safe_fs::ensure_existing_user_file(plist_path)?;
+    if use_game_files_cache && !layout.geometry_dash_found() {
+        return Err(crate::core::game_files::geometry_dash_required_error());
+    }
     let root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
 
@@ -346,6 +350,9 @@ fn fill_previews_from_direct_extract(
 pub fn resolve_geode_buttons_default_sheet(
     layout: &GameFilesLayout,
 ) -> Result<Option<SheetCandidate>, AppError> {
+    if !layout.geometry_dash_found() {
+        return Ok(None);
+    }
     const STEMS: [&str; 3] = ["BlankSheet-uhd", "BlankSheet-hd", "BlankSheet"];
     for stem in STEMS {
         if let Some(pair) =
@@ -363,6 +370,9 @@ pub fn resolve_geode_buttons_default_sheet(
 }
 
 pub fn resolve_geode_buttons_default_input_dir(layout: &GameFilesLayout) -> String {
+    if !layout.geometry_dash_found() {
+        return String::new();
+    }
     layout
         .geode_resources
         .join("geode.loader")
@@ -695,7 +705,7 @@ fn largest_family_sprite(
     best.map(|(_, img, _)| img.clone())
 }
 
-fn normalize_user_template_path(path: &str) -> std::path::PathBuf {
+fn normalize_user_template_path(path: &str) -> PathBuf {
     let mut s = path.trim().to_string();
     const PREFIX: &str = "file://";
     if s.len() >= PREFIX.len() && s[..PREFIX.len()].eq_ignore_ascii_case(PREFIX) {
@@ -707,16 +717,19 @@ fn normalize_user_template_path(path: &str) -> std::path::PathBuf {
             }
         }
     }
-    std::path::PathBuf::from(s)
+    PathBuf::from(s)
 }
 
 fn load_template_rgba(path: &str) -> Result<RgbaImage, AppError> {
     let p = normalize_user_template_path(path);
+    ensure_user_absolute_path(&p)?;
     ensure_readable_image_file(&p)?;
     let img = image::open(&p).map_err(|err| {
         AppError::ParseError(format!(
             "failed to open template png `{}`: {err}",
-            p.display()
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("template")
         ))
     })?;
     Ok(img.to_rgba8())
@@ -725,11 +738,14 @@ fn load_template_rgba(path: &str) -> Result<RgbaImage, AppError> {
 /// PNG data URL for webview previews — same path rules as export (`load_template_rgba`).
 pub fn geode_buttons_template_preview_data_url(path: &str) -> Result<String, AppError> {
     let p = normalize_user_template_path(path);
+    ensure_user_absolute_path(&p)?;
     ensure_readable_image_file(&p)?;
     let img = image::open(&p).map_err(|err| {
         AppError::ParseError(format!(
             "failed to open template image `{}`: {err}",
-            p.display()
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or("template")
         ))
     })?;
     let mut bytes = Vec::new();
@@ -738,7 +754,9 @@ pub fn geode_buttons_template_preview_data_url(path: &str) -> Result<String, App
         img.write_to(&mut cursor, ImageFormat::Png).map_err(|err| {
             AppError::ParseError(format!(
                 "failed to encode template preview `{}`: {err}",
-                p.display()
+                p.file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("template")
             ))
         })?;
     }
@@ -987,12 +1005,16 @@ mod tests {
     fn geode_loader_plist_uses_cache_pipeline() {
         let root = unique_temp_dir("root2");
         let gd = unique_temp_dir("gd2");
+        fs::create_dir_all(gd.join("Resources")).expect("resources");
         let loader = gd.join("geode").join("resources").join("geode.loader");
         fs::create_dir_all(&loader).expect("loader");
         let layout = test_layout(&root, &gd);
         let plist = loader.join("BlankSheet-uhd.plist");
-        fs::write(&plist, "unused").expect("write");
+        let png = loader.join("BlankSheet-uhd.png");
+        fs::write(&plist, "unused").expect("write plist");
+        fs::write(&png, "unused").expect("write png");
 
+        assert!(layout.geometry_dash_found());
         assert!(geode_buttons_plist_is_under_game_files(&layout, &plist));
         let cached = resolve_geode_buttons_cached_sheet_candidate(&layout, &plist).expect("resolve");
         let default = resolve_geode_buttons_default_sheet(&layout).expect("default");

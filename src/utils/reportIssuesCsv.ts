@@ -1,4 +1,5 @@
 import type { OperationReport, ReportIssue } from "../domain/operations";
+import { redactAbsolutePathsInText, shortenPathForDisplay } from "./pathDisplay";
 
 export type GroupedReportIssue = {
   level: string;
@@ -11,11 +12,14 @@ export function groupReportIssues(issues: ReportIssue[]): GroupedReportIssue[] {
   const groups = new Map<string, GroupedReportIssue>();
   for (const issue of issues) {
     const fileName = issue.file
-      ?.split(/[/\\]/)
-      .pop()
-      ?.replace(/\.(plist|png)$/i, "");
+      ? shortenPathForDisplay(issue.file)
+          .split(/[/\\]/)
+          .pop()
+          ?.replace(/\.(plist|png)$/i, "")
+      : undefined;
     const sheet = fileName && fileName.trim().length > 0 ? fileName : "global";
-    const key = `${issue.level}|${sheet}|${issue.message}`;
+    const message = redactAbsolutePathsInText(issue.message);
+    const key = `${issue.level}|${sheet}|${message}`;
     const existing = groups.get(key);
     if (existing) {
       existing.count += 1;
@@ -24,7 +28,7 @@ export function groupReportIssues(issues: ReportIssue[]): GroupedReportIssue[] {
     groups.set(key, {
       level: issue.level,
       sheet,
-      message: issue.message,
+      message,
       count: 1,
     });
   }

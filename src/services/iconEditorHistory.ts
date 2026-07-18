@@ -23,6 +23,8 @@ export type IconEditorHistoryState = {
 
 const STORAGE_KEY_PREFIX = "texture-manager:icon-editor-history:";
 export const ICON_EDITOR_HISTORY_LIMIT = 100;
+/** Cap persisted undo depth (in-memory can be larger). */
+export const ICON_EDITOR_PERSISTED_HISTORY_LIMIT = 20;
 
 export const emptyIconEditorEditSnapshot = (): IconEditorEditSnapshot => ({
   offsetEdits: {},
@@ -54,6 +56,17 @@ export const cloneIconEditorEditSnapshot = (
       cloneSerializedTextureEdit(edit),
     ]),
   ),
+});
+
+/** Persist offsets / role map only — strip PNG data URLs to avoid localStorage quota pressure. */
+const snapshotForPersistence = (
+  snapshot: IconEditorEditSnapshot,
+): IconEditorEditSnapshot => ({
+  roleMapExtra: snapshot.roleMapExtra,
+  offsetEdits: Object.fromEntries(
+    Object.entries(snapshot.offsetEdits).map(([name, point]) => [name, { ...point }]),
+  ),
+  textureEdits: {},
 });
 
 const serializedTextureEditsEqual = (
@@ -151,9 +164,12 @@ export const saveIconEditorHistory = (
     window.localStorage.setItem(
       historyStorageKey(plistPath),
       JSON.stringify({
-        past: history.past.map((entry) => cloneIconEditorEditSnapshot(entry)),
-        present: cloneIconEditorEditSnapshot(history.present),
-        future: history.future.map((entry) => cloneIconEditorEditSnapshot(entry)),
+        past: history.past
+          .slice(-ICON_EDITOR_PERSISTED_HISTORY_LIMIT)
+          .map((entry) => snapshotForPersistence(entry)),
+        present: snapshotForPersistence(history.present),
+        // Do not persist redo stack — texture blobs were stripped anyway.
+        future: [],
       }),
     );
   } catch {

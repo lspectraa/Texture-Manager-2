@@ -54,6 +54,10 @@ import {
   groupReportIssues,
   issuesCsvFileName,
 } from "./utils/reportIssuesCsv";
+import {
+  redactAbsolutePathsInText,
+  shortenPathForDisplay,
+} from "./utils/pathDisplay";
 import convertVersionMap from "./config/convertVersionMap.json";
 import type { AppSettingsView } from "./domain/settings";
 import { DEFAULT_APP_SETTINGS_VIEW } from "./domain/settings";
@@ -499,7 +503,7 @@ function App() {
       setRunError(
         cancelled
           ? "Operation cancelled."
-          : `Failed to execute operation through backend. ${raw}`,
+          : `Failed to execute operation through backend. ${redactAbsolutePathsInText(raw)}`,
       );
     } finally {
       setIsRunning(false);
@@ -1122,7 +1126,9 @@ function App() {
                     </span>
                     <span className="tm-report-output-path-copy">
                       <span className="tm-report-output-path-label">Output</span>
-                      <span className="tm-report-output-path-value">{report.outputDir}</span>
+                      <span className="tm-report-output-path-value">
+                        {shortenPathForDisplay(report.outputDir)}
+                      </span>
                     </span>
                   </div>
                 </div>

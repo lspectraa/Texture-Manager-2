@@ -5,10 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root,
-    resolve_geometry_dash_dir_with_override, GameFilesLayout,
+    detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root, GameFilesLayout,
 };
-use crate::core::safe_fs::{is_safe_path_segment, png_file_to_data_url};
+use crate::core::safe_fs::{
+    ensure_user_absolute_path, is_safe_path_segment, png_file_to_data_url, shorten_path_for_display,
+};
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
 const DEFAULT_SHEET_CONCURRENCY: u32 = 5;
@@ -334,9 +335,11 @@ pub fn apply_save_request(
             next.geometry_dash_dir = None;
         } else {
             let candidate = PathBuf::from(&trimmed);
+            ensure_user_absolute_path(&candidate)?;
             if !looks_like_geometry_dash_dir(&candidate) {
                 return Err(AppError::IoError(format!(
-                    "Selected folder does not look like a Geometry Dash install (missing Resources): {trimmed}"
+                    "Selected folder does not look like a Geometry Dash install (missing Resources): {}",
+                    shorten_path_for_display(&candidate)
                 )));
             }
             next.geometry_dash_dir = Some(trimmed);
@@ -372,10 +375,6 @@ pub fn apply_save_request(
     }
 
     Ok(next.clamp())
-}
-
-pub fn resolve_gd_from_settings(settings: &AppSettings) -> Option<PathBuf> {
-    resolve_geometry_dash_dir_with_override(settings.geometry_dash_dir.as_deref()).ok()
 }
 
 #[cfg(test)]

@@ -13,7 +13,10 @@ use crate::core::contracts::MergerOptions;
 use crate::core::errors::AppError;
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::merger::merge_plist_from_memory;
-use crate::core::safe_fs::{join_under_parent, png_file_to_data_url, save_png_data_url};
+use crate::core::safe_fs::{
+    ensure_existing_user_file, ensure_readable_image_file, ensure_user_absolute_path,
+    join_under_parent, png_file_to_data_url, save_png_data_url,
+};
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,6 +96,7 @@ pub struct IconEditorExtractedFrame {
 }
 
 pub fn icon_editor_sheet_info(plist_path: &Path) -> Result<IconEditorSheetInfo, AppError> {
+    ensure_existing_user_file(plist_path)?;
     let plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
     let root_dict = plist_root
@@ -164,6 +168,7 @@ pub fn icon_editor_save_plist(
     removed_frame_names: &[String],
     frame_texture_updates: &[IconEditorFrameTextureUpdate],
 ) -> Result<(), AppError> {
+    ensure_existing_user_file(plist_path)?;
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
 
@@ -310,6 +315,8 @@ pub fn icon_editor_import_frame(
     frame_name: &str,
     texture_path: &Path,
 ) -> Result<(), AppError> {
+    ensure_existing_user_file(plist_path)?;
+    ensure_readable_image_file(texture_path)?;
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
     let root_dict = plist_root
@@ -358,6 +365,7 @@ pub fn icon_editor_rotate_frame(
     frame_name: &str,
     direction: &str,
 ) -> Result<(), AppError> {
+    ensure_existing_user_file(plist_path)?;
     let direction = parse_rotate_direction(direction)?;
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
@@ -439,6 +447,8 @@ pub fn icon_editor_add_frame(
     if frame_name.trim().is_empty() {
         return Err(AppError::InvalidOperation("new frame name cannot be empty"));
     }
+    ensure_existing_user_file(plist_path)?;
+    ensure_readable_image_file(texture_path)?;
 
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
@@ -500,6 +510,7 @@ pub fn icon_editor_add_frame(
 pub fn icon_editor_extract_frames(
     plist_path: &Path,
 ) -> Result<Vec<IconEditorExtractedFrame>, AppError> {
+    ensure_existing_user_file(plist_path)?;
     let plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
     let root_dict = plist_root
@@ -552,6 +563,7 @@ pub fn icon_editor_extract_frames(
 
 /// PNG data URL for webview previews of user-picked files outside the asset protocol scope.
 pub fn icon_editor_png_data_url(texture_path: &Path) -> Result<String, AppError> {
+    ensure_readable_image_file(texture_path)?;
     png_file_to_data_url(texture_path)
 }
 
@@ -560,6 +572,7 @@ pub fn icon_editor_save_png_data_url(
     output_path: &Path,
     png_data_url: &str,
 ) -> Result<(), AppError> {
+    ensure_user_absolute_path(output_path)?;
     save_png_data_url(output_path, png_data_url)
 }
 
@@ -605,6 +618,7 @@ fn move_sheet_files_to_stem(
     plist_path: &Path,
     new_stem: &str,
 ) -> Result<(PathBuf, PathBuf), AppError> {
+    ensure_existing_user_file(plist_path)?;
     if !plist_path.exists() {
         return Err(AppError::InvalidPath("plist file does not exist"));
     }
@@ -717,6 +731,7 @@ pub fn icon_editor_rename_sheet(
     plist_path: &Path,
     new_stem: &str,
 ) -> Result<IconEditorRenameResult, AppError> {
+    ensure_existing_user_file(plist_path)?;
     validate_sheet_stem(new_stem)?;
     let old_stem = sheet_stem_from_plist_path(plist_path)?;
 
@@ -734,6 +749,7 @@ pub fn icon_editor_swap_rename_sheet(
     plist_path: &Path,
     new_stem: &str,
 ) -> Result<IconEditorRenameResult, AppError> {
+    ensure_existing_user_file(plist_path)?;
     validate_sheet_stem(new_stem)?;
     let old_stem = sheet_stem_from_plist_path(plist_path)?;
     if old_stem == new_stem {
@@ -782,6 +798,7 @@ pub fn icon_editor_copy_sheet(
     removed_frame_names: &[String],
     frame_texture_updates: &[IconEditorFrameTextureUpdate],
 ) -> Result<IconEditorRenameResult, AppError> {
+    ensure_existing_user_file(plist_path)?;
     if new_stem.trim().is_empty() {
         return Err(AppError::InvalidOperation("new sheet name cannot be empty"));
     }

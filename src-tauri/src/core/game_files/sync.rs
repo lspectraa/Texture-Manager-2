@@ -30,6 +30,12 @@ pub enum SyncStatus {
 }
 
 /// Placeholder for future GitHub-hosted manifest sync. No network I/O yet.
+///
+/// ## Plan before enabling network auto-update (deferred)
+/// - Signed manifests over HTTPS + explicit user opt-in
+/// - Scope downloads under `layout.root` only (canonical path checks)
+/// - Do not auto-write into live Geometry Dash Resources
+/// - Threat-model write-up when sync.rs leaves NotConfigured
 pub fn check_for_updates(layout: &GameFilesLayout) -> Result<SyncStatus, AppError> {
     ensure_local_manifest_placeholder(&layout.root)?;
     Ok(SyncStatus::NotConfigured)

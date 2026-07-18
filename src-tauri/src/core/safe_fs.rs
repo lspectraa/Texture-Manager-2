@@ -1,4 +1,23 @@
 //! Shared path / image validation for IPC and pack file joins.
+//!
+//! # Path policy (defense-in-depth)
+//!
+//! **Relative joins** (`ensure_safe_relative_path`, `path_from_slashes`, `join_under_parent`):
+//! only Normal segments; no absolute paths, `.`, or `..`.
+//!
+//! **User-chosen absolute paths** (dialogs / operation dirs / icon-editor files):
+//! allowed (product needs arbitrary pack folders), but must be:
+//! - non-empty
+//! - absolute
+//! - free of lexical `..` (`ParentDir`) components
+//!
+//! Reads may require the path to exist as a regular file (and size/magic for images).
+//! Writes to PNG destinations use [`ensure_png_output_path`] (extension + no `..` + absolute).
+//!
+//! This is **not** a workspace jail — compromised UI can still target any absolute path the
+//! OS user can access. The goal is rejecting traversal tricks and malformed IPC strings.
+//!
+//! **Env overrides** (`TM_GAME_FILES_DIR`, etc.): same absolute / no-`..` checks when validated.
 
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -92,6 +111,115 @@ pub fn join_under_parent(parent: &Path, relative: &str) -> Result<PathBuf, AppEr
     Ok(parent.join(relative))
 }
 
+/// Reject any lexical `..` component in `path` (defense against traversal in absolute IPC strings).
+pub fn ensure_no_parent_dir_components(path: &Path) -> Result<(), AppError> {
+    for component in path.components() {
+        if matches!(component, Component::ParentDir) {
+            return Err(AppError::InvalidPath("path must not contain '..'"));
+        }
+    }
+    Ok(())
+}
+
+/// User-supplied absolute path: non-empty, absolute, no `..` components.
+///
+/// Relative paths are rejected so IPC cannot depend on the process cwd.
+pub fn ensure_user_absolute_path(path: &Path) -> Result<(), AppError> {
+    if path.as_os_str().is_empty() {
+        return Err(AppError::InvalidPath("path cannot be empty"));
+    }
+    if !path.is_absolute() {
+        return Err(AppError::InvalidPath("path must be absolute"));
+    }
+    ensure_no_parent_dir_components(path)
+}
+
+/// Parse a trimmed user path string and apply [`ensure_user_absolute_path`].
+pub fn parse_user_absolute_path(value: &str) -> Result<PathBuf, AppError> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::InvalidPath("path cannot be empty"));
+    }
+    let path = PathBuf::from(trimmed);
+    ensure_user_absolute_path(&path)?;
+    Ok(path)
+}
+
+/// Operation / dialog directory: absolute, no `..`. Existence is optional (output may be created).
+pub fn ensure_user_directory_path(path: &Path) -> Result<(), AppError> {
+    ensure_user_absolute_path(path)
+}
+
+/// Existing regular file for reads (absolute, no `..`, exists, is a file).
+pub fn ensure_existing_user_file(path: &Path) -> Result<(), AppError> {
+    ensure_user_absolute_path(path)?;
+    if !path.exists() {
+        return Err(AppError::InvalidPath("file does not exist"));
+    }
+    let meta = fs::metadata(path)?;
+    if !meta.is_file() {
+        return Err(AppError::InvalidPath("path must be a regular file"));
+    }
+    Ok(())
+}
+
+/// Canonicalize `path` and ensure it stays under `root` (both must exist).
+/// Resolves symlinks/junctions where the OS supports it — mitigates delete/write escape.
+pub fn ensure_canonical_under_root(path: &Path, root: &Path) -> Result<PathBuf, AppError> {
+    let root_canon = root.canonicalize().map_err(|err| {
+        AppError::IoError(format!(
+            "failed to resolve root `{}`: {err}",
+            shorten_path_for_display(root)
+        ))
+    })?;
+    let path_canon = path.canonicalize().map_err(|err| {
+        AppError::IoError(format!(
+            "failed to resolve path `{}`: {err}",
+            shorten_path_for_display(path)
+        ))
+    })?;
+    if path_canon.strip_prefix(&root_canon).is_err() {
+        return Err(AppError::InvalidPath(
+            "path escapes its allowed root directory",
+        ));
+    }
+    Ok(path_canon)
+}
+
+/// `remove_dir_all` only when `path` canonicalizes under `root` (symlink/junction hardening).
+pub fn remove_dir_all_under_root(path: &Path, root: &Path) -> Result<(), AppError> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let safe = ensure_canonical_under_root(path, root)?;
+    fs::remove_dir_all(&safe).map_err(|err| {
+        AppError::IoError(format!(
+            "failed to remove directory `{}`: {err}",
+            shorten_path_for_display(&safe)
+        ))
+    })?;
+    Ok(())
+}
+
+/// Basename (or last two segments) for user-facing errors / CSV — reduces absolute-path leakage.
+pub fn shorten_path_for_display(path: &Path) -> String {
+    let file_name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    if file_name.is_empty() {
+        return path.to_string_lossy().into_owned();
+    }
+    let parent_name = path
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str());
+    match parent_name {
+        Some(parent) if !parent.is_empty() => format!("{parent}/{file_name}"),
+        _ => file_name.to_string(),
+    }
+}
+
 fn ensure_file_size_ok(path: &Path) -> Result<u64, AppError> {
     let meta = fs::metadata(path)?;
     if !meta.is_file() {
@@ -113,14 +241,9 @@ fn ensure_png_magic(bytes: &[u8]) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Read a PNG from disk (existence, file, size, magic) and return a data URL.
+/// Read a PNG from disk (path policy, existence, file, size, magic) and return a data URL.
 pub fn png_file_to_data_url(path: &Path) -> Result<String, AppError> {
-    if path.as_os_str().is_empty() {
-        return Err(AppError::InvalidPath("path cannot be empty"));
-    }
-    if !path.exists() {
-        return Err(AppError::InvalidPath("texture file does not exist"));
-    }
+    ensure_existing_user_file(path)?;
     ensure_file_size_ok(path)?;
     let bytes = fs::read(path)?;
     ensure_png_magic(&bytes)?;
@@ -128,11 +251,9 @@ pub fn png_file_to_data_url(path: &Path) -> Result<String, AppError> {
     Ok(format!("data:image/png;base64,{encoded}"))
 }
 
-/// Validate output path for writing a PNG (non-empty, ends with `.png`, no traversal tricks in name).
+/// Validate output path for writing a PNG (absolute, ends with `.png`, no `..`).
 pub fn ensure_png_output_path(path: &Path) -> Result<(), AppError> {
-    if path.as_os_str().is_empty() {
-        return Err(AppError::InvalidPath("output path cannot be empty"));
-    }
+    ensure_user_absolute_path(path)?;
     let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
         return Err(AppError::InvalidPath("output path has no file name"));
     };
@@ -146,12 +267,6 @@ pub fn ensure_png_output_path(path: &Path) -> Result<(), AppError> {
         .unwrap_or(false);
     if !has_png {
         return Err(AppError::InvalidPath("output path must end with .png"));
-    }
-    // Reject path strings that embed `..` as a component anywhere.
-    for component in path.components() {
-        if matches!(component, Component::ParentDir) {
-            return Err(AppError::InvalidPath("output path must not contain '..'"));
-        }
     }
     Ok(())
 }
@@ -198,11 +313,19 @@ pub fn decode_png_data_url(png_data_url: &str) -> Result<Vec<u8>, AppError> {
 }
 
 /// Decode a PNG data URL and write it to `output_path` after path checks.
+///
+/// Parent directory is created if needed. When the parent already exists, it is
+/// canonicalized when practical (symlink awareness on platforms that support it).
 pub fn save_png_data_url(output_path: &Path, png_data_url: &str) -> Result<(), AppError> {
     ensure_png_output_path(output_path)?;
     let bytes = decode_png_data_url(png_data_url)?;
     if let Some(parent) = output_path.parent() {
         if !parent.as_os_str().is_empty() {
+            ensure_no_parent_dir_components(parent)?;
+            if parent.exists() {
+                // Prefer resolving through any junction/symlink before write.
+                let _ = parent.canonicalize();
+            }
             fs::create_dir_all(parent)?;
         }
     }
@@ -210,14 +333,9 @@ pub fn save_png_data_url(output_path: &Path, png_data_url: &str) -> Result<(), A
     Ok(())
 }
 
-/// Ensure a user-supplied image path exists, is a file, and is within size limits before `image::open`.
+/// Ensure a user-supplied image path exists, is a file, within size limits, and passes path policy.
 pub fn ensure_readable_image_file(path: &Path) -> Result<(), AppError> {
-    if path.as_os_str().is_empty() {
-        return Err(AppError::InvalidPath("path cannot be empty"));
-    }
-    if !path.exists() {
-        return Err(AppError::InvalidPath("image file does not exist"));
-    }
+    ensure_existing_user_file(path)?;
     ensure_file_size_ok(path)?;
     Ok(())
 }
@@ -247,9 +365,82 @@ mod tests {
     }
 
     #[test]
-    fn png_output_requires_extension() {
-        assert!(ensure_png_output_path(Path::new("out.PNG")).is_ok());
-        assert!(ensure_png_output_path(Path::new("out.jpg")).is_err());
+    fn png_output_requires_extension_and_absolute() {
+        #[cfg(windows)]
+        {
+            assert!(ensure_png_output_path(Path::new(r"C:\out\sheet.PNG")).is_ok());
+            assert!(ensure_png_output_path(Path::new(r"C:\out\..\evil.png")).is_err());
+            assert!(ensure_png_output_path(Path::new(r"C:\out\sheet.jpg")).is_err());
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(ensure_png_output_path(Path::new("/tmp/out/sheet.PNG")).is_ok());
+            assert!(ensure_png_output_path(Path::new("/tmp/out/../evil.png")).is_err());
+            assert!(ensure_png_output_path(Path::new("/tmp/out/sheet.jpg")).is_err());
+        }
+        assert!(ensure_png_output_path(Path::new("relative.png")).is_err());
         assert!(ensure_png_output_path(Path::new("")).is_err());
+    }
+
+    #[test]
+    fn user_absolute_rejects_relative_and_dotdot() {
+        assert!(ensure_user_absolute_path(Path::new("relative/dir")).is_err());
+        #[cfg(windows)]
+        {
+            assert!(ensure_user_absolute_path(Path::new(r"C:\packs\input")).is_ok());
+            assert!(ensure_user_absolute_path(Path::new(r"C:\packs\..\Windows")).is_err());
+        }
+        #[cfg(not(windows))]
+        {
+            assert!(ensure_user_absolute_path(Path::new("/packs/input")).is_ok());
+            assert!(ensure_user_absolute_path(Path::new("/packs/../etc")).is_err());
+        }
+    }
+
+    #[test]
+    fn shorten_path_keeps_basename_context() {
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                shorten_path_for_display(Path::new(r"C:\Users\Kevin\TextureManager2\game-files")),
+                "TextureManager2/game-files"
+            );
+        }
+        #[cfg(not(windows))]
+        {
+            assert_eq!(
+                shorten_path_for_display(Path::new("/home/kevin/TextureManager2/game-files")),
+                "TextureManager2/game-files"
+            );
+        }
+    }
+
+    #[test]
+    fn remove_dir_all_under_root_rejects_escape() {
+        let root = std::env::temp_dir().join(format!(
+            "tm2-safe-fs-root-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        let inside = root.join("cache").join("sheet");
+        fs::create_dir_all(&inside).expect("mkdir");
+        let outside = std::env::temp_dir().join(format!(
+            "tm2-safe-fs-outside-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(1)
+        ));
+        fs::create_dir_all(&outside).expect("mkdir outside");
+
+        assert!(remove_dir_all_under_root(&inside, &root.join("cache")).is_ok());
+        assert!(!inside.exists());
+        assert!(remove_dir_all_under_root(&outside, &root.join("cache")).is_err());
+        assert!(outside.exists());
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&outside);
     }
 }

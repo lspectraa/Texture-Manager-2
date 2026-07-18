@@ -10,13 +10,25 @@ use serde::{Deserialize, Serialize};
 use crate::core::contracts::SplitterOptions;
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
-use crate::core::safe_fs::{is_safe_path_segment, join_under_parent, path_from_slashes, png_file_to_data_url};
+use crate::core::safe_fs::{
+    ensure_no_parent_dir_components, ensure_user_absolute_path, is_safe_path_segment,
+    join_under_parent, path_from_slashes, png_file_to_data_url, remove_dir_all_under_root,
+    shorten_path_for_display,
+};
 use crate::core::splitter::split_sheet_candidate;
 
 const GAME_FILES_DIR_NAME: &str = "TextureManager2";
 const GAME_FILES_SUBDIR: &str = "game-files";
 const GEOMETRY_DASH_FOLDER: &str = "Geometry Dash";
 const UNRESOLVED_GD_DIR_NAME: &str = "_unresolved_geometry_dash";
+
+/// Clear user-facing error when a tool needs Geometry Dash but it is missing.
+pub fn geometry_dash_required_error() -> AppError {
+    AppError::IoError(
+        "Geometry Dash is not configured. Open Settings and set or detect the install path."
+            .to_string(),
+    )
+}
 
 #[derive(Debug, Clone)]
 pub struct GameFilesLayout {
@@ -131,11 +143,20 @@ pub struct GameFilesLayoutDto {
     pub geometry_dash_found: bool,
 }
 
+/// App-data root for caches/settings (`~/TextureManager2/game-files` by default).
+///
+/// Override with `TM_GAME_FILES_DIR` (absolute path, no `..` components). Intended for tests and
+/// advanced installs — relocates settings, split-cache, and legacy trees. Invalid overrides are
+/// ignored and the default home-relative path is used.
 pub fn resolve_game_files_root() -> PathBuf {
     if let Ok(env_override) = std::env::var("TM_GAME_FILES_DIR") {
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
-            return PathBuf::from(trimmed);
+            let path = PathBuf::from(trimmed);
+            if ensure_user_absolute_path(&path).is_ok() {
+                return path;
+            }
+            // Invalid override: fall through to default rather than following traversal tricks.
         }
     }
 
@@ -167,12 +188,16 @@ pub fn normalize_legacy_version(version: &str) -> String {
 }
 
 pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
-    !path.as_os_str().is_empty()
-        && path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .map(|name| name != UNRESOLVED_GD_DIR_NAME)
-            .unwrap_or(true)
+    if path.as_os_str().is_empty() {
+        return false;
+    }
+    if ensure_no_parent_dir_components(path).is_err() {
+        return false;
+    }
+    path.file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name != UNRESOLVED_GD_DIR_NAME)
+        .unwrap_or(true)
         && path.join("Resources").is_dir()
 }
 
@@ -444,12 +469,13 @@ pub fn resolve_geometry_dash_dir_with_override(
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
             let path = PathBuf::from(trimmed);
+            ensure_user_absolute_path(&path)?;
             if looks_like_geometry_dash_dir(&path) {
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
                 "TM_GEOMETRY_DASH_DIR does not look like a Geometry Dash install (missing Resources): {}",
-                path.to_string_lossy()
+                shorten_path_for_display(&path)
             )));
         }
     }
@@ -458,12 +484,13 @@ pub fn resolve_geometry_dash_dir_with_override(
         let trimmed = override_path.trim();
         if !trimmed.is_empty() {
             let path = PathBuf::from(trimmed);
+            ensure_user_absolute_path(&path)?;
             if looks_like_geometry_dash_dir(&path) {
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
                 "Configured Geometry Dash folder does not look like an install (missing Resources): {}",
-                path.to_string_lossy()
+                shorten_path_for_display(&path)
             )));
         }
     }
@@ -526,6 +553,11 @@ pub fn build_game_files_layout(geometry_dash_dir: Option<PathBuf>) -> GameFilesL
     layout_from_parts(root, gd)
 }
 
+/// Bootstrap app-data dirs and resolve Geometry Dash when available.
+///
+/// Soft-fail: missing GD does **not** prevent launch. Layout uses `_unresolved_geometry_dash`
+/// placeholders; `geometry_dash_found` is false; Settings can set/detect the path later.
+/// Tools that need GD should check `geometry_dash_found()` and return clear errors.
 pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     let root = resolve_game_files_root();
     let current_split = root.join("split-cache");
@@ -540,6 +572,7 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
 
     let layout = layout_from_parts(root, geometry_dash_dir);
     // Soft-fail: sync is best-effort and must not block launch when GD is missing.
+    // Auto-update / network sync is deferred — see sync.rs plan note; do not enable here.
     let _ = sync::check_for_updates(&layout);
     Ok(layout)
 }
@@ -725,10 +758,19 @@ pub fn find_current_sheet_for_plist(
 }
 
 pub fn split_output_dir_for(layout: &GameFilesLayout, pair: &SheetCandidate) -> PathBuf {
-    layout
-        .current_split
-        .join(&pair.relative_dir)
-        .join(&pair.stem)
+    // relative_dir comes from discovery under an input root; still reject ParentDir if present.
+    let mut dir = layout.current_split.clone();
+    for component in pair.relative_dir.components() {
+        match component {
+            Component::Normal(name) => dir.push(name),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                // Fall back to a flat cache key under the root rather than escaping.
+                return layout.current_split.join(&pair.stem);
+            }
+        }
+    }
+    dir.join(&pair.stem)
 }
 
 fn split_cache_entry_key(pair: &SheetCandidate) -> String {
@@ -829,16 +871,9 @@ fn split_dir_has_cached_plist(pair: &SheetCandidate, split_dir: &Path) -> bool {
     split_dir.join(format!("{}.plist", pair.stem)).exists()
 }
 
-fn clear_split_cache_dir(split_dir: &Path) -> Result<(), AppError> {
-    if split_dir.exists() {
-        fs::remove_dir_all(split_dir).map_err(|err| {
-            AppError::IoError(format!(
-                "failed to clear stale split cache `{}`: {err}",
-                split_dir.to_string_lossy()
-            ))
-        })?;
-    }
-    Ok(())
+fn clear_split_cache_dir(layout: &GameFilesLayout, split_dir: &Path) -> Result<(), AppError> {
+    // Harden against junction/symlink escape: only delete under the split-cache root.
+    remove_dir_all_under_root(split_dir, &layout.current_split)
 }
 
 /// Returns true when the on-disk split cache matches the hashed source gamesheet pair.
@@ -881,7 +916,7 @@ pub fn ensure_sheet_split_cached(
     }
 
     // Source changed or first use: wipe stale cache, resplit, then record hashes.
-    clear_split_cache_dir(&split_dir)?;
+    clear_split_cache_dir(layout, &split_dir)?;
     fs::create_dir_all(&split_dir)?;
     split_sheet_candidate(pair, &split_dir, options, || {})?;
 

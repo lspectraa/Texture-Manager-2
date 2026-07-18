@@ -1,18 +1,19 @@
+use std::path::Path;
+
 use crate::core::contracts::{
     phase_defaults, ConvertToNewVersionOptions, GeodeButtonsOptions, GlowMakerOptions, MergerOptions,
     OperationKind, OperationOptions, OperationPlan, OperationRequest, PorterOptions,
     RandomizerOptions, SplitterOptions,
 };
 use crate::core::errors::AppError;
+use crate::core::safe_fs::{ensure_user_directory_path, parse_user_absolute_path};
 
 pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, AppError> {
-    if request.input_dir.trim().is_empty() {
-        return Err(AppError::InvalidPath("input directory cannot be empty"));
-    }
-
-    if request.output_dir.trim().is_empty() {
-        return Err(AppError::InvalidPath("output directory cannot be empty"));
-    }
+    // Absolute dirs from the folder dialog are allowed; reject empty / relative / `..` tricks.
+    let input_dir = parse_user_absolute_path(&request.input_dir)?;
+    let output_dir = parse_user_absolute_path(&request.output_dir)?;
+    ensure_user_directory_path(Path::new(&input_dir))?;
+    ensure_user_directory_path(Path::new(&output_dir))?;
 
     let defaults = phase_defaults();
     let options = match request.kind.clone() {
@@ -100,8 +101,8 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
 
     Ok(OperationPlan {
         kind: request.kind,
-        input_dir: request.input_dir,
-        output_dir: request.output_dir,
+        input_dir: input_dir.to_string_lossy().into_owned(),
+        output_dir: output_dir.to_string_lossy().into_owned(),
         options,
     })
 }
@@ -159,12 +160,16 @@ mod tests {
     };
     use crate::core::operations::build_operation_plan;
 
+    fn abs_dir(name: &str) -> String {
+        std::env::temp_dir().join(name).to_string_lossy().into_owned()
+    }
+
     #[test]
     fn splitter_forces_non_toggleable_defaults() {
         let request = OperationRequest {
             kind: OperationKind::Splitter,
-            input_dir: "input".to_string(),
-            output_dir: "output".to_string(),
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
             options: Some(OperationOptions::Splitter(
                 crate::core::contracts::SplitterOptions {
                     sheet_concurrency: 2,
@@ -185,8 +190,8 @@ mod tests {
     fn porter_forces_auto_adjust_and_alpha_trim() {
         let request = OperationRequest {
             kind: OperationKind::PorterSplitter,
-            input_dir: "input".to_string(),
-            output_dir: "output".to_string(),
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
             options: Some(OperationOptions::PorterSplitter(PorterOptions {
                 low_port: true,
                 dimensions: None,
@@ -208,8 +213,8 @@ mod tests {
     fn merger_forces_auto_adjust_and_alpha_trim() {
         let request = OperationRequest {
             kind: OperationKind::Merger,
-            input_dir: "input".to_string(),
-            output_dir: "output".to_string(),
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
             options: Some(OperationOptions::Merger(MergerOptions {
                 include_outside_plist_files: true,
                 dimensions: None,
@@ -231,8 +236,8 @@ mod tests {
     fn convert_to_new_version_clamps_and_trims_fields() {
         let request = OperationRequest {
             kind: OperationKind::ConvertToNewVersion,
-            input_dir: "input".to_string(),
-            output_dir: "output".to_string(),
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
             options: Some(OperationOptions::ConvertToNewVersion(
                 ConvertToNewVersionOptions {
                     game_version: " 2.206 ".to_string(),
@@ -249,5 +254,16 @@ mod tests {
             }
             _ => panic!("expected convert to new version options"),
         }
+    }
+
+    #[test]
+    fn rejects_relative_operation_dirs() {
+        let request = OperationRequest {
+            kind: OperationKind::Splitter,
+            input_dir: "relative-in".to_string(),
+            output_dir: "relative-out".to_string(),
+            options: None,
+        };
+        assert!(build_operation_plan(request).is_err());
     }
 }

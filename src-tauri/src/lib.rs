@@ -84,6 +84,12 @@ fn app_background_png_data_url(
     id: String,
 ) -> Result<String, String> {
     let layout = game_files.snapshot();
+    if !layout.geometry_dash_found() {
+        return Err(
+            "Geometry Dash is not configured. Open Settings and set or detect the install path."
+                .to_string(),
+        );
+    }
     app_background_png_data_url_core(&layout.resources, &id).map_err(|err| err.to_string())
 }
 
@@ -151,51 +157,21 @@ fn redetect_geometry_dash_dir(
 }
 
 #[tauri::command]
-fn open_path_in_os(path: String) -> Result<(), String> {
-    let trimmed = path.trim();
-    if trimmed.is_empty() {
-        return Err("Path is empty.".to_string());
-    }
-    let target = std::path::PathBuf::from(trimmed);
+fn open_path_in_os(app: AppHandle, path: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let target = crate::core::safe_fs::parse_user_absolute_path(&path).map_err(|err| err.to_string())?;
     if !target.exists() {
-        return Err(format!("Path does not exist: {trimmed}"));
+        return Err("Path does not exist.".to_string());
     }
 
-    #[cfg(target_os = "windows")]
-    {
-        std::process::Command::new("explorer")
-            .arg(if target.is_dir() {
-                trimmed.to_string()
-            } else {
-                format!("/select,{trimmed}")
-            })
-            .spawn()
-            .map_err(|err| format!("Failed to open path: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(target_os = "macos")]
-    {
-        std::process::Command::new("open")
-            .arg(trimmed)
-            .spawn()
-            .map_err(|err| format!("Failed to open path: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(all(unix, not(target_os = "macos")))]
-    {
-        std::process::Command::new("xdg-open")
-            .arg(trimmed)
-            .spawn()
-            .map_err(|err| format!("Failed to open path: {err}"))?;
-        return Ok(());
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "macos", unix)))]
-    {
-        Err("Opening folders is not supported on this platform.".to_string())
-    }
+    // Prefer plugin APIs over spawning explorer/open/xdg-open (avoids Windows /select,comma bugs).
+    let result = if target.is_dir() {
+        app.opener().open_path(target.to_string_lossy().as_ref(), None::<&str>)
+    } else {
+        app.opener().reveal_item_in_dir(&target)
+    };
+    result.map_err(|err| format!("Failed to open path: {err}"))
 }
 
 #[tauri::command]
@@ -386,12 +362,15 @@ fn geode_buttons_target_index_cmd(
     use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, String> {
     let layout = game_files.snapshot();
-    geode_buttons_target_index(
-        std::path::Path::new(&plist_path),
-        &layout,
-        use_game_files_cache,
-    )
-    .map_err(|err| err.to_string())
+    if use_game_files_cache && !layout.geometry_dash_found() {
+        return Err(
+            "Geometry Dash is not configured. Open Settings and set or detect the install path."
+                .to_string(),
+        );
+    }
+    let plist = crate::core::safe_fs::parse_user_absolute_path(&plist_path)
+        .map_err(|err| err.to_string())?;
+    geode_buttons_target_index(&plist, &layout, use_game_files_cache).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -401,13 +380,18 @@ fn geode_buttons_autoselect_plist_cmd(
 ) -> Result<Option<String>, String> {
     let trimmed = input_dir.trim();
     if !trimmed.is_empty() {
+        let dir =
+            crate::core::safe_fs::parse_user_absolute_path(trimmed).map_err(|err| err.to_string())?;
         if let Some(path) =
-            resolve_geode_buttons_plist(std::path::Path::new(trimmed)).map_err(|err| err.to_string())?
+            resolve_geode_buttons_plist(&dir).map_err(|err| err.to_string())?
         {
             return Ok(Some(path));
         }
     }
     let layout = game_files.snapshot();
+    if !layout.geometry_dash_found() {
+        return Ok(None);
+    }
     Ok(resolve_geode_buttons_default_sheet(&layout)
         .map_err(|err| err.to_string())?
         .map(|pair| pair.plist_path.to_string_lossy().to_string()))
