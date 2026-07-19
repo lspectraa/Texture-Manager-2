@@ -68,7 +68,7 @@ export const getGeodeButtonsDefaultInputDir = async (): Promise<string> => {
   return invoke<string>("geode_buttons_default_input_dir_cmd");
 };
 
-/** Load a template file as a PNG data URL (same path handling as export). Use when `convertFileSrc` is blocked. */
+/** Load a template file as a PNG data URL (same path handling as export). */
 export const getGeodeButtonsTemplatePreviewDataUrl = async (
   path: string,
 ): Promise<string | null> => {

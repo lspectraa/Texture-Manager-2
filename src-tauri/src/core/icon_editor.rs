@@ -15,7 +15,7 @@ use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::safe_fs::{
     ensure_existing_user_file, ensure_readable_image_file, ensure_user_absolute_path,
-    join_under_parent, png_file_to_data_url, save_png_data_url,
+    is_safe_path_segment, join_under_parent, png_file_to_data_url, save_png_data_url,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -577,12 +577,54 @@ pub fn icon_editor_save_png_data_url(
 }
 
 fn validate_sheet_stem(new_stem: &str) -> Result<(), AppError> {
-    if new_stem.trim().is_empty() {
+    let trimmed = new_stem.trim();
+    if trimmed.is_empty() {
         return Err(AppError::InvalidOperation("new sheet name cannot be empty"));
     }
-    if new_stem.contains('/') || new_stem.contains('\\') {
+    if trimmed.contains('/') || trimmed.contains('\\') || trimmed.contains('\0') {
         return Err(AppError::InvalidOperation(
             "new sheet name cannot contain separators",
+        ));
+    }
+    if !is_safe_path_segment(trimmed) {
+        return Err(AppError::InvalidOperation(
+            "new sheet name is not a valid single path segment",
+        ));
+    }
+    // Reject Windows device / reserved names (CON, PRN, AUX, NUL, COM1, LPT1, …).
+    let stem_for_reserved = trimmed
+        .split_once('.')
+        .map(|(before, _)| before)
+        .unwrap_or(trimmed);
+    let upper = stem_for_reserved.to_ascii_uppercase();
+    let reserved = matches!(
+        upper.as_str(),
+        "CON"
+            | "PRN"
+            | "AUX"
+            | "NUL"
+            | "COM1"
+            | "COM2"
+            | "COM3"
+            | "COM4"
+            | "COM5"
+            | "COM6"
+            | "COM7"
+            | "COM8"
+            | "COM9"
+            | "LPT1"
+            | "LPT2"
+            | "LPT3"
+            | "LPT4"
+            | "LPT5"
+            | "LPT6"
+            | "LPT7"
+            | "LPT8"
+            | "LPT9"
+    );
+    if reserved {
+        return Err(AppError::InvalidOperation(
+            "new sheet name cannot use a reserved system name",
         ));
     }
     Ok(())

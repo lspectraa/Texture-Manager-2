@@ -8,7 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import html2canvas from "html2canvas";
 import { useTranslation } from "react-i18next";
@@ -577,14 +577,15 @@ function resolveFrameNameFromPlist(frames: IconEditorFrameInfo[], canonical: str
   return found?.name ?? null;
 }
 
-const resolveImageUrl = (path: string, version: number): string => {
+/** Bundled public assets only (e.g. `/icon-editor-bg/...`). No asset-protocol FS reads. */
+const resolveImageUrl = (path: string): string => {
   if (!path.trim()) {
     return "";
   }
-  if (!isTauriRuntime() || path.startsWith("/")) {
+  if (path.startsWith("/") || path.startsWith("data:")) {
     return path;
   }
-  return `${convertFileSrc(path)}?v=${version}`;
+  return "";
 };
 
 const parseRoleFromFrameName = (name: string): IconLayerRole => {
@@ -1106,7 +1107,6 @@ export function IconEditorToolPanel() {
   const { t } = useTranslation("iconEditor");
   const [sheetInfo, setSheetInfo] = useState<IconEditorSheetInfo | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const [atlasVersion, setAtlasVersion] = useState(0);
   const [splitFrameCanvases, setSplitFrameCanvases] = useState<
     Record<string, HTMLCanvasElement>
   >({});
@@ -1423,9 +1423,9 @@ export function IconEditorToolPanel() {
         .sort((left, right) => left.zIndex - right.zIndex)
         .map((layer) => ({
           ...layer,
-          resolvedSrc: resolveImageUrl(layer.src, atlasVersion),
+          resolvedSrc: resolveImageUrl(layer.src),
         })),
-    [atlasVersion],
+    [],
   );
 
   const clampScrollPortScroll = useCallback(() => {
@@ -1656,7 +1656,6 @@ export function IconEditorToolPanel() {
         } else {
           void deserializeTextureEdits(restoredClone.textureEdits).then(setPendingTextureEdits);
         }
-        setAtlasVersion((value) => value + 1);
         setViewportFocusGeneration((generation) => generation + 1);
       } catch (error) {
         const parsed = toIconEditorErrorInfo(

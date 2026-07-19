@@ -194,11 +194,44 @@ pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
     if ensure_no_parent_dir_components(path).is_err() {
         return false;
     }
-    path.file_name()
+    let is_unresolved = path
+        .file_name()
         .and_then(|name| name.to_str())
-        .map(|name| name != UNRESOLVED_GD_DIR_NAME)
-        .unwrap_or(true)
-        && path.join("Resources").is_dir()
+        .map(|name| name == UNRESOLVED_GD_DIR_NAME)
+        .unwrap_or(false);
+    if is_unresolved {
+        return false;
+    }
+
+    let resources = path.join("Resources");
+    if !resources.is_dir() {
+        return false;
+    }
+
+    // Binary / engine markers (Steam install root on Windows/macOS/Linux variants).
+    let has_binary = path.join("GeometryDash.exe").is_file()
+        || path.join("libcocos2d.dll").is_file()
+        || path.join("libfmod.dll").is_file()
+        || path.join("GeometryDash").is_file()
+        || path.join("GeometryDash.x86_64").is_file()
+        || path
+            .join("Geometry Dash.app")
+            .join("Contents")
+            .join("MacOS")
+            .join("Geometry Dash")
+            .is_file();
+
+    // Texture markers — distinguish a real GD Resources tree from any random
+    // folder that happens to contain a subdirectory named Resources.
+    let has_textures = resources.join("icons").is_dir()
+        || resources.join("game_bg_01_001-uhd.png").is_file()
+        || resources.join("game_bg_01_001-hd.png").is_file()
+        || resources.join("game_bg_01_001.png").is_file()
+        || resources.join("GJ_GameSheet-uhd.plist").is_file()
+        || resources.join("GJ_GameSheet-hd.plist").is_file()
+        || resources.join("GJ_GameSheet.plist").is_file();
+
+    has_binary || has_textures
 }
 
 fn home_dir() -> Option<PathBuf> {
@@ -530,7 +563,7 @@ pub fn resolve_geometry_dash_dir_with_override(
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
-                "TM_GEOMETRY_DASH_DIR does not look like a Geometry Dash install (missing Resources): {}",
+                "TM_GEOMETRY_DASH_DIR does not look like a Geometry Dash install: {}",
                 shorten_path_for_display(&path)
             )));
         }
@@ -545,7 +578,7 @@ pub fn resolve_geometry_dash_dir_with_override(
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
-                "Configured Geometry Dash folder does not look like an install (missing Resources): {}",
+                "Configured Geometry Dash folder does not look like an install: {}",
                 shorten_path_for_display(&path)
             )));
         }
@@ -1177,6 +1210,35 @@ mod tests {
             current_split: root.join("split-cache"),
             legacy: root.join("legacy"),
         }
+    }
+
+    #[test]
+    fn looks_like_geometry_dash_requires_more_than_resources_dirname() {
+        let root = temp_game_files_root("gd_shape");
+        let plain = root.join("NotGD");
+        let resources = plain.join("Resources");
+        fs::create_dir_all(&resources).expect("resources");
+        assert!(
+            !looks_like_geometry_dash_dir(&plain),
+            "empty Resources alone must not count as GD"
+        );
+
+        fs::create_dir_all(resources.join("icons")).expect("icons");
+        assert!(
+            looks_like_geometry_dash_dir(&plain),
+            "Resources/icons is a valid texture marker"
+        );
+
+        let with_exe = root.join("SteamGD");
+        fs::create_dir_all(with_exe.join("Resources")).expect("resources");
+        fs::write(with_exe.join("GeometryDash.exe"), b"mz").expect("exe");
+        assert!(looks_like_geometry_dash_dir(&with_exe));
+
+        let unresolved = root.join(UNRESOLVED_GD_DIR_NAME);
+        fs::create_dir_all(unresolved.join("Resources").join("icons")).expect("unresolved");
+        assert!(!looks_like_geometry_dash_dir(&unresolved));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]

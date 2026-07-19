@@ -198,18 +198,28 @@ async fn redetect_geometry_dash_dir(
 fn open_path_in_os(app: AppHandle, path: String) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
-    let target = crate::core::safe_fs::parse_user_absolute_path(&path).map_err(|err| err.to_string())?;
-    if !target.exists() {
-        return Err("Path does not exist.".to_string());
+    let target =
+        crate::core::safe_fs::parse_user_absolute_path(&path).map_err(|err| err.to_string())?;
+    let root = crate::core::game_files::resolve_game_files_root();
+    std::fs::create_dir_all(&root).map_err(|err| {
+        format!(
+            "failed to ensure game-files root exists: {err}"
+        )
+    })?;
+    // Only allow opening directories under the app game-files root (no arbitrary
+    // path open/launch from the webview). Opener path permissions are not
+    // granted to the frontend; this Rust path uses OpenerExt directly.
+    let target_canon = crate::core::safe_fs::ensure_canonical_under_root(&target, &root)
+        .map_err(|err| err.to_string())?;
+    if !target_canon.is_dir() {
+        return Err(
+            "Only directories under the Texture Manager game-files folder can be opened.".to_string(),
+        );
     }
 
-    // Prefer plugin APIs over spawning explorer/open/xdg-open (avoids Windows /select,comma bugs).
-    let result = if target.is_dir() {
-        app.opener().open_path(target.to_string_lossy().as_ref(), None::<&str>)
-    } else {
-        app.opener().reveal_item_in_dir(&target)
-    };
-    result.map_err(|err| format!("Failed to open path: {err}"))
+    app.opener()
+        .open_path(target_canon.to_string_lossy().as_ref(), None::<&str>)
+        .map_err(|err| format!("Failed to open path: {err}"))
 }
 
 #[tauri::command]

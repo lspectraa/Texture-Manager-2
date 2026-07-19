@@ -978,6 +978,7 @@ mod tests {
         let gd = unique_temp_dir("gd");
         let custom = unique_temp_dir("custom");
         fs::create_dir_all(gd.join("Resources")).expect("resources");
+        fs::create_dir_all(gd.join("Resources").join("icons")).expect("icons");
         fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader")).expect("loader");
         fs::create_dir_all(&custom).expect("custom");
 
@@ -1006,6 +1007,7 @@ mod tests {
         let root = unique_temp_dir("root2");
         let gd = unique_temp_dir("gd2");
         fs::create_dir_all(gd.join("Resources")).expect("resources");
+        fs::create_dir_all(gd.join("Resources").join("icons")).expect("icons");
         let loader = gd.join("geode").join("resources").join("geode.loader");
         fs::create_dir_all(&loader).expect("loader");
         let layout = test_layout(&root, &gd);
@@ -1032,6 +1034,7 @@ mod tests {
         let root = unique_temp_dir("root3");
         let gd = unique_temp_dir("gd3");
         fs::create_dir_all(gd.join("Resources")).expect("resources");
+        fs::create_dir_all(gd.join("Resources").join("icons")).expect("icons");
         fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader")).expect("loader");
         let layout = test_layout(&root, &gd);
         let missing = gd

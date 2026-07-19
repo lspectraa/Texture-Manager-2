@@ -25,9 +25,9 @@
     ],
     "security": {
       "csp": {
-        "default-src": "'self' customprotocol: asset:",
+        "default-src": "'self' customprotocol:",
         "connect-src": "ipc: http://ipc.localhost",
-        "img-src": "'self' asset: http://asset.localhost https://asset.localhost blob: data:",
+        "img-src": "'self' blob: data:",
         "style-src": "'unsafe-inline' 'self'",
         "script-src": "'self'",
         "object-src": "'none'",
@@ -35,9 +35,9 @@
         "form-action": "'self'"
       },
       "devCsp": {
-        "default-src": "'self' customprotocol: asset:",
+        "default-src": "'self' customprotocol:",
         "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420",
-        "img-src": "'self' asset: http://asset.localhost https://asset.localhost blob: data:",
+        "img-src": "'self' blob: data:",
         "style-src": "'unsafe-inline' 'self'",
         "script-src": "'self' 'unsafe-eval'",
         "object-src": "'none'",
@@ -45,8 +45,7 @@
         "form-action": "'self'"
       },
       "assetProtocol": {
-        "enable": true,
-        "scope": ["**"]
+        "enable": false
       }
     }
   },

@@ -1,13 +1,13 @@
-import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import type { AppBackgroundOption } from "../config/appBackground";
 import { isTauriRuntime } from "./tauriOperations";
 
 const imageUrlCache = new Map<string, Promise<string>>();
 
 /**
- * Resolve a shell/Settings background URL without pulling UHD PNGs through IPC as
- * base64. Prefer the asset protocol (`convertFileSrc`); fall back to the Rust
- * data-URL command only when that is unavailable.
+ * Resolve a shell/Settings background URL via the allowlisted Rust command.
+ * Does not use the asset protocol (`convertFileSrc`) — that would require a
+ * broad filesystem scope.
  */
 export function getAppBackgroundImageDataUrl(
   optionOrId: AppBackgroundOption | string,
@@ -17,22 +17,18 @@ export function getAppBackgroundImageDataUrl(
   }
 
   const id = typeof optionOrId === "string" ? optionOrId : optionOrId.id;
-  const path = typeof optionOrId === "string" ? "" : optionOrId.path.trim();
 
   const cached = imageUrlCache.get(id);
   if (cached) {
     return cached;
   }
 
-  const pending = (async (): Promise<string> => {
-    if (path) {
-      return convertFileSrc(path);
-    }
-    return invoke<string>("app_background_png_data_url", { id });
-  })().catch((error: unknown) => {
-    imageUrlCache.delete(id);
-    throw error;
-  });
+  const pending = invoke<string>("app_background_png_data_url", { id }).catch(
+    (error: unknown) => {
+      imageUrlCache.delete(id);
+      throw error;
+    },
+  );
 
   imageUrlCache.set(id, pending);
   return pending;

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import type {
   GeodeButtonsOptions,
@@ -294,9 +293,9 @@ async function resolvePreviewImageSrc(path: string): Promise<string> {
     if (fromBackend) {
       return fromBackend;
     }
+    return "";
   }
-  const normalized = normalizedFs.replace(/\\/g, "/");
-  return isTauriRuntime() ? convertFileSrc(normalized) : normalized;
+  return normalizedFs.replace(/\\/g, "/");
 }
 
 /** Disk template images decoded once; HSV preview only redraws from this bitmap. */

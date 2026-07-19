@@ -382,7 +382,7 @@ pub fn apply_save_request(
             ensure_user_absolute_path(&candidate)?;
             if !looks_like_geometry_dash_dir(&candidate) {
                 return Err(AppError::IoError(format!(
-                    "Selected folder does not look like a Geometry Dash install (missing Resources): {}",
+                    "Selected folder does not look like a Geometry Dash install: {}",
                     shorten_path_for_display(&candidate)
                 )));
             }

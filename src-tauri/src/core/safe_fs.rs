@@ -314,22 +314,41 @@ pub fn decode_png_data_url(png_data_url: &str) -> Result<Vec<u8>, AppError> {
 
 /// Decode a PNG data URL and write it to `output_path` after path checks.
 ///
-/// Parent directory is created if needed. When the parent already exists, it is
-/// canonicalized when practical (symlink awareness on platforms that support it).
+/// Parent directory is created if needed. The write always targets
+/// `canonicalize(parent)/file_name` so junction/symlink parents resolve to a
+/// concrete directory before the file is written. Existing symlink leaves are
+/// rejected (do not follow a link as the write destination).
 pub fn save_png_data_url(output_path: &Path, png_data_url: &str) -> Result<(), AppError> {
     ensure_png_output_path(output_path)?;
     let bytes = decode_png_data_url(png_data_url)?;
-    if let Some(parent) = output_path.parent() {
-        if !parent.as_os_str().is_empty() {
-            ensure_no_parent_dir_components(parent)?;
-            if parent.exists() {
-                // Prefer resolving through any junction/symlink before write.
-                let _ = parent.canonicalize();
-            }
-            fs::create_dir_all(parent)?;
-        }
+    let Some(parent) = output_path.parent() else {
+        return Err(AppError::InvalidPath("output path has no parent directory"));
+    };
+    if parent.as_os_str().is_empty() {
+        return Err(AppError::InvalidPath("output path has no parent directory"));
     }
-    fs::write(output_path, bytes)?;
+    ensure_no_parent_dir_components(parent)?;
+    fs::create_dir_all(parent)?;
+    let parent_canon = parent.canonicalize().map_err(|err| {
+        AppError::IoError(format!(
+            "failed to resolve output directory `{}`: {err}",
+            shorten_path_for_display(parent)
+        ))
+    })?;
+    let Some(file_name) = output_path.file_name() else {
+        return Err(AppError::InvalidPath("output path has no file name"));
+    };
+    let final_path = parent_canon.join(file_name);
+    if final_path
+        .symlink_metadata()
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return Err(AppError::InvalidPath(
+            "refusing to write through a symbolic link",
+        ));
+    }
+    fs::write(&final_path, bytes)?;
     Ok(())
 }
 
@@ -413,6 +432,34 @@ mod tests {
                 "TextureManager2/game-files"
             );
         }
+    }
+
+    #[test]
+    fn save_png_data_url_writes_under_canonical_parent() {
+        let root = std::env::temp_dir().join(format!(
+            "tm2-png-write-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        let out_dir = root.join("out");
+        fs::create_dir_all(&out_dir).expect("mkdir");
+        let out_path = out_dir.join("sheet.png");
+        // Minimal valid PNG (1x1) magic + IHDR/IDAT/IEND is large; use magic-only
+        // decode path — decode_png_data_url requires magic, write uses full bytes.
+        let png_bytes: &[u8] = &[
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, b't', b'e', b's', b't',
+        ];
+        let data_url = format!(
+            "data:image/png;base64,{}",
+            BASE64_STANDARD.encode(png_bytes)
+        );
+        save_png_data_url(&out_path, &data_url).expect("write");
+        assert!(out_path.exists());
+        let written = fs::read(&out_path).expect("read");
+        assert_eq!(written, png_bytes);
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
