@@ -43,10 +43,12 @@ import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
+import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import {
   APP_BACKGROUND_RANDOM,
   DEFAULT_APP_BACKGROUND_OPACITY,
 } from "./config/appBackground";
+import { APP_VERSION } from "./config/appMeta";
 import { isUpcomingTool } from "./config/toolNavigation";
 import {
   buildIssuesCsvFromReport,
@@ -73,6 +75,11 @@ import {
   saveAppSettings,
   setGeometryDashDir,
 } from "./services/tauriSettings";
+import {
+  checkForAppUpdate,
+  getAppPackageVersion,
+  type AvailableAppUpdate,
+} from "./services/tauriUpdater";
 import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
 import { changeAppLanguage } from "./i18n";
 import { resolveInitialAppLanguage } from "./i18n/languages";
@@ -165,6 +172,15 @@ function App() {
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [onboardingError, setOnboardingError] = useState<string | null>(null);
   const [onboardingBusy, setOnboardingBusy] = useState(false);
+  const [appVersion, setAppVersion] = useState(APP_VERSION);
+  const [availableUpdate, setAvailableUpdate] =
+    useState<AvailableAppUpdate | null>(null);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
+  const [updateCheckBusy, setUpdateCheckBusy] = useState(false);
+  const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(
+    null,
+  );
+  const updateCheckBusyRef = useRef(false);
   /** While set, applySettingsView must not clobber a newer in-flight opacity drag. */
   const optimisticBackgroundOpacityRef = useRef<number | null>(null);
   const backgroundOpacitySaveTimerRef = useRef<ReturnType<
@@ -270,6 +286,8 @@ function App() {
         setAppSettings(resolvedSettings);
         applyTheme(settings.theme);
         setStoredTheme(settings.theme);
+        const version = await getAppPackageVersion();
+        setAppVersion(version);
 
         const response = await getPhaseDefaults();
         const concurrency = settings.defaultSheetConcurrency;
@@ -460,6 +478,77 @@ function App() {
   const needsOnboarding =
     settingsHydrated &&
     appSettings.onboardingVersion < CURRENT_ONBOARDING_VERSION;
+
+  const runUpdateCheck = useCallback(
+    async (options?: { silent?: boolean }): Promise<void> => {
+      const silent = options?.silent ?? false;
+      if (updateCheckBusyRef.current) {
+        return;
+      }
+      updateCheckBusyRef.current = true;
+      setUpdateCheckBusy(true);
+      if (!silent) {
+        setUpdateStatusMessage(t("settings:updates.checking"));
+      }
+      try {
+        const result = await checkForAppUpdate();
+        switch (result.status) {
+          case "unsupported":
+            setAvailableUpdate(null);
+            setUpdateStatusMessage(t("settings:updates.unsupported"));
+            break;
+          case "upToDate":
+            setAvailableUpdate(null);
+            setAppVersion(result.currentVersion);
+            setUpdateStatusMessage(
+              t("settings:updates.upToDate", { version: result.currentVersion }),
+            );
+            break;
+          case "available":
+            setAvailableUpdate(result.update);
+            setUpdateBannerDismissed(false);
+            setAppVersion(result.update.currentVersion);
+            setUpdateStatusMessage(
+              t("settings:updates.available", {
+                version: result.update.version,
+                current: result.update.currentVersion,
+              }),
+            );
+            break;
+          case "error":
+            setAvailableUpdate(null);
+            setAppVersion(result.currentVersion);
+            setUpdateStatusMessage(
+              silent
+                ? null
+                : t("settings:updates.checkFailed", { error: result.message }),
+            );
+            break;
+          default: {
+            const _exhaustive: never = result;
+            void _exhaustive;
+            break;
+          }
+        }
+      } finally {
+        updateCheckBusyRef.current = false;
+        setUpdateCheckBusy(false);
+      }
+    },
+    [t],
+  );
+
+  useEffect(() => {
+    if (!settingsHydrated || needsOnboarding) {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void runUpdateCheck({ silent: true });
+    }, 1500);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [settingsHydrated, needsOnboarding, runUpdateCheck]);
 
   const executeSelectedOperation = async (): Promise<void> => {
     setRunError(null);
@@ -771,7 +860,14 @@ function App() {
             settings={appSettings}
             busy={settingsBusy}
             error={settingsError}
+            appVersion={appVersion}
+            updateStatusMessage={updateStatusMessage}
+            updateCheckBusy={updateCheckBusy}
+            operationRunning={isRunning}
             pickFolder={pickFolder}
+            onCheckForUpdates={() => {
+              void runUpdateCheck({ silent: false });
+            }}
             onThemeChange={(theme: AppTheme) => {
               // Optimistic: keep selection/theme stable while Tauri persists.
               applyTheme(theme);
@@ -1087,6 +1183,13 @@ function App() {
         options={appSettings.availableAppBackgrounds}
         opacity={appSettings.appBackgroundOpacity}
       />
+      {availableUpdate && !updateBannerDismissed && !needsOnboarding ? (
+        <AppUpdateBanner
+          update={availableUpdate}
+          operationRunning={isRunning}
+          onDismiss={() => setUpdateBannerDismissed(true)}
+        />
+      ) : null}
       {isRunning ? (
         <div
           className={`tm-progress-overlay tm-progress-state-${overlayState}`}

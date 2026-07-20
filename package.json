@@ -3,6 +3,17 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "description": "Geometry Dash texture tooling remake",
+  "author": "Spectra",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lspectraa/Texture-Manager-2.git"
+  },
+  "homepage": "https://github.com/lspectraa/Texture-Manager-2",
+  "bugs": {
+    "url": "https://github.com/lspectraa/Texture-Manager-2/issues"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -10,6 +21,8 @@
     "tauri": "tauri",
     "check:env": "powershell -ExecutionPolicy Bypass -File ./scripts/check-prereqs.ps1",
     "phase0:verify": "npm run check:env && npm run build",
+    "sync:version": "powershell -ExecutionPolicy Bypass -File ./scripts/sync-version.ps1",
+    "setup:updater-signing": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-updater-signing.ps1",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
@@ -17,6 +30,8 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
     "html2canvas": "^1.4.1",
     "i18next": "^26.3.6",
     "lucide-react": "^1.8.0",

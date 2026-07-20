@@ -11,9 +11,9 @@ import {
   Settings2,
   Shuffle,
   Sparkles,
+  Download,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { APP_VERSION } from "../../config/appMeta";
 import {
   APP_BACKGROUND_RANDOM,
   MAX_APP_BACKGROUND_OPACITY,
@@ -45,6 +45,10 @@ type SettingsToolPanelProps = {
   settings: AppSettingsView;
   busy: boolean;
   error: string | null;
+  appVersion: string;
+  updateStatusMessage: string | null;
+  updateCheckBusy: boolean;
+  operationRunning: boolean;
   onThemeChange: (theme: AppTheme) => void;
   onLanguageChange: (language: AppLanguage) => void;
   onConcurrencyChange: (value: number) => void;
@@ -55,6 +59,7 @@ type SettingsToolPanelProps = {
   onRedetectGeometryDash: () => void;
   onOpenCacheFolder: () => void;
   onResetDefaults: () => void;
+  onCheckForUpdates: () => void;
   pickFolder: PickFolderFn;
 };
 
@@ -126,6 +131,10 @@ export function SettingsToolPanel({
   settings,
   busy,
   error,
+  appVersion,
+  updateStatusMessage,
+  updateCheckBusy,
+  operationRunning,
   onThemeChange,
   onLanguageChange,
   onConcurrencyChange,
@@ -136,6 +145,7 @@ export function SettingsToolPanel({
   onRedetectGeometryDash,
   onOpenCacheFolder,
   onResetDefaults,
+  onCheckForUpdates,
   pickFolder,
 }: SettingsToolPanelProps) {
   const { t } = useTranslation("settings");
@@ -184,7 +194,7 @@ export function SettingsToolPanel({
           </div>
         </div>
         <div className="tm-settings-hero-chips" aria-label={t("statusAria")}>
-          <StatusChip tone="info">v{APP_VERSION}</StatusChip>
+          <StatusChip tone="info">v{appVersion}</StatusChip>
           <StatusChip tone={settings.theme === "light" ? "info" : "neutral"}>
             {t("themeChip", {
               theme: t(`common:${settings.theme}`),
@@ -398,6 +408,32 @@ export function SettingsToolPanel({
                 {t("cache.resetDefaults")}
               </button>
             </div>
+          </ToolSection>
+
+          <ToolSection
+            title={t("updates.title")}
+            subtitle={t("updates.subtitle")}
+            icon={Download}
+          >
+            <div className="tm-settings-actions">
+              <button
+                type="button"
+                className="tm-settings-action-btn"
+                disabled={busy || updateCheckBusy || operationRunning}
+                onClick={onCheckForUpdates}
+              >
+                <RefreshCw size={14} strokeWidth={1.9} />
+                {updateCheckBusy
+                  ? t("updates.checking")
+                  : t("updates.checkForUpdates")}
+              </button>
+            </div>
+            {operationRunning ? (
+              <p className="tm-tool-section-note">{t("updates.installBlocked")}</p>
+            ) : null}
+            {updateStatusMessage ? (
+              <p className="tm-tool-section-note">{updateStatusMessage}</p>
+            ) : null}
           </ToolSection>
 
           <ToolSection

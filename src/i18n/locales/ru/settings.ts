@@ -61,6 +61,30 @@ const settings: AppLocaleResources["settings"] = {
     clearOverride: "Сбросить указанный путь",
     redetect: "Найти снова",
   },
+  updates: {
+    title: "Обновления",
+    subtitle:
+      "Проверка GitHub Releases на наличие версию Texture Manager 2",
+    checkForUpdates: "Проверить обновления",
+    checking: "Проверка…",
+    upToDate: "У вас установлена последняя версия (v{{version}}).",
+    available: "Доступна версия {{version}} (у вас v{{current}}).",
+    unsupported:
+      "Проверка обновлений доступна только в установленном приложении.",
+    checkFailed: "Не удалось проверить обновления. {{error}}",
+    installBlocked:
+      "Дождитесь завершения текущей операции перед установкой обновления.",
+    installing: "Загрузка и установка…",
+    downloading: "Загрузка обновления… {{percent}}%",
+    installAndRestart: "Установить и перезапустить",
+    availableTitle: "Доступно обновление {{version}}",
+    availableMeta:
+      "У вас v{{current}}. Перезапуск установит обновление.",
+    waitForOperation:
+      "Дождитесь завершения текущей операции перед установкой.",
+    later: "Позже",
+    dismiss: "Скрыть обновление",
+  },
   saveFailed: "Не удалось сохранить языковые настройки. {{error}}",
 };
 

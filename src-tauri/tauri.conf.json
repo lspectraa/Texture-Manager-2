@@ -51,7 +51,8 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis"],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -60,5 +61,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDRGNjI4NDY4OTQzNTdFMgpSV1RpVjBPSlJpajJCQ0x5V3hzUUE0Tm4xUzV4QzhoVVlSbUpBN29LbzNJV3BjQU10SnZrUkQrago=",
+      "endpoints": [
+        "https://github.com/lspectraa/Texture-Manager-2/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

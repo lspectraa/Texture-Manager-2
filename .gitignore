@@ -29,3 +29,10 @@ node_modules/*
 /blob-report/
 /playwright/.cache/
 e2e/*
+
+# Tauri updater private keys must never be committed
+*.key
+!*.key.pub
+.env
+.env.*
+

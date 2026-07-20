@@ -61,6 +61,28 @@ const settings: AppLocaleResources["settings"] = {
     clearOverride: "Borrar configuración manual",
     redetect: "Volver a detectar",
   },
+  updates: {
+    title: "Actualizaciones",
+    subtitle:
+      "Busca en GitHub Releases una versión más reciente de Texture Manager 2",
+    checkForUpdates: "Buscar actualizaciones",
+    checking: "Buscando…",
+    upToDate: "Tienes la versión más reciente (v{{version}}).",
+    available: "La versión {{version}} está disponible (tienes la v{{current}}).",
+    unsupported:
+      "La comprobación de actualizaciones requiere la aplicación de escritorio instalada.",
+    checkFailed: "No se pudieron buscar actualizaciones. {{error}}",
+    installBlocked:
+      "Termina la operación actual antes de instalar una actualización.",
+    installing: "Descargando e instalando…",
+    downloading: "Descargando actualización… {{percent}}%",
+    installAndRestart: "Instalar y reiniciar",
+    availableTitle: "La actualización {{version}} está disponible",
+    availableMeta: "Tienes la v{{current}}. El reinicio instalará la actualización.",
+    waitForOperation: "Termina la operación actual antes de instalar.",
+    later: "Más tarde",
+    dismiss: "Descartar actualización",
+  },
   saveFailed: "No se pudo guardar la preferencia de idioma. {{error}}",
 };
 
