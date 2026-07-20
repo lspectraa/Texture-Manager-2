@@ -61,6 +61,13 @@ const tools = {
       "Composite icon layers before glow (primary + secondary + extra)",
     rainbowGlow:
       "Rainbow glow (extended spectrum, cyan → purple → reddish-violet)",
+    preview: "Preview",
+    previewDescription:
+      "Live preview using a random UHD icon from your game — updates as you change settings",
+    previewAlt: "Glow maker sample preview",
+    previewLoading: "Generating preview…",
+    previewError: "Preview unavailable",
+    refreshPreview: "New random icon",
   },
   geodeButtons: {
     sourceDescription:

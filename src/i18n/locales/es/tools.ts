@@ -64,6 +64,13 @@ const tools: AppLocaleResources["tools"] = {
       "Combinar las capas del icono antes del brillo (primaria + secundaria + extra)",
     rainbowGlow:
       "Brillo arcoíris (espectro extendido, cian → morado → violeta rojizo)",
+    preview: "Vista previa",
+    previewDescription:
+      "Vista previa en vivo con un icono UHD aleatorio de tu juego — se actualiza al cambiar los ajustes",
+    previewAlt: "Vista previa de muestra del creador de brillo",
+    previewLoading: "Generando vista previa…",
+    previewError: "Vista previa no disponible",
+    refreshPreview: "Nuevo icono aleatorio",
   },
   geodeButtons: {
     sourceDescription:

@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::core::contracts::{phase_defaults, OperationRequest, PhaseDefaults};
+use crate::core::contracts::{
+    phase_defaults, GlowMakerOptions, OperationRequest, PhaseDefaults,
+};
 use crate::core::executor::execute_operation_plan;
 use crate::core::game_files::{
     bootstrap_game_files, invalidate_geometry_dash_detection_cache, refresh_game_files_layout,
@@ -16,6 +18,7 @@ use crate::core::geode_buttons::{
     resolve_geode_buttons_default_input_dir, resolve_geode_buttons_default_sheet,
     resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
 };
+use crate::core::glow_preview::glow_maker_preview_data_url;
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
     icon_editor_extract_frames as icon_editor_extract_frames_core,
@@ -506,6 +509,20 @@ async fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<Str
     .await
 }
 
+#[tauri::command]
+async fn glow_maker_preview_cmd(
+    options: GlowMakerOptions,
+    refresh: Option<bool>,
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<String, String> {
+    let layout = game_files.snapshot();
+    let refresh = refresh.unwrap_or(false);
+    run_blocking(move || {
+        glow_maker_preview_data_url(&layout, &options, refresh).map_err(|err| err.to_string())
+    })
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
@@ -548,6 +565,7 @@ pub fn run() {
             geode_buttons_autoselect_plist_cmd,
             geode_buttons_default_input_dir_cmd,
             geode_buttons_template_preview_data_url_cmd,
+            glow_maker_preview_cmd,
             icon_editor_sheet_info,
             icon_editor_save_plist,
             icon_editor_import_frame,

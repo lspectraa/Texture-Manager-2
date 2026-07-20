@@ -7,6 +7,7 @@ pub mod executor;
 pub mod glow;
 pub mod glow_composite;
 pub mod glow_maker;
+pub mod glow_preview;
 pub mod geode_buttons;
 pub mod icon_editor;
 pub mod image_io;

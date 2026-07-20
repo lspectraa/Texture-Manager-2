@@ -1,5 +1,7 @@
-import { Palette, SlidersHorizontal } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Eye, Palette, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { getGlowMakerPreviewDataUrl } from "../../services/tauriGlowMaker";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -26,6 +28,8 @@ type GlowMakerToolPanelProps = {
   pickFolder: PickFolderFn;
 };
 
+const PREVIEW_DEBOUNCE_MS = 200;
+
 export function GlowMakerToolPanel({
   inputDir,
   outputDir,
@@ -42,6 +46,58 @@ export function GlowMakerToolPanel({
   pickFolder,
 }: GlowMakerToolPanelProps) {
   const { t } = useTranslation("tools");
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(true);
+  const [previewError, setPreviewError] = useState(false);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const previewGenRef = useRef(0);
+  const refreshPendingRef = useRef(false);
+
+  useEffect(() => {
+    let alive = true;
+    const gen = ++previewGenRef.current;
+    const refresh = refreshPendingRef.current;
+    refreshPendingRef.current = false;
+    setPreviewLoading(true);
+    setPreviewError(false);
+
+    const timer = window.setTimeout(() => {
+      getGlowMakerPreviewDataUrl({
+        thickness,
+        tolerance,
+        rainbowGlow,
+        compositeLayers,
+        refresh,
+      })
+        .then((url) => {
+          if (!alive || gen !== previewGenRef.current) return;
+          if (url) {
+            setPreviewSrc(url);
+            setPreviewError(false);
+          } else {
+            setPreviewError(true);
+          }
+        })
+        .catch(() => {
+          if (!alive || gen !== previewGenRef.current) return;
+          setPreviewError(true);
+        })
+        .finally(() => {
+          if (!alive || gen !== previewGenRef.current) return;
+          setPreviewLoading(false);
+        });
+    }, PREVIEW_DEBOUNCE_MS);
+
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [thickness, tolerance, rainbowGlow, compositeLayers, previewRefreshKey]);
+
+  const refreshPreviewIcon = (): void => {
+    refreshPendingRef.current = true;
+    setPreviewRefreshKey((key) => key + 1);
+  };
 
   return (
     <ToolPage accent="cyan">
@@ -92,6 +148,40 @@ export function GlowMakerToolPanel({
           checked={rainbowGlow}
           onChange={onRainbowGlowChange}
         />
+      </ToolSection>
+      <ToolSection
+        title={t("glowMaker.preview")}
+        subtitle={t("glowMaker.previewDescription")}
+        icon={Eye}
+        columns={1}
+      >
+        <div
+          className={`tm-glow-preview${previewLoading ? " tm-glow-preview--loading" : ""}`}
+          aria-busy={previewLoading}
+        >
+          <button
+            type="button"
+            className="tm-glow-preview-refresh"
+            onClick={refreshPreviewIcon}
+            disabled={previewLoading}
+          >
+            <RefreshCw size={14} aria-hidden />
+            {t("glowMaker.refreshPreview")}
+          </button>
+          {previewSrc && !previewError ? (
+            <img
+              className="tm-glow-preview-thumb"
+              src={previewSrc}
+              alt={t("glowMaker.previewAlt")}
+            />
+          ) : (
+            <span className="tm-glow-preview-status">
+              {previewError
+                ? t("glowMaker.previewError")
+                : t("glowMaker.previewLoading")}
+            </span>
+          )}
+        </div>
       </ToolSection>
     </ToolPage>
   );
