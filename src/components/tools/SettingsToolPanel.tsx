@@ -47,6 +47,7 @@ type SettingsToolPanelProps = {
   error: string | null;
   appVersion: string;
   updateStatusMessage: string | null;
+  updateStatusTone: StatusChipTone | null;
   updateCheckBusy: boolean;
   operationRunning: boolean;
   onThemeChange: (theme: AppTheme) => void;
@@ -133,6 +134,7 @@ export function SettingsToolPanel({
   error,
   appVersion,
   updateStatusMessage,
+  updateStatusTone,
   updateCheckBusy,
   operationRunning,
   onThemeChange,
@@ -432,7 +434,13 @@ export function SettingsToolPanel({
               <p className="tm-tool-section-note">{t("updates.installBlocked")}</p>
             ) : null}
             {updateStatusMessage ? (
-              <p className="tm-tool-section-note">{updateStatusMessage}</p>
+              updateStatusTone === "danger" ? (
+                <div className="tm-settings-update-status" role="alert">
+                  <StatusChip tone="danger">{updateStatusMessage}</StatusChip>
+                </div>
+              ) : (
+                <p className="tm-tool-section-note">{updateStatusMessage}</p>
+              )
             ) : null}
           </ToolSection>
 

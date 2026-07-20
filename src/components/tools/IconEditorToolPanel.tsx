@@ -963,14 +963,21 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
 
 type IconEditorToolbarTipProps = {
   label: string;
+  shortcut?: string;
   children: ReactNode;
   className?: string;
 };
 
-function IconEditorToolbarTip({ label, children, className }: IconEditorToolbarTipProps) {
+function IconEditorToolbarTip({
+  label,
+  shortcut,
+  children,
+  className,
+}: IconEditorToolbarTipProps) {
   return (
     <AppTooltip
       label={label}
+      shortcut={shortcut}
       className={`tm-icon-editor-toolbar-tip${className ? ` ${className}` : ""}`}
       placement="bottom"
     >
@@ -2847,22 +2854,28 @@ export function IconEditorToolPanel() {
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip label={t("toolbar.undoTooltip")}>
+          <IconEditorToolbarTip
+            label={t("toolbar.undoTooltip")}
+            shortcut={t("toolbar.undoShortcut")}
+          >
             <button
               type="button"
               className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              aria-label={t("toolbar.undo")}
+              aria-label={`${t("toolbar.undo")} (${t("toolbar.undoShortcut")})`}
               onClick={undoEdits}
               disabled={!sheetInfo || isBusy || !canUndoEdits}
             >
               <Undo2 size={15} aria-hidden />
             </button>
           </IconEditorToolbarTip>
-          <IconEditorToolbarTip label={t("toolbar.redoTooltip")}>
+          <IconEditorToolbarTip
+            label={t("toolbar.redoTooltip")}
+            shortcut={t("toolbar.redoShortcut")}
+          >
             <button
               type="button"
               className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              aria-label={t("toolbar.redo")}
+              aria-label={`${t("toolbar.redo")} (${t("toolbar.redoShortcut")})`}
               onClick={redoEdits}
               disabled={!sheetInfo || isBusy || !canRedoEdits}
             >
@@ -2872,11 +2885,18 @@ export function IconEditorToolPanel() {
         </div>
         <div className="tm-icon-editor-toolbar-divider" aria-hidden />
         <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip label={saveTooltip}>
+          <IconEditorToolbarTip
+            label={saveTooltip}
+            shortcut={sheetInfo && !isBusy ? t("toolbar.saveShortcut") : undefined}
+          >
             <button
               type="button"
               className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
-              aria-label={saveTooltip}
+              aria-label={
+                sheetInfo && !isBusy
+                  ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
+                  : saveTooltip
+              }
               onClick={() => saveOffsets().catch(() => {})}
               disabled={!sheetInfo || isBusy}
             >

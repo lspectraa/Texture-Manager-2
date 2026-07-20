@@ -180,6 +180,9 @@ function App() {
   const [updateStatusMessage, setUpdateStatusMessage] = useState<string | null>(
     null,
   );
+  const [updateStatusTone, setUpdateStatusTone] = useState<
+    "success" | "warning" | "danger" | "info" | "neutral" | null
+  >(null);
   const updateCheckBusyRef = useRef(false);
   /** While set, applySettingsView must not clobber a newer in-flight opacity drag. */
   const optimisticBackgroundOpacityRef = useRef<number | null>(null);
@@ -489,6 +492,7 @@ function App() {
       setUpdateCheckBusy(true);
       if (!silent) {
         setUpdateStatusMessage(t("settings:updates.checking"));
+        setUpdateStatusTone("info");
       }
       try {
         const result = await checkForAppUpdate();
@@ -496,6 +500,7 @@ function App() {
           case "unsupported":
             setAvailableUpdate(null);
             setUpdateStatusMessage(t("settings:updates.unsupported"));
+            setUpdateStatusTone("warning");
             break;
           case "upToDate":
             setAvailableUpdate(null);
@@ -503,6 +508,7 @@ function App() {
             setUpdateStatusMessage(
               t("settings:updates.upToDate", { version: result.currentVersion }),
             );
+            setUpdateStatusTone("success");
             break;
           case "available":
             setAvailableUpdate(result.update);
@@ -514,15 +520,20 @@ function App() {
                 current: result.update.currentVersion,
               }),
             );
+            setUpdateStatusTone("info");
             break;
           case "error":
             setAvailableUpdate(null);
             setAppVersion(result.currentVersion);
-            setUpdateStatusMessage(
-              silent
-                ? null
-                : t("settings:updates.checkFailed", { error: result.message }),
-            );
+            if (silent) {
+              setUpdateStatusMessage(null);
+              setUpdateStatusTone(null);
+            } else {
+              setUpdateStatusMessage(
+                t("settings:updates.checkFailed", { error: result.message }),
+              );
+              setUpdateStatusTone("danger");
+            }
             break;
           default: {
             const _exhaustive: never = result;
@@ -862,6 +873,7 @@ function App() {
             error={settingsError}
             appVersion={appVersion}
             updateStatusMessage={updateStatusMessage}
+            updateStatusTone={updateStatusTone}
             updateCheckBusy={updateCheckBusy}
             operationRunning={isRunning}
             pickFolder={pickFolder}

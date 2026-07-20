@@ -14,6 +14,11 @@ async function bootstrap(): Promise<void> {
   // First paint from localStorage; persisted settings refine it before render.
   initTheme();
 
+  // Desktop app: suppress the browser default context menu everywhere.
+  document.addEventListener("contextmenu", (event) => {
+    event.preventDefault();
+  });
+
   const settings = await getAppSettings().catch(() => ({
     ...DEFAULT_APP_SETTINGS_VIEW,
   }));

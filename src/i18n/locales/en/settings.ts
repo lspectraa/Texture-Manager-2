@@ -8,7 +8,7 @@ const settings = {
   gdChip: "GD {{status}}",
   appearance: {
     title: "Appearance",
-    subtitle: "Choose a look — same picker will power first-run onboarding",
+    subtitle: "Choose a look",
   },
   theme: "Theme",
   language: {

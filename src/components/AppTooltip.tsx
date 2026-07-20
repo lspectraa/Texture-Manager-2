@@ -11,6 +11,8 @@ export type AppTooltipPlacement = "bottom" | "right";
 
 type AppTooltipProps = {
   label: string;
+  /** Optional keyboard shortcut shown as a kbd badge in the tooltip. */
+  shortcut?: string;
   children: ReactNode;
   className?: string;
   placement?: AppTooltipPlacement;
@@ -18,6 +20,7 @@ type AppTooltipProps = {
 
 export function AppTooltip({
   label,
+  shortcut,
   children,
   className,
   placement = "bottom",
@@ -95,11 +98,16 @@ export function AppTooltip({
         typeof document !== "undefined" &&
         createPortal(
           <span
-            className={`tm-app-tooltip-popup tm-app-tooltip-popup--${placement}`}
+            className={`tm-app-tooltip-popup tm-app-tooltip-popup--${placement}${
+              shortcut ? " tm-app-tooltip-popup--with-shortcut" : ""
+            }`}
             role="tooltip"
             style={{ top: position.top, left: position.left }}
           >
-            {label}
+            <span className="tm-app-tooltip-label">{label}</span>
+            {shortcut ? (
+              <kbd className="tm-app-tooltip-shortcut">{shortcut}</kbd>
+            ) : null}
           </span>,
           document.body,
         )}

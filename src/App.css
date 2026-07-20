@@ -4503,6 +4503,34 @@ select:focus-visible {
   pointer-events: none;
 }
 
+.tm-app-tooltip-popup--with-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+}
+
+.tm-app-tooltip-label {
+  flex: 1 1 auto;
+}
+
+.tm-app-tooltip-shortcut {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid rgba(160, 210, 255, 0.28);
+  background: rgba(12, 20, 42, 0.72);
+  color: var(--tm-text-muted);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
 .tm-app-tooltip-popup--bottom {
   transform: translateX(-50%);
   animation: tm-app-tooltip-in-bottom var(--tm-fast) ease;
@@ -7969,6 +7997,21 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   color: #ffb0b8;
   background: rgba(200, 70, 90, 0.16);
   border-color: rgba(240, 120, 140, 0.38);
+}
+
+.tm-settings-update-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.tm-settings-update-status .tm-status-chip {
+  white-space: normal;
+  max-width: 100%;
+  border-radius: 12px;
+  line-height: 1.35;
 }
 
 .tm-status-chip--info {
