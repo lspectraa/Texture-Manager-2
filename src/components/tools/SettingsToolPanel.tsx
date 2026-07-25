@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   CheckCircle2,
   FolderOpen,
@@ -6,11 +7,13 @@ import {
   Globe,
   HardDrive,
   Image,
+  Plus,
   RefreshCw,
   RotateCcw,
   Settings2,
   Shuffle,
   Sparkles,
+  Trash2,
   Download,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -27,6 +30,7 @@ import type {
 } from "../../domain/settings";
 import { APP_LANGUAGES } from "../../i18n/languages";
 import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages";
+import { isTauriRuntime } from "../../services/tauriOperations";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
@@ -55,6 +59,8 @@ type SettingsToolPanelProps = {
   onConcurrencyChange: (value: number) => void;
   onAppBackgroundChange: (value: AppBackgroundSetting) => void;
   onAppBackgroundOpacityChange: (value: number) => void;
+  onAddCustomAppBackground: (sourcePath: string) => void;
+  onRemoveCustomAppBackground: (id: string) => void;
   onGeometryDashPathSelected: (path: string) => void;
   onClearGeometryDashOverride: () => void;
   onRedetectGeometryDash: () => void;
@@ -142,6 +148,8 @@ export function SettingsToolPanel({
   onConcurrencyChange,
   onAppBackgroundChange,
   onAppBackgroundOpacityChange,
+  onAddCustomAppBackground,
+  onRemoveCustomAppBackground,
   onGeometryDashPathSelected,
   onClearGeometryDashOverride,
   onRedetectGeometryDash,
@@ -162,6 +170,12 @@ export function SettingsToolPanel({
   }, [settings.geometryDashResolved, settings.geometryDashDetected]);
 
   const gdStatus = geometryDashStatus(settings, t);
+  const hasAnyBackground =
+    settings.availableAppBackgrounds.length > 0 ||
+    settings.availableCustomAppBackgrounds.length > 0;
+  const randomPreviewOption =
+    settings.availableAppBackgrounds[0] ??
+    settings.availableCustomAppBackgrounds[0];
 
   const languageOptions = useMemo<AppSelectOption<AppLanguage>[]>(
     () =>
@@ -181,6 +195,26 @@ export function SettingsToolPanel({
     applyTheme(theme);
     setStoredTheme(theme);
     onThemeChange(theme);
+  };
+
+  const handleAddCustomBackground = async (): Promise<void> => {
+    if (busy || !isTauriRuntime()) {
+      return;
+    }
+    const selected = await open({
+      multiple: false,
+      title: t("background.custom.addTitle"),
+      filters: [
+        {
+          name: t("background.custom.imageFilter"),
+          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+        },
+      ],
+    });
+    if (typeof selected !== "string" || !selected) {
+      return;
+    }
+    onAddCustomAppBackground(selected);
   };
 
   return (
@@ -260,10 +294,7 @@ export function SettingsToolPanel({
                 onClick={() => onAppBackgroundChange(APP_BACKGROUND_RANDOM)}
               >
                 <span className="tm-settings-background-preview">
-                  <AppBackgroundThumbnail
-                    option={settings.availableAppBackgrounds[0]}
-                    alt=""
-                  />
+                  <AppBackgroundThumbnail option={randomPreviewOption} alt="" />
                   <span className="tm-settings-background-random-icon" aria-hidden>
                     <Shuffle size={18} strokeWidth={2.2} />
                   </span>
@@ -302,6 +333,79 @@ export function SettingsToolPanel({
                 {t("background.noneFound")}
               </p>
             ) : null}
+
+            <div className="tm-settings-background-custom">
+              <div className="tm-settings-background-custom-header">
+                <span className="tm-tool-field-label">
+                  {t("background.custom.label")}
+                </span>
+                <button
+                  type="button"
+                  className="tm-settings-action-btn"
+                  disabled={busy || !isTauriRuntime()}
+                  onClick={() => {
+                    void handleAddCustomBackground();
+                  }}
+                >
+                  <Plus size={14} strokeWidth={2} aria-hidden />
+                  {t("background.custom.add")}
+                </button>
+              </div>
+              {settings.availableCustomAppBackgrounds.length > 0 ? (
+                <div
+                  className="tm-settings-background-grid"
+                  role="radiogroup"
+                  aria-label={t("background.custom.aria")}
+                >
+                  {settings.availableCustomAppBackgrounds.map((bg) => {
+                    const selected = settings.appBackground === bg.id;
+                    return (
+                      <div
+                        key={bg.id}
+                        className={`tm-settings-background-tile tm-settings-background-tile--custom${
+                          selected ? " is-selected" : ""
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          className="tm-settings-background-tile-select"
+                          role="radio"
+                          aria-checked={selected}
+                          disabled={busy}
+                          onClick={() => onAppBackgroundChange(bg.id)}
+                        >
+                          <span className="tm-settings-background-preview">
+                            <AppBackgroundThumbnail option={bg} alt="" />
+                          </span>
+                          <span className="tm-settings-background-name">
+                            {bg.label}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="tm-settings-background-delete"
+                          disabled={busy}
+                          aria-label={t("background.custom.removeAria", {
+                            name: bg.label,
+                          })}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onRemoveCustomAppBackground(bg.id);
+                          }}
+                        >
+                          <Trash2 size={13} strokeWidth={2} aria-hidden />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="tm-tool-section-note">
+                  {t("background.custom.empty")}
+                </p>
+              )}
+            </div>
+
             <label className="tm-settings-background-opacity">
               <span>
                 {t("background.opacity")}
@@ -314,7 +418,7 @@ export function SettingsToolPanel({
                 max={MAX_APP_BACKGROUND_OPACITY * 100}
                 step={5}
                 value={Math.round(settings.appBackgroundOpacity * 100)}
-                disabled={busy || settings.availableAppBackgrounds.length === 0}
+                disabled={busy || !hasAnyBackground}
                 onChange={(event) =>
                   onAppBackgroundOpacityChange(Number(event.target.value) / 100)
                 }

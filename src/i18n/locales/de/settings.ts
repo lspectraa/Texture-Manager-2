@@ -25,6 +25,16 @@ const settings = {
     opacity: "Hintergrund-Deckkraft",
     noneFound:
       "Noch keine game_bg_*-Bilder von Geometry Dash gefunden — setze einen gültigen GD-Installationspfad, um sie zu finden.",
+    custom: {
+      label: "Eigene Hintergründe",
+      aria: "Eigene App-Hintergründe",
+      add: "Bild hinzufügen",
+      addTitle: "Hintergrundbild auswählen",
+      imageFilter: "Bilder",
+      empty:
+        "Füge eigene Bilder hinzu — sie werden in Graustufen umgewandelt und lokal zwischengespeichert.",
+      removeAria: "{{name}} entfernen",
+    },
   },
   performance: {
     title: "Leistung",

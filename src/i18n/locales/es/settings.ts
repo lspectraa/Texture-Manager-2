@@ -28,6 +28,16 @@ const settings: AppLocaleResources["settings"] = {
     opacity: "Opacidad del fondo",
     noneFound:
       "Aún no se encontraron imágenes game_bg_* de Geometry Dash; establece una ruta de instalación de GD válida para detectarlas.",
+    custom: {
+      label: "Fondos personalizados",
+      aria: "Fondos personalizados de la aplicación",
+      add: "Añadir imagen",
+      addTitle: "Elige una imagen de fondo",
+      imageFilter: "Imágenes",
+      empty:
+        "Añade tus propias imágenes: se convierten a escala de grises y se guardan en caché localmente.",
+      removeAria: "Eliminar {{name}}",
+    },
   },
   performance: {
     title: "Rendimiento",

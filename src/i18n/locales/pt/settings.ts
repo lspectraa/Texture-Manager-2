@@ -25,6 +25,16 @@ const settings = {
     opacity: "Opacidade do plano de fundo",
     noneFound:
       "Nenhuma imagem game_bg_* do Geometry Dash encontrada — defina um caminho de instalação válido para localizá-las.",
+    custom: {
+      label: "Planos de fundo personalizados",
+      aria: "Planos de fundo personalizados do app",
+      add: "Adicionar imagem",
+      addTitle: "Escolher uma imagem de fundo",
+      imageFilter: "Imagens",
+      empty:
+        "Adicione suas próprias imagens — elas são convertidas para escala de cinza e armazenadas em cache localmente.",
+      removeAria: "Remover {{name}}",
+    },
   },
   performance: {
     title: "Desempenho",

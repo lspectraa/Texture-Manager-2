@@ -654,6 +654,7 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
 
     fs::create_dir_all(&current_split)?;
     fs::create_dir_all(&legacy)?;
+    let _ = fs::create_dir_all(root.join("custom-backgrounds"));
 
     let override_path = read_settings_geometry_dash_override(&root);
     let geometry_dash_dir = if override_path.as_ref().is_some_and(|path| !path.trim().is_empty()) {
@@ -676,6 +677,7 @@ pub fn refresh_game_files_layout(settings_override: Option<&str>) -> GameFilesLa
     let root = resolve_game_files_root();
     let _ = fs::create_dir_all(root.join("split-cache"));
     let _ = fs::create_dir_all(root.join("legacy"));
+    let _ = fs::create_dir_all(root.join("custom-backgrounds"));
     let geometry_dash_dir = resolve_geometry_dash_dir_with_override(settings_override)
         .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME));
     let layout = layout_from_parts(root, geometry_dash_dir);

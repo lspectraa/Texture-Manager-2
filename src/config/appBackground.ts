@@ -18,11 +18,22 @@ export const APP_BACKGROUND_RANDOM = "random" as const;
 
 export type AppBackgroundId = typeof APP_BACKGROUND_RANDOM | string;
 
+export type AppBackgroundKind = "game" | "custom";
+
 export type AppBackgroundOption = {
   id: string;
   label: string;
   path: string;
+  kind: AppBackgroundKind;
 };
+
+/** Merge game + custom lists for Random / shell resolution. */
+export function allAppBackgroundOptions(
+  game: readonly AppBackgroundOption[],
+  custom: readonly AppBackgroundOption[],
+): AppBackgroundOption[] {
+  return [...game, ...custom];
+}
 
 /**
  * Session-random: when the setting is `random`, pick one entry from the

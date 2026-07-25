@@ -1,14 +1,17 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
 use crate::core::errors::AppError;
 use crate::core::game_files::{
     detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root, GameFilesLayout,
 };
+use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::safe_fs::{
-    ensure_user_absolute_path, is_safe_path_segment, png_file_to_data_url, shorten_path_for_display,
+    ensure_readable_image_file, ensure_user_absolute_path, is_safe_path_segment,
+    png_file_to_data_url, shorten_path_for_display,
 };
 
 const SETTINGS_FILE_NAME: &str = "settings.json";
@@ -25,6 +28,9 @@ const MAX_APP_BACKGROUND_OPACITY: f32 = 1.0;
 const DEFAULT_ONBOARDING_VERSION: u32 = 0;
 const GAME_BG_PREFIX: &str = "game_bg_";
 const GAME_BG_UHD_SUFFIX: &str = "_001-uhd.png";
+pub const CUSTOM_BACKGROUNDS_DIR_NAME: &str = "custom-backgrounds";
+const CUSTOM_BG_PREFIX: &str = "custom_";
+const CUSTOM_BG_SUFFIX: &str = ".png";
 
 fn is_supported_language(value: &str) -> bool {
     SUPPORTED_LANGUAGES
@@ -91,7 +97,7 @@ pub struct AppSettings {
     pub theme: AppTheme,
     #[serde(default = "default_language")]
     pub language: String,
-    /// `"random"` (default) or a `game_bg_*_001-uhd.png` filename under GD Resources.
+    /// `"random"` (default), a `game_bg_*_001-uhd.png` filename, or a `custom_*.png` id.
     #[serde(default = "default_app_background")]
     pub app_background: String,
     #[serde(default = "default_app_background_opacity")]
@@ -163,12 +169,20 @@ impl AppSettings {
     }
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum AppBackgroundKind {
+    Game,
+    Custom,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppBackgroundOption {
     pub id: String,
     pub label: String,
     pub path: String,
+    pub kind: AppBackgroundKind,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -186,6 +200,7 @@ pub struct AppSettingsView {
     pub app_background_opacity: f32,
     pub onboarding_version: u32,
     pub available_app_backgrounds: Vec<AppBackgroundOption>,
+    pub available_custom_app_backgrounds: Vec<AppBackgroundOption>,
     pub game_files_root: String,
     pub split_cache_dir: String,
 }
@@ -205,13 +220,23 @@ pub struct SaveAppSettingsRequest {
     pub theme: Option<String>,
     #[serde(default)]
     pub language: Option<String>,
-    /// `"random"` or a discovered `game_bg_*_001-uhd.png` filename.
+    /// `"random"`, a `game_bg_*_001-uhd.png` filename, or a `custom_*.png` id.
     #[serde(default)]
     pub app_background: Option<String>,
     #[serde(default)]
     pub app_background_opacity: Option<f32>,
     #[serde(default)]
     pub onboarding_version: Option<u32>,
+}
+
+pub fn custom_backgrounds_dir(root: &Path) -> PathBuf {
+    root.join(CUSTOM_BACKGROUNDS_DIR_NAME)
+}
+
+pub fn ensure_custom_backgrounds_dir(root: &Path) -> Result<PathBuf, AppError> {
+    let dir = custom_backgrounds_dir(root);
+    fs::create_dir_all(&dir)?;
+    Ok(dir)
 }
 
 pub fn settings_path(root: &Path) -> PathBuf {
@@ -267,6 +292,7 @@ pub fn discover_app_backgrounds(resources_dir: &Path) -> Vec<AppBackgroundOption
             id: name.to_string(),
             label,
             path: path.to_string_lossy().to_string(),
+            kind: AppBackgroundKind::Game,
         });
     }
 
@@ -274,13 +300,63 @@ pub fn discover_app_backgrounds(resources_dir: &Path) -> Vec<AppBackgroundOption
     options
 }
 
+/// Discover cached custom backgrounds under `{root}/custom-backgrounds/`.
+/// Soft-fails to an empty list when the folder is missing or unreadable.
+pub fn discover_custom_app_backgrounds(root: &Path) -> Vec<AppBackgroundOption> {
+    let dir = custom_backgrounds_dir(root);
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return Vec::new();
+    };
+
+    let mut options = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if !is_custom_bg_filename(name) {
+            continue;
+        }
+        options.push(AppBackgroundOption {
+            id: name.to_string(),
+            label: String::new(), // filled after sort for stable Custom N labels
+            path: path.to_string_lossy().to_string(),
+            kind: AppBackgroundKind::Custom,
+        });
+    }
+
+    options.sort_by(|a, b| a.id.cmp(&b.id));
+    for (index, option) in options.iter_mut().enumerate() {
+        option.label = format!("Custom {}", index + 1);
+    }
+    options
+}
+
 /// Read only a background that is present in the validated discovery list.
-pub fn app_background_png_data_url(resources_dir: &Path, id: &str) -> Result<String, AppError> {
+pub fn app_background_png_data_url(
+    resources_dir: &Path,
+    root: &Path,
+    id: &str,
+) -> Result<String, AppError> {
     let normalized = normalize_app_background_setting(id)?;
     if normalized == DEFAULT_APP_BACKGROUND {
         return Err(AppError::IoError(
             "Random is not a concrete app background.".to_string(),
         ));
+    }
+    if is_custom_bg_filename(&normalized) {
+        let option = discover_custom_app_backgrounds(root)
+            .into_iter()
+            .find(|option| option.id == normalized)
+            .ok_or_else(|| {
+                AppError::IoError(format!(
+                    "Custom app background '{normalized}' was not found in the cache."
+                ))
+            })?;
+        return png_file_to_data_url(Path::new(&option.path));
     }
     let option = discover_app_backgrounds(resources_dir)
         .into_iter()
@@ -293,12 +369,92 @@ pub fn app_background_png_data_url(resources_dir: &Path, id: &str) -> Result<Str
     png_file_to_data_url(Path::new(&option.path))
 }
 
+/// Import a user image, convert to grayscale PNG, and cache under custom-backgrounds.
+pub fn add_custom_app_background(source_path: &Path) -> Result<AppBackgroundOption, AppError> {
+    ensure_readable_image_file(source_path)?;
+    let root = resolve_game_files_root();
+    let dir = ensure_custom_backgrounds_dir(&root)?;
+
+    let opened = image::open(source_path).map_err(|err| {
+        AppError::IoError(format!(
+            "Failed to open image {}: {err}",
+            shorten_path_for_display(source_path)
+        ))
+    })?;
+    let grayscale = opened.grayscale();
+
+    let id = new_custom_background_id();
+    let dest = dir.join(&id);
+    save_dynamic_png_fast(&dest, &grayscale)?;
+
+    let options = discover_custom_app_backgrounds(&root);
+    options
+        .into_iter()
+        .find(|option| option.id == id)
+        .ok_or_else(|| {
+            AppError::IoError("Custom background was written but could not be rediscovered.".to_string())
+        })
+}
+
+/// Delete a cached custom background. Resets `appBackground` to random when it matched.
+pub fn remove_custom_app_background(id: &str) -> Result<AppSettings, AppError> {
+    let normalized = normalize_app_background_setting(id)?;
+    if !is_custom_bg_filename(&normalized) {
+        return Err(AppError::IoError(format!(
+            "Invalid custom app background id '{normalized}'."
+        )));
+    }
+
+    let root = resolve_game_files_root();
+    let option = discover_custom_app_backgrounds(&root)
+        .into_iter()
+        .find(|option| option.id == normalized)
+        .ok_or_else(|| {
+            AppError::IoError(format!(
+                "Custom app background '{normalized}' was not found in the cache."
+            ))
+        })?;
+
+    let path = PathBuf::from(&option.path);
+    if path.is_file() {
+        fs::remove_file(&path)?;
+    }
+
+    let mut settings = load_settings();
+    if settings.app_background == normalized {
+        settings.app_background = default_app_background();
+        settings = save_settings(&settings)?;
+    }
+    Ok(settings)
+}
+
 fn is_game_bg_uhd_filename(name: &str) -> bool {
     if !is_safe_path_segment(name) {
         return false;
     }
     let lower = name.to_ascii_lowercase();
     lower.starts_with(GAME_BG_PREFIX) && lower.ends_with(GAME_BG_UHD_SUFFIX)
+}
+
+fn is_custom_bg_filename(name: &str) -> bool {
+    if !is_safe_path_segment(name) {
+        return false;
+    }
+    let lower = name.to_ascii_lowercase();
+    if !lower.starts_with(CUSTOM_BG_PREFIX) || !lower.ends_with(CUSTOM_BG_SUFFIX) {
+        return false;
+    }
+    let stem = &lower[CUSTOM_BG_PREFIX.len()..lower.len() - CUSTOM_BG_SUFFIX.len()];
+    !stem.is_empty()
+        && stem
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() || c == '-' || c == '_')
+}
+
+fn new_custom_background_id() -> String {
+    let bytes: [u8; 8] = rand::rng().random();
+    let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    format!("{CUSTOM_BG_PREFIX}{hex}{CUSTOM_BG_SUFFIX}")
 }
 
 fn game_bg_label(filename: &str) -> Option<String> {
@@ -316,12 +472,15 @@ fn normalize_app_background_setting(raw: &str) -> Result<String, AppError> {
     if trimmed.eq_ignore_ascii_case(DEFAULT_APP_BACKGROUND) {
         return Ok(DEFAULT_APP_BACKGROUND.to_string());
     }
-    if !is_game_bg_uhd_filename(trimmed) {
-        return Err(AppError::IoError(format!(
-            "Invalid app background '{trimmed}'. Expected 'random' or a game_bg_*_001-uhd.png filename."
-        )));
+    if is_game_bg_uhd_filename(trimmed) {
+        return Ok(trimmed.to_string());
     }
-    Ok(trimmed.to_string())
+    if is_custom_bg_filename(trimmed) {
+        return Ok(trimmed.to_string());
+    }
+    Err(AppError::IoError(format!(
+        "Invalid app background '{trimmed}'. Expected 'random', a game_bg_*_001-uhd.png filename, or a custom_*.png id."
+    )))
 }
 
 pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSettingsView {
@@ -346,6 +505,7 @@ pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSet
     } else {
         Vec::new()
     };
+    let available_custom_app_backgrounds = discover_custom_app_backgrounds(&layout.root);
 
     AppSettingsView {
         geometry_dash_dir: settings.geometry_dash_dir.clone(),
@@ -360,6 +520,7 @@ pub fn settings_view(settings: &AppSettings, layout: &GameFilesLayout) -> AppSet
         app_background_opacity: settings.app_background_opacity,
         onboarding_version: settings.onboarding_version,
         available_app_backgrounds,
+        available_custom_app_backgrounds,
         game_files_root: layout.root.to_string_lossy().to_string(),
         split_cache_dir: layout.current_split.to_string_lossy().to_string(),
     }
@@ -595,6 +756,28 @@ mod tests {
     }
 
     #[test]
+    fn custom_bg_filename_detection() {
+        assert!(is_custom_bg_filename("custom_a1b2c3d4e5f60708.png"));
+        assert!(is_custom_bg_filename("custom_deadbeef.png"));
+        assert!(!is_custom_bg_filename("custom_.png"));
+        assert!(!is_custom_bg_filename("custom_../x.png"));
+        assert!(!is_custom_bg_filename("game_bg_01_001-uhd.png"));
+    }
+
+    #[test]
+    fn normalize_accepts_custom_and_rejects_junk() {
+        assert_eq!(
+            normalize_app_background_setting("custom_abcd1234.png").expect("ok"),
+            "custom_abcd1234.png"
+        );
+        assert_eq!(
+            normalize_app_background_setting("random").expect("ok"),
+            "random"
+        );
+        assert!(normalize_app_background_setting("not-a-bg.png").is_err());
+    }
+
+    #[test]
     fn discover_app_backgrounds_from_dir() {
         let dir = std::env::temp_dir().join(format!(
             "tm2-bg-test-{}",
@@ -614,6 +797,80 @@ mod tests {
         assert_eq!(options.len(), 2);
         assert_eq!(options[0].id, "game_bg_01_001-uhd.png");
         assert_eq!(options[0].label, "Background 01");
+        assert_eq!(options[0].kind, AppBackgroundKind::Game);
         assert_eq!(options[1].id, "game_bg_02_001-uhd.png");
+    }
+
+    #[test]
+    fn discover_custom_app_backgrounds_from_dir() {
+        let root = std::env::temp_dir().join(format!(
+            "tm2-custom-bg-root-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        let dir = custom_backgrounds_dir(&root);
+        fs::create_dir_all(&dir).expect("temp dir");
+        fs::write(dir.join("custom_bbbbbbbb.png"), b"not-a-real-png").expect("write");
+        fs::write(dir.join("custom_aaaaaaaa.png"), b"not-a-real-png").expect("write");
+        fs::write(dir.join("ignore.png"), b"x").expect("write");
+
+        let options = discover_custom_app_backgrounds(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(options.len(), 2);
+        assert_eq!(options[0].id, "custom_aaaaaaaa.png");
+        assert_eq!(options[0].label, "Custom 1");
+        assert_eq!(options[0].kind, AppBackgroundKind::Custom);
+        assert_eq!(options[1].id, "custom_bbbbbbbb.png");
+        assert_eq!(options[1].label, "Custom 2");
+    }
+
+    #[test]
+    fn add_custom_app_background_writes_grayscale_png() {
+        let root = std::env::temp_dir().join(format!(
+            "tm2-custom-bg-add-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0)
+        ));
+        fs::create_dir_all(&root).expect("temp root");
+        // Point game-files root at our temp dir for this process.
+        std::env::set_var("TM_GAME_FILES_DIR", &root);
+
+        let source = root.join("source.png");
+        let mut rgba = image::RgbaImage::new(2, 2);
+        rgba.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+        rgba.put_pixel(1, 0, image::Rgba([0, 255, 0, 255]));
+        rgba.put_pixel(0, 1, image::Rgba([0, 0, 255, 255]));
+        rgba.put_pixel(1, 1, image::Rgba([255, 255, 0, 128]));
+        crate::core::image_io::save_rgba_png_fast(&source, &rgba).expect("write source");
+
+        let option = add_custom_app_background(&source).expect("add custom");
+        assert!(is_custom_bg_filename(&option.id));
+        assert_eq!(option.kind, AppBackgroundKind::Custom);
+
+        let cached = image::open(&option.path).expect("open cached").to_rgba8();
+        let px = cached.get_pixel(0, 0);
+        assert_eq!(px[0], px[1]);
+        assert_eq!(px[1], px[2]);
+        assert_eq!(px[3], 255);
+
+        let discovered = discover_custom_app_backgrounds(&root);
+        assert!(discovered.iter().any(|item| item.id == option.id));
+
+        // Select the custom bg, then remove — should reset to random and delete the file.
+        let mut settings = AppSettings::default();
+        settings.app_background = option.id.clone();
+        save_settings(&settings).expect("save");
+        let after_remove = remove_custom_app_background(&option.id).expect("remove");
+        assert_eq!(after_remove.app_background, "random");
+        assert!(!Path::new(&option.path).exists());
+        assert!(discover_custom_app_backgrounds(&root).is_empty());
+
+        std::env::remove_var("TM_GAME_FILES_DIR");
+        let _ = fs::remove_dir_all(&root);
     }
 }

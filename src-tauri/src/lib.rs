@@ -45,9 +45,10 @@ use crate::core::icon_editor::{
 use crate::core::operations::build_operation_plan;
 use crate::core::report::OperationReport;
 use crate::core::settings::{
+    add_custom_app_background as add_custom_app_background_core,
     app_background_png_data_url as app_background_png_data_url_core, apply_save_request,
-    load_settings, save_settings, settings_view, AppSettings, AppSettingsView,
-    SaveAppSettingsRequest,
+    load_settings, remove_custom_app_background as remove_custom_app_background_core,
+    save_settings, settings_view, AppSettings, AppSettingsView, SaveAppSettingsRequest,
 };
 
 fn phase_defaults_from_settings() -> PhaseDefaults {
@@ -115,13 +116,43 @@ async fn app_background_png_data_url(
 ) -> Result<String, String> {
     let layout = game_files.snapshot();
     run_blocking(move || {
-        if !layout.geometry_dash_found() {
+        let is_custom = id.trim().to_ascii_lowercase().starts_with("custom_");
+        if !is_custom && !layout.geometry_dash_found() {
             return Err(
                 "Geometry Dash is not configured. Open Settings and set or detect the install path."
                     .to_string(),
             );
         }
-        app_background_png_data_url_core(&layout.resources, &id).map_err(|err| err.to_string())
+        app_background_png_data_url_core(&layout.resources, &layout.root, &id)
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn add_custom_app_background(
+    game_files: tauri::State<'_, GameFilesState>,
+    source_path: String,
+) -> Result<AppSettingsView, String> {
+    let game_files = game_files.inner().clone();
+    run_blocking(move || {
+        let path = std::path::PathBuf::from(source_path);
+        add_custom_app_background_core(&path).map_err(|err| err.to_string())?;
+        let settings = load_settings();
+        Ok(settings_view(&settings, &game_files.snapshot()))
+    })
+    .await
+}
+
+#[tauri::command]
+async fn remove_custom_app_background(
+    game_files: tauri::State<'_, GameFilesState>,
+    id: String,
+) -> Result<AppSettingsView, String> {
+    let game_files = game_files.inner().clone();
+    run_blocking(move || {
+        let settings = remove_custom_app_background_core(&id).map_err(|err| err.to_string())?;
+        Ok(settings_view(&settings, &game_files.snapshot()))
     })
     .await
 }
@@ -614,6 +645,8 @@ pub fn run() {
             get_phase_defaults,
             get_app_settings,
             app_background_png_data_url,
+            add_custom_app_background,
+            remove_custom_app_background,
             save_app_settings,
             set_geometry_dash_dir,
             clear_geometry_dash_dir,

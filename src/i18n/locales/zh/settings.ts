@@ -24,6 +24,15 @@ const settings = {
     opacity: "背景不透明度",
     noneFound:
       "尚未找到 Geometry Dash 的 game_bg_* 图片——请设置有效的 GD 安装路径以便查找。",
+    custom: {
+      label: "自定义背景",
+      aria: "自定义应用背景",
+      add: "添加图片",
+      addTitle: "选择背景图片",
+      imageFilter: "图片",
+      empty: "添加自己的图片——会转换为灰度并缓存在本地。",
+      removeAria: "移除 {{name}}",
+    },
   },
   performance: {
     title: "性能",

@@ -25,6 +25,15 @@ const settings = {
     opacity: "Background opacity",
     noneFound:
       "No Geometry Dash game_bg_* images found yet — set a valid GD install path to discover them.",
+    custom: {
+      label: "Custom backgrounds",
+      aria: "Custom app backgrounds",
+      add: "Add image",
+      addTitle: "Choose a background image",
+      imageFilter: "Images",
+      empty: "Add your own images — they are converted to grayscale and cached locally.",
+      removeAria: "Remove {{name}}",
+    },
   },
   performance: {
     title: "Performance",

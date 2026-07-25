@@ -4,6 +4,8 @@ import {
   DEFAULT_APP_BACKGROUND_OPACITY,
   MAX_APP_BACKGROUND_OPACITY,
   MIN_APP_BACKGROUND_OPACITY,
+  type AppBackgroundKind,
+  type AppBackgroundOption,
 } from "../config/appBackground";
 import {
   AppSettingsView,
@@ -17,16 +19,54 @@ import { isTauriRuntime } from "./tauriOperations";
 /** In-memory settings for browser / non-Tauri (Playwright, Vite). */
 let browserSettings: AppSettingsView = { ...DEFAULT_APP_SETTINGS_VIEW };
 
+function normalizeBackgroundOption(
+  item: AppBackgroundOption | null | undefined,
+  fallbackKind: AppBackgroundKind,
+): AppBackgroundOption | null {
+  if (
+    !item ||
+    typeof item.id !== "string" ||
+    typeof item.path !== "string" ||
+    typeof item.label !== "string"
+  ) {
+    return null;
+  }
+  const kind: AppBackgroundKind =
+    item.kind === "custom" || item.kind === "game" ? item.kind : fallbackKind;
+  return {
+    id: item.id,
+    label: item.label,
+    path: item.path,
+    kind,
+  };
+}
+
+function normalizeBackgroundList(
+  raw: unknown,
+  fallbackKind: AppBackgroundKind,
+): AppBackgroundOption[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: AppBackgroundOption[] = [];
+  for (const item of raw) {
+    const normalized = normalizeBackgroundOption(
+      item as AppBackgroundOption,
+      fallbackKind,
+    );
+    if (normalized) {
+      out.push(normalized);
+    }
+  }
+  return out;
+}
+
 function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
-  const available = Array.isArray(raw.availableAppBackgrounds)
-    ? raw.availableAppBackgrounds.filter(
-        (item) =>
-          item &&
-          typeof item.id === "string" &&
-          typeof item.path === "string" &&
-          typeof item.label === "string",
-      )
-    : [];
+  const available = normalizeBackgroundList(raw.availableAppBackgrounds, "game");
+  const availableCustom = normalizeBackgroundList(
+    raw.availableCustomAppBackgrounds,
+    "custom",
+  );
   const appBackgroundRaw =
     typeof raw.appBackground === "string" ? raw.appBackground.trim() : "";
   const appBackground =
@@ -55,6 +95,7 @@ function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
     ),
     onboardingVersion,
     availableAppBackgrounds: available,
+    availableCustomAppBackgrounds: availableCustom,
     defaultSheetConcurrency: Math.min(
       64,
       Math.max(1, Number(raw.defaultSheetConcurrency) || 5),
@@ -110,6 +151,42 @@ export const saveAppSettings = async (
     return applyBrowserSave(request);
   }
   const view = await invoke<AppSettingsView>("save_app_settings", { request });
+  return normalizeSettingsView(view);
+};
+
+export const addCustomAppBackground = async (
+  sourcePath: string,
+): Promise<AppSettingsView> => {
+  if (!isTauriRuntime()) {
+    return { ...browserSettings };
+  }
+  const view = await invoke<AppSettingsView>("add_custom_app_background", {
+    sourcePath,
+  });
+  return normalizeSettingsView(view);
+};
+
+export const removeCustomAppBackground = async (
+  id: string,
+): Promise<AppSettingsView> => {
+  if (!isTauriRuntime()) {
+    const next = {
+      ...browserSettings,
+      availableCustomAppBackgrounds:
+        browserSettings.availableCustomAppBackgrounds.filter(
+          (item) => item.id !== id,
+        ),
+      appBackground:
+        browserSettings.appBackground === id
+          ? APP_BACKGROUND_RANDOM
+          : browserSettings.appBackground,
+    };
+    browserSettings = normalizeSettingsView(next);
+    return { ...browserSettings };
+  }
+  const view = await invoke<AppSettingsView>("remove_custom_app_background", {
+    id,
+  });
   return normalizeSettingsView(view);
 };
 

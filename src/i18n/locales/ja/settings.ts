@@ -24,6 +24,16 @@ const settings = {
     opacity: "背景の不透明度",
     noneFound:
       "Geometry Dash の game_bg_* 画像がまだ見つかりません。有効な GD インストールパスを設定してください。",
+    custom: {
+      label: "カスタム背景",
+      aria: "カスタムアプリ背景",
+      add: "画像を追加",
+      addTitle: "背景画像を選択",
+      imageFilter: "画像",
+      empty:
+        "独自の画像を追加できます。グレースケールに変換され、ローカルにキャッシュされます。",
+      removeAria: "{{name}} を削除",
+    },
   },
   performance: {
     title: "パフォーマンス",

@@ -46,6 +46,7 @@ import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
 import {
+  allAppBackgroundOptions,
   APP_BACKGROUND_RANDOM,
   DEFAULT_APP_BACKGROUND_OPACITY,
 } from "./config/appBackground";
@@ -69,10 +70,12 @@ import {
   DEFAULT_APP_SETTINGS_VIEW,
 } from "./domain/settings";
 import {
+  addCustomAppBackground,
   clearGeometryDashDir,
   getAppSettings,
   openPathInOs,
   redetectGeometryDashDir,
+  removeCustomAppBackground,
   saveAppSettings,
   setGeometryDashDir,
 } from "./services/tauriSettings";
@@ -854,6 +857,18 @@ function App() {
   const showRunAction = isToolPanel;
   const showOperationAndReport = !isIconEditor && !isParticleEditor && !isHome && !isGeodeButtons && !isSettings;
 
+  const shellBackgroundOptions = useMemo(
+    () =>
+      allAppBackgroundOptions(
+        appSettings.availableAppBackgrounds,
+        appSettings.availableCustomAppBackgrounds,
+      ),
+    [
+      appSettings.availableAppBackgrounds,
+      appSettings.availableCustomAppBackgrounds,
+    ],
+  );
+
   const toolPanel = (() => {
     switch (selectedTool) {
       case "home":
@@ -947,6 +962,20 @@ function App() {
                   : { ...prev, appBackground },
               );
               runSettingsAction(() => saveAppSettings({ appBackground }), {
+                blockUi: false,
+              }).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
+            onAddCustomAppBackground={(sourcePath) => {
+              runSettingsAction(() => addCustomAppBackground(sourcePath)).catch(
+                () => {
+                  // Error surfaced via settingsError.
+                },
+              );
+            }}
+            onRemoveCustomAppBackground={(id) => {
+              runSettingsAction(() => removeCustomAppBackground(id), {
                 blockUi: false,
               }).catch(() => {
                 // Error surfaced via settingsError.
@@ -1146,7 +1175,7 @@ function App() {
         </div>
         <AppGameBackground
           setting={appSettings.appBackground}
-          options={appSettings.availableAppBackgrounds}
+          options={shellBackgroundOptions}
           opacity={appSettings.appBackgroundOpacity}
         />
         <OnboardingFlow
@@ -1195,7 +1224,7 @@ function App() {
       </div>
       <AppGameBackground
         setting={appSettings.appBackground}
-        options={appSettings.availableAppBackgrounds}
+        options={shellBackgroundOptions}
         opacity={appSettings.appBackgroundOpacity}
       />
       {availableUpdate && !updateBannerDismissed && !needsOnboarding ? (

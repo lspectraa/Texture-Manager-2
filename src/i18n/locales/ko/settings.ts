@@ -24,6 +24,16 @@ const settings = {
     opacity: "배경 불투명도",
     noneFound:
       "Geometry Dash의 game_bg_* 이미지를 아직 찾지 못했습니다 — 올바른 GD 설치 경로를 지정하세요.",
+    custom: {
+      label: "사용자 지정 배경",
+      aria: "사용자 지정 앱 배경",
+      add: "이미지 추가",
+      addTitle: "배경 이미지 선택",
+      imageFilter: "이미지",
+      empty:
+        "직접 이미지를 추가하세요 — 흑백으로 변환되어 로컬에 캐시됩니다.",
+      removeAria: "{{name}} 제거",
+    },
   },
   performance: {
     title: "성능",

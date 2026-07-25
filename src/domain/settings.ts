@@ -12,7 +12,7 @@ export type AppTheme = "dark" | "light";
 
 export type { AppLanguage };
 
-/** `"random"` (default) or a discovered `game_bg_*_001-uhd.png` filename. */
+/** `"random"` (default), a game_bg id, or a custom_*.png id. */
 export type AppBackgroundSetting = typeof APP_BACKGROUND_RANDOM | string;
 
 /** Current first-run onboarding revision. Values below this show onboarding. */
@@ -27,13 +27,14 @@ export type AppSettingsView = {
   defaultSheetConcurrency: number;
   theme: AppTheme;
   language: AppLanguage;
-  /** `"random"` or a `game_bg_*_001-uhd.png` id from `availableAppBackgrounds`. */
+  /** `"random"`, a game background id, or a custom background id. */
   appBackground: AppBackgroundSetting;
   /** Opacity applied only to the game background image layer, from 0.1 to 1. */
   appBackgroundOpacity: number;
   /** Completed first-run onboarding revision. `0` means incomplete. */
   onboardingVersion: number;
   availableAppBackgrounds: AppBackgroundOption[];
+  availableCustomAppBackgrounds: AppBackgroundOption[];
   gameFilesRoot: string;
   splitCacheDir: string;
 };
@@ -62,6 +63,7 @@ export const DEFAULT_APP_SETTINGS_VIEW: AppSettingsView = {
   appBackgroundOpacity: DEFAULT_APP_BACKGROUND_OPACITY,
   onboardingVersion: 0,
   availableAppBackgrounds: [],
+  availableCustomAppBackgrounds: [],
   gameFilesRoot: "",
   splitCacheDir: "",
 };
