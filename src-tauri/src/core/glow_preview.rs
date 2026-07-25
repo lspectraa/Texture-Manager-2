@@ -16,7 +16,10 @@ use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::game_files::GameFilesLayout;
 use crate::core::glow::render_icon_glow_from_primary;
-use crate::core::glow_composite::composite_icon_layers_for_glow;
+use crate::core::glow_composite::{
+    composite_icon_layers_for_glow, sprite_offset_for_frame, trimmed_sprite_anchor,
+};
+use crate::core::particle_sprites::ParticlePreviewSprite;
 use crate::core::splitter::split_sheet_candidate_memory;
 
 #[derive(Clone)]
@@ -32,7 +35,30 @@ struct CachedPreviewSample {
     sample: PreviewIconSample,
 }
 
-static PREVIEW_SAMPLE: Mutex<Option<CachedPreviewSample>> = Mutex::new(None);
+/// Which preview consumes the random icon; each has its own exclusion rules and cache.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PreviewIconAudience {
+    /// Glow Maker live preview.
+    GlowMaker,
+    /// Particle Editor silhouette (cubes, ships, balls, … — not UFO/robot/spider/wave/swing).
+    ParticleSilhouette,
+    /// Particle Editor ship-drag silhouette — only `ship_*` UHD sheets.
+    ParticleShip,
+}
+
+static GLOW_PREVIEW_SAMPLE: Mutex<Option<CachedPreviewSample>> = Mutex::new(None);
+static PARTICLE_PREVIEW_SAMPLE: Mutex<Option<CachedPreviewSample>> = Mutex::new(None);
+static PARTICLE_SHIP_PREVIEW_SAMPLE: Mutex<Option<CachedPreviewSample>> = Mutex::new(None);
+
+fn preview_sample_cache(
+    audience: PreviewIconAudience,
+) -> &'static Mutex<Option<CachedPreviewSample>> {
+    match audience {
+        PreviewIconAudience::GlowMaker => &GLOW_PREVIEW_SAMPLE,
+        PreviewIconAudience::ParticleSilhouette => &PARTICLE_PREVIEW_SAMPLE,
+        PreviewIconAudience::ParticleShip => &PARTICLE_SHIP_PREVIEW_SAMPLE,
+    }
+}
 
 fn clamp_glow_options(options: &GlowMakerOptions) -> GlowMakerOptions {
     GlowMakerOptions {
@@ -63,30 +89,47 @@ fn is_icon_primary_frame(frame_name: &str) -> bool {
 }
 
 /// UFO (`bird_` / `ufo_`), robot, and spider sheets are multi-part or awkward for a single-sprite preview.
-fn is_excluded_preview_icon_stem(stem: &str) -> bool {
+///
+/// The particle silhouette additionally drops waves (`dart_`) and swings, whose
+/// sprites read poorly as an emitter attach object. Ship-drag previews only keep
+/// `ship_*` sheets.
+fn is_excluded_preview_icon_stem(stem: &str, audience: PreviewIconAudience) -> bool {
     let lower = stem.to_ascii_lowercase();
     let base = lower
         .strip_suffix("-uhd")
         .or_else(|| lower.strip_suffix("-hd"))
         .unwrap_or(lower.as_str());
-    base.starts_with("bird_")
+    let shared = base.starts_with("bird_")
         || base.starts_with("ufo_")
         || base.starts_with("robot_")
-        || base.starts_with("spider_")
+        || base.starts_with("spider_");
+    match audience {
+        PreviewIconAudience::GlowMaker => shared,
+        PreviewIconAudience::ParticleSilhouette => {
+            shared || base.starts_with("dart_") || base.starts_with("swing_")
+        }
+        PreviewIconAudience::ParticleShip => !base.starts_with("ship_"),
+    }
 }
 
-fn uhd_icon_sheet_pairs(icons_dir: &std::path::Path) -> Result<Vec<SheetCandidate>, AppError> {
+fn uhd_icon_sheet_pairs(
+    icons_dir: &std::path::Path,
+    audience: PreviewIconAudience,
+) -> Result<Vec<SheetCandidate>, AppError> {
     let pairs: Vec<SheetCandidate> = discover_sheet_pairs(icons_dir)?
         .into_iter()
         .filter(|pair| {
             let stem = pair.stem.to_ascii_lowercase();
-            stem.ends_with("-uhd") && !is_excluded_preview_icon_stem(&pair.stem)
+            stem.ends_with("-uhd") && !is_excluded_preview_icon_stem(&pair.stem, audience)
         })
         .collect();
     Ok(pairs)
 }
 
-fn load_random_uhd_preview_icon(layout: &GameFilesLayout) -> Result<PreviewIconSample, AppError> {
+fn load_random_uhd_preview_icon(
+    layout: &GameFilesLayout,
+    audience: PreviewIconAudience,
+) -> Result<PreviewIconSample, AppError> {
     if !layout.geometry_dash_found() {
         return Err(AppError::InvalidOperation(
             "Geometry Dash is not configured for glow preview",
@@ -100,11 +143,17 @@ fn load_random_uhd_preview_icon(layout: &GameFilesLayout) -> Result<PreviewIconS
         ));
     }
 
-    let pairs = uhd_icon_sheet_pairs(&icons_dir)?;
+    let pairs = uhd_icon_sheet_pairs(&icons_dir, audience)?;
     if pairs.is_empty() {
-        return Err(AppError::InvalidOperation(
-            "No eligible -uhd icon sheets found under Resources/icons (UFO, robot, and spider are excluded)",
-        ));
+        let detail = match audience {
+            PreviewIconAudience::ParticleShip => {
+                "No eligible ship_-uhd icon sheets found under Resources/icons"
+            }
+            _ => {
+                "No eligible -uhd icon sheets found under Resources/icons (UFO, robot, and spider are excluded)"
+            }
+        };
+        return Err(AppError::InvalidOperation(detail));
     }
 
     let sheet_idx = rand::rng().random_range(0..pairs.len());
@@ -146,9 +195,10 @@ fn load_random_uhd_preview_icon(layout: &GameFilesLayout) -> Result<PreviewIconS
 fn preview_icon_sample(
     layout: &GameFilesLayout,
     refresh: bool,
+    audience: PreviewIconAudience,
 ) -> Result<PreviewIconSample, AppError> {
     let resources_key = layout.resources.to_string_lossy().to_string();
-    let mut guard = PREVIEW_SAMPLE
+    let mut guard = preview_sample_cache(audience)
         .lock()
         .map_err(|_| AppError::InvalidOperation("glow preview cache lock poisoned"))?;
 
@@ -160,7 +210,7 @@ fn preview_icon_sample(
         }
     }
 
-    let sample = load_random_uhd_preview_icon(layout)?;
+    let sample = load_random_uhd_preview_icon(layout, audience)?;
     *guard = Some(CachedPreviewSample {
         resources_key,
         sample: sample.clone(),
@@ -181,7 +231,7 @@ fn glow_source_for_preview(
         &sample.plist_root,
         &sample.primary_frame,
     ) {
-        Ok(Some(composite)) => composite,
+        Ok(Some((composite, _, _))) => composite,
         Ok(None) | Err(_) => sample.primary.clone(),
     }
 }
@@ -216,11 +266,60 @@ pub fn glow_maker_preview_data_url(
     refresh: bool,
 ) -> Result<String, AppError> {
     let options = clamp_glow_options(options);
-    let sample = preview_icon_sample(layout, refresh)?;
+    let sample = preview_icon_sample(layout, refresh, PreviewIconAudience::GlowMaker)?;
     let source = glow_source_for_preview(&options, &sample);
     let glow = render_icon_glow_from_primary(&source, &options);
-    let composed = compose_glow_under_icon(&glow, &sample.primary);
+    // Overlay the same composite used for glow so extras stay visible at native size.
+    let composed = compose_glow_under_icon(&glow, &source);
     rgba_to_png_data_url(&composed)
+}
+
+/// Anchored PNG of a random eligible UHD icon (no glow) for Particle Editor silhouettes.
+///
+/// Composites primary + secondary + extra when those frames exist so the preview
+/// matches how the icon looks in-game / in the icon editor. `anchorX/Y` is the
+/// Cocos node origin inside the image (Icon Editor / `spriteOffset` convention).
+///
+/// When `kind` is `Some("ship")`, only ship sheets are considered. Otherwise the
+/// general particle silhouette pool is used (robots, spiders, waves, swings, and
+/// UFOs are never picked).
+pub fn random_uhd_icon_preview_data_url(
+    layout: &GameFilesLayout,
+    refresh: bool,
+    kind: Option<&str>,
+) -> Result<ParticlePreviewSprite, AppError> {
+    let audience = match kind.map(|k| k.trim().to_ascii_lowercase()).as_deref() {
+        Some("ship") => PreviewIconAudience::ParticleShip,
+        _ => PreviewIconAudience::ParticleSilhouette,
+    };
+    let sample = preview_icon_sample(layout, refresh, audience)?;
+    let offset = sprite_offset_for_frame(&sample.plist_root, &sample.primary_frame);
+
+    let (icon, anchor_x, anchor_y) = match composite_icon_layers_for_glow(
+        &sample.sprites,
+        &sample.plist_root,
+        &sample.primary_frame,
+    ) {
+        Ok(Some((composite, ax, ay))) => (composite, ax, ay),
+        Ok(None) | Err(_) => {
+            let (ax, ay) =
+                trimmed_sprite_anchor(sample.primary.width(), sample.primary.height(), offset);
+            (sample.primary, ax, ay)
+        }
+    };
+
+    let mut bytes = Vec::new();
+    {
+        let mut cursor = Cursor::new(&mut bytes);
+        icon.write_to(&mut cursor, ImageFormat::Png).map_err(|err| {
+            AppError::ParseError(format!("failed to encode glow preview PNG: {err}"))
+        })?;
+    }
+    Ok(ParticlePreviewSprite {
+        data_url: format!("data:image/png;base64,{}", BASE64_STANDARD.encode(&bytes)),
+        anchor_x,
+        anchor_y,
+    })
 }
 
 #[cfg(test)]
@@ -253,16 +352,39 @@ mod tests {
 
     #[test]
     fn excluded_preview_stems_cover_ufo_robot_spider() {
-        assert!(is_excluded_preview_icon_stem("bird_01-uhd"));
-        assert!(is_excluded_preview_icon_stem("bird_42-hd"));
-        assert!(is_excluded_preview_icon_stem("ufo_01-uhd"));
-        assert!(is_excluded_preview_icon_stem("robot_01_01-uhd"));
-        assert!(is_excluded_preview_icon_stem("spider_05_03-uhd"));
-        assert!(!is_excluded_preview_icon_stem("player_12-uhd"));
-        assert!(!is_excluded_preview_icon_stem("ship_03-uhd"));
-        assert!(!is_excluded_preview_icon_stem("player_ball_01-uhd"));
-        assert!(!is_excluded_preview_icon_stem("dart_02-uhd"));
-        assert!(!is_excluded_preview_icon_stem("swing_01-uhd"));
+        let glow = PreviewIconAudience::GlowMaker;
+        assert!(is_excluded_preview_icon_stem("bird_01-uhd", glow));
+        assert!(is_excluded_preview_icon_stem("bird_42-hd", glow));
+        assert!(is_excluded_preview_icon_stem("ufo_01-uhd", glow));
+        assert!(is_excluded_preview_icon_stem("robot_01_01-uhd", glow));
+        assert!(is_excluded_preview_icon_stem("spider_05_03-uhd", glow));
+        assert!(!is_excluded_preview_icon_stem("player_12-uhd", glow));
+        assert!(!is_excluded_preview_icon_stem("ship_03-uhd", glow));
+        assert!(!is_excluded_preview_icon_stem("player_ball_01-uhd", glow));
+        assert!(!is_excluded_preview_icon_stem("dart_02-uhd", glow));
+        assert!(!is_excluded_preview_icon_stem("swing_01-uhd", glow));
+    }
+
+    #[test]
+    fn particle_silhouette_also_excludes_waves_and_swings() {
+        let particle = PreviewIconAudience::ParticleSilhouette;
+        assert!(is_excluded_preview_icon_stem("dart_02-uhd", particle));
+        assert!(is_excluded_preview_icon_stem("swing_01-uhd", particle));
+        assert!(is_excluded_preview_icon_stem("robot_01_01-uhd", particle));
+        assert!(is_excluded_preview_icon_stem("spider_05_03-uhd", particle));
+        assert!(!is_excluded_preview_icon_stem("player_12-uhd", particle));
+        assert!(!is_excluded_preview_icon_stem("ship_03-uhd", particle));
+        assert!(!is_excluded_preview_icon_stem("player_ball_01-uhd", particle));
+    }
+
+    #[test]
+    fn particle_ship_audience_only_allows_ships() {
+        let ship = PreviewIconAudience::ParticleShip;
+        assert!(!is_excluded_preview_icon_stem("ship_03-uhd", ship));
+        assert!(!is_excluded_preview_icon_stem("ship_42-uhd", ship));
+        assert!(is_excluded_preview_icon_stem("player_12-uhd", ship));
+        assert!(is_excluded_preview_icon_stem("player_ball_01-uhd", ship));
+        assert!(is_excluded_preview_icon_stem("dart_02-uhd", ship));
     }
 
     #[test]

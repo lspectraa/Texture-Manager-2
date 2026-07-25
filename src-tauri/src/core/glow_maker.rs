@@ -237,7 +237,7 @@ where
                 &split.plist_root,
                 &primary_name,
             ) {
-                Ok(Some(composite)) => composite,
+                Ok(Some((composite, _, _))) => composite,
                 Ok(None) => primary_sprite.clone(),
                 Err(err) => {
                     issues.push(ReportIssue {

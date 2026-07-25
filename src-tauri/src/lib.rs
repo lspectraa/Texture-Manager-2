@@ -18,7 +18,16 @@ use crate::core::geode_buttons::{
     resolve_geode_buttons_default_input_dir, resolve_geode_buttons_default_sheet,
     resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
 };
-use crate::core::glow_preview::glow_maker_preview_data_url;
+use crate::core::glow_preview::{glow_maker_preview_data_url, random_uhd_icon_preview_data_url};
+use crate::core::particle_editor::{
+    particle_editor_load_texture as particle_editor_load_texture_core,
+    particle_editor_open as particle_editor_open_core,
+    particle_editor_save as particle_editor_save_core,
+    ParticleOpenResult, ParticleSaveRequest,
+};
+use crate::core::particle_sprites::{
+    particle_editor_sheet_frame_data_url, ParticlePreviewSprite,
+};
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
     icon_editor_extract_frames as icon_editor_extract_frames_core,
@@ -444,6 +453,30 @@ async fn icon_editor_save_png_data_url(
 }
 
 #[tauri::command]
+async fn particle_editor_open(path: String) -> Result<ParticleOpenResult, String> {
+    run_blocking(move || {
+        particle_editor_open_core(&path).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn particle_editor_save(request: ParticleSaveRequest) -> Result<(), String> {
+    run_blocking(move || {
+        particle_editor_save_core(request).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn particle_editor_load_texture(path: String) -> Result<String, String> {
+    run_blocking(move || {
+        particle_editor_load_texture_core(&path).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 fn get_game_files_layout(game_files: tauri::State<'_, GameFilesState>) -> GameFilesLayoutDto {
     game_files.snapshot().to_dto()
 }
@@ -523,6 +556,35 @@ async fn glow_maker_preview_cmd(
     .await
 }
 
+#[tauri::command]
+async fn particle_editor_preview_icon_cmd(
+    refresh: Option<bool>,
+    kind: Option<String>,
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<ParticlePreviewSprite, String> {
+    let layout = game_files.snapshot();
+    let refresh = refresh.unwrap_or(false);
+    run_blocking(move || {
+        random_uhd_icon_preview_data_url(&layout, refresh, kind.as_deref())
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn particle_editor_sheet_frame_cmd(
+    sheet_stem: String,
+    frame_name: String,
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<ParticlePreviewSprite, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        particle_editor_sheet_frame_data_url(&layout, &sheet_stem, &frame_name)
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[allow(unused_mut)]
@@ -566,6 +628,8 @@ pub fn run() {
             geode_buttons_default_input_dir_cmd,
             geode_buttons_template_preview_data_url_cmd,
             glow_maker_preview_cmd,
+            particle_editor_preview_icon_cmd,
+            particle_editor_sheet_frame_cmd,
             icon_editor_sheet_info,
             icon_editor_save_plist,
             icon_editor_import_frame,
@@ -576,7 +640,10 @@ pub fn run() {
             icon_editor_swap_rename_sheet,
             icon_editor_copy_sheet,
             icon_editor_png_data_url,
-            icon_editor_save_png_data_url
+            icon_editor_save_png_data_url,
+            particle_editor_open,
+            particle_editor_save,
+            particle_editor_load_texture
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -52,9 +52,9 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Botones de Geode",
       description: "Crea botones con estilo Geode a partir de tus imágenes.",
     },
-    trailEditor: {
-      label: "Editor de estelas",
-      description: "Crea y edita efectos de estela del jugador.",
+    particleEditor: {
+      label: "Editor de partículas",
+      description: "Crea y edita efectos de partículas.",
     },
     splitter: {
       label: "Divisor",

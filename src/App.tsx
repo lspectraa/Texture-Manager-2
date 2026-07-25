@@ -35,6 +35,7 @@ import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVer
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
 import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
+import { ParticleEditorToolPanel } from "./components/tools/ParticleEditorToolPanel";
 import { SettingsToolPanel } from "./components/tools/SettingsToolPanel";
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { HomeScreen } from "./components/HomeScreen";
@@ -96,7 +97,7 @@ type PrimaryTool =
   | "glowMaker"
   | "geodeButtons"
   | "texturePackInstaller"
-  | "trailEditor";
+  | "particleEditor";
 
 type Rgb = [number, number, number];
 
@@ -845,12 +846,13 @@ function App() {
               : t("reports:status.errorsFound")
             : t("reports:status.ready");
   const isIconEditor = selectedTool === "iconEditor";
+  const isParticleEditor = selectedTool === "particleEditor";
   const isHome = selectedTool === "home";
   const isSettings = selectedTool === "settings";
   const isGeodeButtons = selectedTool === "geodeButtons";
-  const isToolPanel = !isIconEditor && !isHome && !isSettings;
+  const isToolPanel = !isIconEditor && !isParticleEditor && !isHome && !isSettings;
   const showRunAction = isToolPanel;
-  const showOperationAndReport = !isIconEditor && !isHome && !isGeodeButtons && !isSettings;
+  const showOperationAndReport = !isIconEditor && !isParticleEditor && !isHome && !isGeodeButtons && !isSettings;
 
   const toolPanel = (() => {
     switch (selectedTool) {
@@ -1109,8 +1111,9 @@ function App() {
             pickFolder={pickFolder}
           />
         );
+      case "particleEditor":
+        return <ParticleEditorToolPanel />;
       case "texturePackInstaller":
-      case "trailEditor":
         return null;
       default: {
         const neverTool: never = selectedTool;
@@ -1296,7 +1299,7 @@ function App() {
 
       <section
         className={`tm-layout ${
-          isIconEditor || isHome || isGeodeButtons || isSettings ? "tm-layout-icon-editor" : ""
+          isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings ? "tm-layout-icon-editor" : ""
         }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
           showOperationAndReport && isReportCollapsed ? " tm-layout-report-collapsed" : ""
         }${
@@ -1323,7 +1326,7 @@ function App() {
         <section
           className={`tm-panel tm-glass-card${
             isIconEditor ? " tm-panel-icon-editor" : ""
-          }${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
+          }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
             isGeodeButtons ? " tm-panel-geode" : ""
           }`}
         >

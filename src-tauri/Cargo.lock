@@ -4858,6 +4858,7 @@ name = "texture-manager-2"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "flate2",
  "image",
  "plist",
  "rand 0.10.1",

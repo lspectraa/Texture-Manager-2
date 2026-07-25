@@ -1,5 +1,14 @@
 /** Supported UI languages. Keep in sync with Rust `SUPPORTED_LANGUAGES`. */
-export type AppLanguage = "en" | "es" | "ru";
+export type AppLanguage =
+  | "en"
+  | "es"
+  | "ru"
+  | "pt"
+  | "de"
+  | "fr"
+  | "zh"
+  | "ko"
+  | "ja";
 
 export type TextDirection = "ltr" | "rtl";
 
@@ -44,6 +53,54 @@ export const APP_LANGUAGES: readonly AppLanguageMeta[] = [
     direction: "ltr",
     showTranslationDisclaimer: true,
   },
+  {
+    code: "pt",
+    locale: "pt",
+    nativeName: "Português",
+    englishName: "Portuguese",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
+  {
+    code: "de",
+    locale: "de",
+    nativeName: "Deutsch",
+    englishName: "German",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
+  {
+    code: "fr",
+    locale: "fr",
+    nativeName: "Français",
+    englishName: "French",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
+  {
+    code: "zh",
+    locale: "zh-Hans",
+    nativeName: "简体中文",
+    englishName: "Chinese (Simplified)",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
+  {
+    code: "ko",
+    locale: "ko",
+    nativeName: "한국어",
+    englishName: "Korean",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
+  {
+    code: "ja",
+    locale: "ja",
+    nativeName: "日本語",
+    englishName: "Japanese",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
 ] as const;
 
 export const DEFAULT_APP_LANGUAGE: AppLanguage = "en";
@@ -53,14 +110,30 @@ const LANGUAGE_BY_CODE = new Map(
 );
 
 export function isAppLanguage(value: unknown): value is AppLanguage {
-  return value === "en" || value === "es" || value === "ru";
+  return (
+    value === "en" ||
+    value === "es" ||
+    value === "ru" ||
+    value === "pt" ||
+    value === "de" ||
+    value === "fr" ||
+    value === "zh" ||
+    value === "ko" ||
+    value === "ja"
+  );
 }
 
 export function getLanguageMeta(code: AppLanguage): AppLanguageMeta {
   switch (code) {
     case "en":
     case "es":
-    case "ru": {
+    case "ru":
+    case "pt":
+    case "de":
+    case "fr":
+    case "zh":
+    case "ko":
+    case "ja": {
       const meta = LANGUAGE_BY_CODE.get(code);
       if (!meta) {
         throw new Error(`Missing language metadata for '${code}'`);
@@ -96,7 +169,7 @@ export function normalizeAppLanguage(value: unknown): AppLanguage {
 
 /**
  * Map browser/system preferred languages to a supported app language.
- * Only Spanish and Russian are auto-selected; everything else is English.
+ * Anything outside the supported set falls back to English.
  */
 export function detectSystemAppLanguage(
   languages: readonly string[] = typeof navigator !== "undefined"
@@ -110,7 +183,10 @@ export function detectSystemAppLanguage(
       continue;
     }
     const primary = entry.trim().toLowerCase().split(/[-_]/)[0];
-    if (primary === "es" || primary === "ru") {
+    if (primary === DEFAULT_APP_LANGUAGE) {
+      continue;
+    }
+    if (isAppLanguage(primary)) {
       return primary;
     }
   }
@@ -131,8 +207,8 @@ export function resolveInitialAppLanguage(options: {
   if (options.onboardingComplete) {
     return persisted;
   }
-  // Incomplete onboarding: prefer system Spanish/Russian when the stored
-  // value is still the English default (first install / migration).
+  // Incomplete onboarding: prefer the system language when the stored value
+  // is still the English default (first install / migration).
   if (persisted === DEFAULT_APP_LANGUAGE) {
     return detectSystemAppLanguage(options.systemLanguages);
   }

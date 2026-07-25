@@ -14,6 +14,9 @@ import { normalizeAppLanguage } from "../i18n/languages";
 import { isAppTheme } from "../utils/theme";
 import { isTauriRuntime } from "./tauriOperations";
 
+/** In-memory settings for browser / non-Tauri (Playwright, Vite). */
+let browserSettings: AppSettingsView = { ...DEFAULT_APP_SETTINGS_VIEW };
+
 function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
   const available = Array.isArray(raw.availableAppBackgrounds)
     ? raw.availableAppBackgrounds.filter(
@@ -59,9 +62,42 @@ function normalizeSettingsView(raw: AppSettingsView): AppSettingsView {
   };
 }
 
+function applyBrowserSave(request: SaveAppSettingsRequest): AppSettingsView {
+  const next: AppSettingsView = {
+    ...browserSettings,
+    theme: request.theme ?? browserSettings.theme,
+    language: normalizeAppLanguage(
+      request.language ?? browserSettings.language,
+    ),
+    defaultSheetConcurrency:
+      request.defaultSheetConcurrency ?? browserSettings.defaultSheetConcurrency,
+    appBackground: request.appBackground ?? browserSettings.appBackground,
+    appBackgroundOpacity:
+      request.appBackgroundOpacity ?? browserSettings.appBackgroundOpacity,
+    onboardingVersion:
+      request.onboardingVersion ?? browserSettings.onboardingVersion,
+  };
+
+  if (request.clearGeometryDashDir) {
+    next.geometryDashDir = null;
+    next.geometryDashOverrideActive = false;
+    next.geometryDashResolved = next.geometryDashDetected;
+    next.geometryDashFound = Boolean(next.geometryDashDetected);
+  } else if (request.geometryDashDir !== undefined) {
+    next.geometryDashDir = request.geometryDashDir;
+    next.geometryDashOverrideActive = Boolean(request.geometryDashDir);
+    next.geometryDashResolved =
+      request.geometryDashDir || next.geometryDashDetected;
+    next.geometryDashFound = Boolean(next.geometryDashResolved);
+  }
+
+  browserSettings = normalizeSettingsView(next);
+  return { ...browserSettings };
+}
+
 export const getAppSettings = async (): Promise<AppSettingsView> => {
   if (!isTauriRuntime()) {
-    return { ...DEFAULT_APP_SETTINGS_VIEW };
+    return { ...browserSettings };
   }
   const view = await invoke<AppSettingsView>("get_app_settings");
   return normalizeSettingsView(view);
@@ -71,26 +107,7 @@ export const saveAppSettings = async (
   request: SaveAppSettingsRequest,
 ): Promise<AppSettingsView> => {
   if (!isTauriRuntime()) {
-    const nextBackground = request.appBackground ?? DEFAULT_APP_SETTINGS_VIEW.appBackground;
-    return {
-      ...DEFAULT_APP_SETTINGS_VIEW,
-      theme: request.theme ?? DEFAULT_APP_SETTINGS_VIEW.theme,
-      language: normalizeAppLanguage(
-        request.language ?? DEFAULT_APP_SETTINGS_VIEW.language,
-      ),
-      defaultSheetConcurrency:
-        request.defaultSheetConcurrency ??
-        DEFAULT_APP_SETTINGS_VIEW.defaultSheetConcurrency,
-      appBackground: nextBackground,
-      appBackgroundOpacity:
-        request.appBackgroundOpacity ??
-        DEFAULT_APP_SETTINGS_VIEW.appBackgroundOpacity,
-      onboardingVersion:
-        request.onboardingVersion ?? DEFAULT_APP_SETTINGS_VIEW.onboardingVersion,
-      geometryDashDir: request.clearGeometryDashDir
-        ? null
-        : (request.geometryDashDir ?? DEFAULT_APP_SETTINGS_VIEW.geometryDashDir),
-    };
+    return applyBrowserSave(request);
   }
   const view = await invoke<AppSettingsView>("save_app_settings", { request });
   return normalizeSettingsView(view);

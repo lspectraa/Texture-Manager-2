@@ -52,9 +52,9 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Кнопки Geode",
       description: "Создавайте кнопки в стиле Geode из своих изображений.",
     },
-    trailEditor: {
-      label: "Редактор следа",
-      description: "Создавайте и редактируйте эффекты следа игрока.",
+    particleEditor: {
+      label: "Редактор частиц",
+      description: "Создавайте и редактируйте эффекты частиц.",
     },
     splitter: {
       label: "Разделитель",

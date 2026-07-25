@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useId,
   useLayoutEffect,
@@ -19,6 +20,8 @@ export type AppSelectOption<T extends string = string> = {
   description?: string;
   /** Leading visual (flag, icon, swatch). */
   leading?: ReactNode;
+  /** Heading rendered above the first option of each consecutive run. */
+  group?: string;
   disabled?: boolean;
 };
 
@@ -32,6 +35,8 @@ type AppSelectProps<T extends string = string> = {
   "aria-labelledby"?: string;
   disabled?: boolean;
   className?: string;
+  /** Extra class on the menu itself, for widening or spacing a specific picker. */
+  menuClassName?: string;
   /** Larger trigger + option rows (language picker). */
   size?: "sm" | "md";
   /**
@@ -58,6 +63,7 @@ export function AppSelect<T extends string = string>({
   "aria-labelledby": ariaLabelledBy,
   disabled = false,
   className,
+  menuClassName,
   size = "sm",
   portal = false,
 }: AppSelectProps<T>) {
@@ -255,7 +261,7 @@ export function AppSelect<T extends string = string>({
         portal && menuPosition
           ? ` tm-app-select-menu--portal tm-app-select-menu--${menuPosition.placement}`
           : ""
-      }`}
+      }${menuClassName ? ` ${menuClassName}` : ""}`}
       role="listbox"
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
@@ -264,9 +270,17 @@ export function AppSelect<T extends string = string>({
           {options.map((option, index) => {
             const isSelected = option.value === value;
             const isHighlighted = index === highlightIndex;
+            const previousGroup = index > 0 ? options[index - 1]?.group : undefined;
+            const groupHeading =
+              option.group && option.group !== previousGroup ? option.group : null;
             return (
+              <Fragment key={option.value}>
+              {groupHeading ? (
+                <span className="tm-app-select-group" role="presentation">
+                  {groupHeading}
+                </span>
+              ) : null}
               <button
-                key={option.value}
                 type="button"
                 role="option"
                 aria-selected={isSelected}
@@ -305,6 +319,7 @@ export function AppSelect<T extends string = string>({
                   <span className="tm-app-select-check-spacer" aria-hidden />
                 )}
               </button>
+              </Fragment>
             );
           })}
     </div>

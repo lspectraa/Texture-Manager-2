@@ -5,9 +5,15 @@ import {
   DEFAULT_APP_LANGUAGE,
   type AppLanguage,
 } from "./languages";
+import de from "./locales/de";
 import en from "./locales/en";
 import es from "./locales/es";
+import fr from "./locales/fr";
+import ja from "./locales/ja";
+import ko from "./locales/ko";
+import pt from "./locales/pt";
 import ru from "./locales/ru";
+import zh from "./locales/zh";
 
 export const I18N_NAMESPACES = [
   "common",
@@ -24,6 +30,12 @@ const resources = {
   en,
   es,
   ru,
+  pt,
+  de,
+  fr,
+  zh,
+  ko,
+  ja,
 } as const;
 
 let initialized = false;

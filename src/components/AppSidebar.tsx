@@ -93,6 +93,7 @@ export function AppSidebar({
                   const ToolIcon = tool.icon;
                   const isActive = selectedTool === tool.id;
                   const isUpcoming = tool.upcoming === true;
+                  const toolLabel = t(tool.shortLabel ?? tool.label);
                   return (
                     <button
                       key={tool.id}
@@ -110,13 +111,14 @@ export function AppSidebar({
                       disabled={isUpcoming}
                       aria-disabled={isUpcoming || undefined}
                       role="listitem"
+                      aria-label={toolLabel}
                       aria-current={isActive ? "page" : undefined}
                     >
                       <span className="tm-nav-btn-icon" aria-hidden>
                         <ToolIcon size={16} strokeWidth={1.85} />
                       </span>
                       <span className="tm-nav-btn-label">
-                        {t(tool.shortLabel ?? tool.label)}
+                        {toolLabel}
                       </span>
                       {isUpcoming ? (
                         <span className="tm-nav-btn-upcoming-badge" aria-hidden>

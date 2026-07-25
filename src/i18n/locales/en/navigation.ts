@@ -50,9 +50,9 @@ const navigation = {
       shortLabel: "Geode Buttons",
       description: "Build Geode-style buttons from your images.",
     },
-    trailEditor: {
-      label: "Trail Editor",
-      description: "Create and edit player trail effects.",
+    particleEditor: {
+      label: "Particle Editor",
+      description: "Create and edit particle effects.",
     },
     splitter: {
       label: "Splitter",

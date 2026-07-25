@@ -15,7 +15,7 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 const DEFAULT_SHEET_CONCURRENCY: u32 = 5;
 const DEFAULT_LANGUAGE: &str = "en";
 /// Keep in sync with frontend `AppLanguage` / `APP_LANGUAGES`.
-const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru"];
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja"];
 /// Default: pick a discovered `game_bg_*` once per frontend session.
 const DEFAULT_APP_BACKGROUND: &str = "random";
 const DEFAULT_APP_BACKGROUND_OPACITY: f32 = 0.75;
@@ -406,9 +406,10 @@ pub fn apply_save_request(
     if let Some(language) = request.language {
         let trimmed = language.trim();
         if trimmed.is_empty() {
-            return Err(AppError::IoError(
-                "Invalid language ''. Expected 'en', 'es', or 'ru'.".to_string(),
-            ));
+            return Err(AppError::IoError(format!(
+                "Invalid language ''. Expected one of {}.",
+                SUPPORTED_LANGUAGES.join(", ")
+            )));
         }
         let primary = trimmed
             .split(['-', '_'])
@@ -417,7 +418,8 @@ pub fn apply_save_request(
             .to_ascii_lowercase();
         if !is_supported_language(&primary) {
             return Err(AppError::IoError(format!(
-                "Invalid language '{trimmed}'. Expected 'en', 'es', or 'ru'."
+                "Invalid language '{trimmed}'. Expected one of {}.",
+                SUPPORTED_LANGUAGES.join(", ")
             )));
         }
         next.language = primary;
@@ -518,7 +520,7 @@ mod tests {
         assert_eq!(blank.language, "en");
 
         let unknown = AppSettings {
-            language: "de".to_string(),
+            language: "xx".to_string(),
             ..AppSettings::default()
         }
         .clamp();
@@ -533,8 +535,10 @@ mod tests {
     }
 
     #[test]
-    fn language_roundtrip_en_es_ru() {
-        for code in ["en", "es", "ru", "ES", "ru-RU"] {
+    fn language_roundtrip_supported_codes() {
+        for code in [
+            "en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "ES", "ru-RU", "zh-Hans",
+        ] {
             let next = apply_save_request(
                 &AppSettings::default(),
                 SaveAppSettingsRequest {
@@ -567,7 +571,7 @@ mod tests {
                 clear_geometry_dash_dir: false,
                 default_sheet_concurrency: None,
                 theme: None,
-                language: Some("de".to_string()),
+                language: Some("xx".to_string()),
                 app_background: None,
                 app_background_opacity: None,
                 onboarding_version: None,

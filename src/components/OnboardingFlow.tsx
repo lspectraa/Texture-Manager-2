@@ -157,48 +157,49 @@ export function OnboardingFlow({
 
         <div className="tm-onboarding-body">
           {stepId === "language" ? (
-            <div
-              className="tm-onboarding-language-grid"
-              role="radiogroup"
-              aria-label={t("languageAria")}
-            >
-              {APP_LANGUAGES.map((option) => {
-                const selected = language === option.code;
-                return (
-                  <button
-                    key={option.code}
-                    type="button"
-                    role="radio"
-                    aria-checked={selected}
-                    disabled={busy}
-                    className={`tm-onboarding-language-card${
-                      selected ? " selected" : ""
-                    }`}
-                    onClick={() => {
-                      setLanguage(option.code);
-                      onLanguagePreview?.(option.code);
-                    }}
-                  >
-                    <span className="tm-onboarding-language-icon" aria-hidden>
-                      <LanguageFlag code={option.code} size={28} />
-                    </span>
-                    <span className="tm-onboarding-language-copy">
-                      <span className="tm-onboarding-language-label">
-                        {option.nativeName}
+            <div className="tm-onboarding-language">
+              <div
+                className="tm-onboarding-language-scroll"
+                role="radiogroup"
+                aria-label={t("languageAria")}
+                tabIndex={0}
+              >
+                {APP_LANGUAGES.map((option) => {
+                  const selected = language === option.code;
+                  return (
+                    <button
+                      key={option.code}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      disabled={busy}
+                      className={`tm-onboarding-language-card${
+                        selected ? " selected" : ""
+                      }`}
+                      onClick={() => {
+                        setLanguage(option.code);
+                        onLanguagePreview?.(option.code);
+                      }}
+                    >
+                      <span className="tm-onboarding-language-icon" aria-hidden>
+                        <LanguageFlag code={option.code} size={28} />
                       </span>
-                      {option.englishName !== option.nativeName ? (
-                        <span className="tm-onboarding-language-meta">
-                          {option.englishName}
+                      <span className="tm-onboarding-language-copy">
+                        <span className="tm-onboarding-language-label">
+                          {option.nativeName}
                         </span>
-                      ) : null}
-                    </span>
-                    <StatusChip tone="success">{t("common:available")}</StatusChip>
-                  </button>
-                );
-              })}
-              <p className="tm-onboarding-hint">
-                {t("languageHint")}
-              </p>
+                        {option.englishName !== option.nativeName ? (
+                          <span className="tm-onboarding-language-meta">
+                            {option.englishName}
+                          </span>
+                        ) : null}
+                      </span>
+                      <StatusChip tone="success">{t("common:available")}</StatusChip>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="tm-onboarding-hint">{t("languageHint")}</p>
             </div>
           ) : null}
 

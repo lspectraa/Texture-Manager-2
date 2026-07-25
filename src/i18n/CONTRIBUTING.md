@@ -4,7 +4,7 @@ Texture Manager 2 uses `i18next` + `react-i18next` with typed catalogs under `sr
 
 ## Supported languages
 
-Registered in [`languages.ts`](./languages.ts) as `AppLanguage = "en" | "es" | "ru"`.
+Registered in [`languages.ts`](./languages.ts) as `AppLanguage = "en" | "es" | "ru" | "pt" | "de" | "fr" | "zh" | "ko" | "ja"`.
 
 Each language entry includes:
 
@@ -17,8 +17,8 @@ Rust allowlist in `src-tauri/src/core/settings.rs` must stay in sync.
 ## Add or change a string
 
 1. Add the key to the matching English namespace file under `src/i18n/locales/en/` (`common`, `navigation`, `onboarding`, `settings`, `tools`, `iconEditor`, `reports`, `errors`).
-2. Copy the same key into `locales/es/` and `locales/ru/` with translated text.
-3. TypeScript enforces that Spanish/Russian match the English key shape via `AppLocaleResources`.
+2. Copy the same key into every other locale directory under `src/i18n/locales/` with translated text.
+3. TypeScript enforces that each non-English locale matches the English key shape via `AppLocaleResources`.
 4. In components, use `useTranslation("namespace")` and `t("key", { var })`. Prefer plural keys (`key_one` / `key_other`) over string concatenation.
 
 Leave product names, paths, filenames, operation IDs, plist/frame identifiers, version strings, and backend diagnostic bodies untranslated.

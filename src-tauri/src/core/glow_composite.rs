@@ -102,6 +102,26 @@ fn frame_sprite_offset(frames: &Dictionary, sprite_key: &str) -> PointF32 {
     parse_pair(raw).unwrap_or(PointF32 { x: 0.0, y: 0.0 })
 }
 
+/// Node-origin pixel inside a trimmed sprite image (Icon Editor convention).
+///
+/// TexturePacker `spriteOffset` shifts the trimmed sprite relative to the node
+/// origin; with CSS/canvas Y-down this maps to:
+/// `anchor = (w/2 - offset.x, h/2 + offset.y)`.
+pub fn trimmed_sprite_anchor(width: u32, height: u32, offset: PointF32) -> (f32, f32) {
+    (
+        width as f32 / 2.0 - offset.x,
+        height as f32 / 2.0 + offset.y,
+    )
+}
+
+/// Public wrapper for gamesheet / icon frame `spriteOffset` lookups.
+pub fn sprite_offset_for_frame(plist_root: &Value, frame_key: &str) -> PointF32 {
+    match frames_dictionary(plist_root) {
+        Ok(frames) => frame_sprite_offset(frames, frame_key),
+        Err(_) => PointF32 { x: 0.0, y: 0.0 },
+    }
+}
+
 fn layer_center_relative_to_primary(layer_offset: PointF32, primary_offset: PointF32) -> (f32, f32) {
     (
         layer_offset.x - primary_offset.x,
@@ -124,11 +144,13 @@ struct CompositeLayer {
 /// Combine primary, secondary, and extra (when present) into one aligned RGBA image.
 ///
 /// Layers are centered on plist `spriteOffset` anchors, matching icon editor layout.
+/// Returns `(image, anchor_x, anchor_y)` where the anchor is the Cocos/node origin
+/// inside the image (primary center adjusted by primary `spriteOffset`).
 pub fn composite_icon_layers_for_glow(
     sprites: &BTreeMap<String, RgbaImage>,
     plist_root: &Value,
     primary_frame_key: &str,
-) -> Result<Option<RgbaImage>, AppError> {
+) -> Result<Option<(RgbaImage, f32, f32)>, AppError> {
     let stem = match icon_stem_from_frame_name(primary_frame_key) {
         Some(stem) => stem,
         None => return Ok(None),
@@ -194,7 +216,13 @@ pub fn composite_icon_layers_for_glow(
         overlay_centered(&mut canvas, &layer.image, center_x, center_y);
     }
 
-    Ok(Some(canvas))
+    // Primary image-center is at (-min_x, -min_y); node origin is offset from that.
+    let primary_center_x = -min_x;
+    let primary_center_y = -min_y;
+    let anchor_x = primary_center_x - primary_offset.x;
+    let anchor_y = primary_center_y + primary_offset.y;
+
+    Ok(Some((canvas, anchor_x, anchor_y)))
 }
 
 #[cfg(test)]

@@ -212,7 +212,7 @@ fn build_sprite_output_path(
     output_dir.join(basename)
 }
 
-fn extract_frame_image(
+pub(crate) fn extract_frame_image(
     source_image: &DynamicImage,
     frame_dict: &mut Dictionary,
     _options: &SplitterOptions,

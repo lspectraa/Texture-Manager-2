@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "Ausgabe",
+  expandPanelAria: "Ausgabebereich ausklappen",
+  collapsePanelAria: "Ausgabebereich einklappen",
+  showPanel: "Ausgabe anzeigen",
+  hidePanel: "Ausgabe ausblenden",
+  status: {
+    running: "Läuft",
+    complete: "Abgeschlossen",
+    warnings: "Warnungen",
+    runFailed: "Ausführung fehlgeschlagen",
+    errorsFound: "Fehler gefunden",
+    ready: "Bereit",
+  },
+  progress: {
+    aria: "Vorgang läuft",
+    cancelling: "Wird abgebrochen…",
+    completed: "Abgeschlossen",
+    completedWithWarnings: "Mit Warnungen abgeschlossen",
+    completedWithErrors: "Mit Fehlern abgeschlossen",
+    working: "In Arbeit…",
+    gamesheet: "Gamesheet",
+    sprites_one: "{{completed}} / {{total}} Sprite",
+    sprites_other: "{{completed}} / {{total}} Sprites",
+    plists_one: "{{completed}} / {{total}} Plist",
+    plists_other: "{{completed}} / {{total}} Plists",
+    preparing: "Vorgang wird vorbereitet…",
+    cancel: "Abbrechen",
+  },
+  alerts: {
+    defaultsLoadError: "Fehler beim Laden der Standardwerte",
+    runError: "Ausführungsfehler",
+  },
+  empty: {
+    title: "Es wurde noch kein Vorgang ausgeführt",
+    hint: "Führe ein Werkzeug aus, um hier Ergebnisse, Laufzeiten und Probleme zu sehen.",
+  },
+  summary: {
+    processed: "Verarbeitet",
+    elapsed: "Dauer",
+    output: "Ausgabe",
+  },
+  issues: {
+    title: "Probleme",
+    noIssues: "Keine Probleme gemeldet",
+    copyCsv: "CSV kopieren",
+    copied: "Kopiert",
+    copyCsvTooltip: "Probleme als CSV kopieren",
+    copyCsvAria: "Probleme als CSV kopieren",
+    download: "Herunterladen",
+    downloadCsvTooltip: "Probleme als CSV herunterladen",
+    downloadCsvAria: "Probleme als CSV herunterladen",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "Fehler",
+    warning: "Warnung",
+  },
+} as const;
+
+export default reports;

@@ -24,7 +24,7 @@ export type AppToolId =
   | "convertToNewVersion"
   | "geodeButtons"
   | "texturePackInstaller"
-  | "trailEditor";
+  | "particleEditor";
 
 export type ToolAccent = "sky" | "violet" | "mint" | "amber" | "rose" | "cyan";
 
@@ -76,11 +76,10 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         icon: Sparkles,
       },
       {
-        id: "trailEditor",
-        label: "tools.trailEditor.label",
-        description: "tools.trailEditor.description",
+        id: "particleEditor",
+        label: "tools.particleEditor.label",
+        description: "tools.particleEditor.description",
         icon: Wind,
-        upcoming: true,
       },
     ],
   },

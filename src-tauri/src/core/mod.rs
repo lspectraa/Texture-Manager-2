@@ -10,6 +10,8 @@ pub mod glow_maker;
 pub mod glow_preview;
 pub mod geode_buttons;
 pub mod icon_editor;
+pub mod particle_editor;
+pub mod particle_sprites;
 pub mod image_io;
 pub mod merger;
 pub mod operations;
