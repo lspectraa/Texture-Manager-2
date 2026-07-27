@@ -6,6 +6,7 @@ $ErrorActionPreference = "Stop"
 $keyPath = Join-Path $env:USERPROFILE ".tauri\texture-manager-2.key"
 $pubPath = "$keyPath.pub"
 $confPath = Join-Path $PSScriptRoot "..\src-tauri\tauri.conf.json"
+$confPath = (Resolve-Path $confPath).Path
 
 New-Item -ItemType Directory -Force -Path (Split-Path $keyPath) | Out-Null
 
@@ -26,13 +27,27 @@ if (-not (Test-Path $pubPath)) {
   throw "Public key file missing: $pubPath"
 }
 
-$pubkey = (Get-Content $pubPath -Raw).Trim()
-$conf = Get-Content $confPath -Raw | ConvertFrom-Json
-$conf.plugins.updater.pubkey = $pubkey
-$conf | ConvertTo-Json -Depth 20 | Set-Content -Path $confPath -Encoding utf8
+$pubkey = ([System.IO.File]::ReadAllText($pubPath)).Trim().TrimStart([char]0xFEFF)
+$confText = ([System.IO.File]::ReadAllText($confPath)).TrimStart([char]0xFEFF)
+if ($confText -notmatch '"pubkey"\s*:') {
+  throw "tauri.conf.json is missing plugins.updater.pubkey"
+}
+
+$escaped = $pubkey -replace '\\', '\\' -replace '"', '\"'
+$updated = [regex]::Replace(
+  $confText,
+  '("pubkey"\s*:\s*)"(?:\\.|[^"\\])*"',
+  ('$1"' + $escaped + '"')
+)
+if ($updated -eq $confText -and $confText -notmatch [regex]::Escape($pubkey)) {
+  throw "Failed to update pubkey in tauri.conf.json"
+}
+
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($confPath, $updated, $utf8NoBom)
 
 Write-Host ""
-Write-Host "Public key written to src-tauri/tauri.conf.json"
+Write-Host "Public key written to src-tauri/tauri.conf.json (UTF-8, no BOM)"
 Write-Host ""
 Write-Host "YOUR ACTION ITEMS:"
 Write-Host "1. Back up the private key offline (password manager / encrypted drive):"

@@ -13,14 +13,31 @@ if ($version -notmatch '^\d+\.\d+\.\d+$') {
   throw "package.json version must be numeric SemVer major.minor.patch (got '$version'). WiX/MSI rejects prerelease tags."
 }
 
+function Read-TextNoBom([string]$path) {
+  $text = [System.IO.File]::ReadAllText($path)
+  return $text.TrimStart([char]0xFEFF)
+}
+
+function Write-TextNoBom([string]$path, [string]$text) {
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($path, $text, $utf8NoBom)
+}
+
 function Set-FileVersion([string]$path, [scriptblock]$mutator) {
-  $text = Get-Content $path -Raw
+  $text = Read-TextNoBom $path
   $next = & $mutator $text
   if ($next -ne $text) {
-    Set-Content -Path $path -Value $next -NoNewline -Encoding utf8
+    Write-TextNoBom $path $next
     Write-Host "Updated $path -> $version"
   } else {
-    Write-Host "Unchanged $path"
+    # Still rewrite without BOM if a previous PowerShell Set-Content left one behind.
+    $raw = [System.IO.File]::ReadAllBytes($path)
+    if ($raw.Length -ge 3 -and $raw[0] -eq 0xEF -and $raw[1] -eq 0xBB -and $raw[2] -eq 0xBF) {
+      Write-TextNoBom $path $text
+      Write-Host "Stripped UTF-8 BOM from $path"
+    } else {
+      Write-Host "Unchanged $path"
+    }
   }
 }
 
