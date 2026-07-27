@@ -45,8 +45,10 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Key was generated with no password. Do not set
+          # TAURI_SIGNING_PRIVATE_KEY_PASSWORD — GitHub rejects empty secrets,
+          # and any non-empty value makes signing fail with "Wrong password".
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
