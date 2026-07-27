@@ -1,11 +1,16 @@
-# Sync package.json version into Cargo.toml, tauri.conf.json, and appMeta.ts
+# Sync package.json version (single source of truth) into Cargo.toml and tauri.conf.json.
+# Frontend reads the version from package.json directly — do not hardcode it elsewhere.
 $ErrorActionPreference = "Stop"
 
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
-$packageJson = Get-Content (Join-Path $root "package.json") -Raw | ConvertFrom-Json
+$packageJsonPath = Join-Path $root "package.json"
+$packageJson = Get-Content $packageJsonPath -Raw | ConvertFrom-Json
 $version = [string]$packageJson.version
 if (-not $version) {
   throw "package.json is missing a version"
+}
+if ($version -notmatch '^\d+\.\d+\.\d+$') {
+  throw "package.json version must be numeric SemVer major.minor.patch (got '$version'). WiX/MSI rejects prerelease tags."
 }
 
 function Set-FileVersion([string]$path, [scriptblock]$mutator) {
@@ -29,9 +34,4 @@ Set-FileVersion (Join-Path $root "src-tauri\tauri.conf.json") {
   $text -replace '(?m)^(\s*"version"\s*:\s*)"[^"]+"', "`$1`"$version`""
 }
 
-Set-FileVersion (Join-Path $root "src\config\appMeta.ts") {
-  param($text)
-  $text -replace '(?m)^export const APP_VERSION = "[^"]+";', "export const APP_VERSION = `"$version`";"
-}
-
-Write-Host "Version sync complete: $version"
+Write-Host "Version sync complete: $version (source: package.json)"

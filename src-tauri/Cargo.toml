@@ -1,6 +1,6 @@
 [package]
 name = "texture-manager-2"
-version = "0.1.0"
+version = "0.0.1"
 description = "Geometry Dash texture tooling remake"
 authors = ["Spectra"]
 edition = "2021"

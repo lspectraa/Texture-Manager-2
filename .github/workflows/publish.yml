@@ -16,7 +16,7 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: ""
+            args: "--bundles msi"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +38,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build and draft release
+      - name: Sync version from package.json
+        run: npm run sync:version
+
+      - name: Build MSI and draft GitHub release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -47,9 +50,9 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Draft release created by CI. Review assets, then publish when ready."
+          releaseBody: "Draft Windows MSI release created by CI. Review assets, then publish when ready."
           releaseDraft: true
           prerelease: false
           uploadUpdaterJson: true
-          updaterJsonPreferNsis: true
+          updaterJsonPreferNsis: false
           args: ${{ matrix.args }}
