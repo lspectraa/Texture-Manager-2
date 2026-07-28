@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "运行输出",
+  expandPanelAria: "展开运行输出面板",
+  collapsePanelAria: "收起运行输出面板",
+  showPanel: "显示运行输出",
+  hidePanel: "隐藏运行输出",
+  status: {
+    running: "运行中",
+    complete: "已完成",
+    warnings: "警告",
+    runFailed: "运行失败",
+    errorsFound: "发现错误",
+    ready: "就绪",
+  },
+  progress: {
+    aria: "操作进行中",
+    cancelling: "正在取消…",
+    completed: "已完成",
+    completedWithWarnings: "完成，但有警告",
+    completedWithErrors: "完成，但有错误",
+    working: "处理中…",
+    gamesheet: "Gamesheet",
+    sprites_one: "{{completed}} / {{total}} 个 sprite",
+    sprites_other: "{{completed}} / {{total}} 个 sprite",
+    plists_one: "{{completed}} / {{total}} 个 plist",
+    plists_other: "{{completed}} / {{total}} 个 plist",
+    preparing: "正在准备操作…",
+    cancel: "取消",
+  },
+  alerts: {
+    defaultsLoadError: "默认值加载错误",
+    runError: "运行错误",
+  },
+  empty: {
+    title: "尚未运行任何操作",
+    hint: "运行一个工具后，这里会显示结果、耗时和问题。",
+  },
+  summary: {
+    processed: "已处理",
+    elapsed: "耗时",
+    output: "输出",
+  },
+  issues: {
+    title: "问题",
+    noIssues: "没有报告任何问题",
+    copyCsv: "复制 CSV",
+    copied: "已复制",
+    copyCsvTooltip: "以 CSV 格式复制问题列表",
+    copyCsvAria: "以 CSV 格式复制问题列表",
+    download: "下载",
+    downloadCsvTooltip: "以 CSV 格式下载问题列表",
+    downloadCsvAria: "以 CSV 格式下载问题列表",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "错误",
+    warning: "警告",
+  },
+} as const;
+
+export default reports;

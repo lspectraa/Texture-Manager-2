@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "実行結果",
+  expandPanelAria: "実行結果パネルを展開",
+  collapsePanelAria: "実行結果パネルを折りたたむ",
+  showPanel: "実行結果を表示",
+  hidePanel: "実行結果を隠す",
+  status: {
+    running: "実行中",
+    complete: "完了",
+    warnings: "警告",
+    runFailed: "実行に失敗",
+    errorsFound: "エラーあり",
+    ready: "準備完了",
+  },
+  progress: {
+    aria: "処理中",
+    cancelling: "キャンセル中…",
+    completed: "完了しました",
+    completedWithWarnings: "警告付きで完了しました",
+    completedWithErrors: "エラー付きで完了しました",
+    working: "処理中…",
+    gamesheet: "ゲームシート",
+    sprites_one: "{{completed}} / {{total}} スプライト",
+    sprites_other: "{{completed}} / {{total}} スプライト",
+    plists_one: "{{completed}} / {{total}} plist",
+    plists_other: "{{completed}} / {{total}} plist",
+    preparing: "処理を準備中…",
+    cancel: "キャンセル",
+  },
+  alerts: {
+    defaultsLoadError: "既定値の読み込みエラー",
+    runError: "実行エラー",
+  },
+  empty: {
+    title: "まだ実行された処理はありません",
+    hint: "ツールを実行すると、結果・所要時間・問題点がここに表示されます。",
+  },
+  summary: {
+    processed: "処理数",
+    elapsed: "経過時間",
+    output: "出力",
+  },
+  issues: {
+    title: "問題",
+    noIssues: "報告された問題はありません",
+    copyCsv: "CSV をコピー",
+    copied: "コピーしました",
+    copyCsvTooltip: "問題を CSV としてコピー",
+    copyCsvAria: "問題を CSV としてコピー",
+    download: "ダウンロード",
+    downloadCsvTooltip: "問題を CSV としてダウンロード",
+    downloadCsvAria: "問題を CSV としてダウンロード",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "エラー",
+    warning: "警告",
+  },
+} as const;
+
+export default reports;

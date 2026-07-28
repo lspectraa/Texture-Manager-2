@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "Saída da execução",
+  expandPanelAria: "Expandir painel de saída da execução",
+  collapsePanelAria: "Recolher painel de saída da execução",
+  showPanel: "Mostrar saída da execução",
+  hidePanel: "Ocultar saída da execução",
+  status: {
+    running: "Executando",
+    complete: "Concluído",
+    warnings: "Avisos",
+    runFailed: "Execução falhou",
+    errorsFound: "Erros encontrados",
+    ready: "Pronto",
+  },
+  progress: {
+    aria: "Operação em andamento",
+    cancelling: "Cancelando…",
+    completed: "Concluído",
+    completedWithWarnings: "Concluído com avisos",
+    completedWithErrors: "Concluído com erros",
+    working: "Trabalhando…",
+    gamesheet: "Gamesheet",
+    sprites_one: "{{completed}} / {{total}} sprite",
+    sprites_other: "{{completed}} / {{total}} sprites",
+    plists_one: "{{completed}} / {{total}} plist",
+    plists_other: "{{completed}} / {{total}} plists",
+    preparing: "Preparando operação…",
+    cancel: "Cancelar",
+  },
+  alerts: {
+    defaultsLoadError: "Erro ao carregar padrões",
+    runError: "Erro na execução",
+  },
+  empty: {
+    title: "Nenhuma operação foi executada ainda",
+    hint: "Execute uma ferramenta para ver resultados, tempos e problemas aqui.",
+  },
+  summary: {
+    processed: "Processados",
+    elapsed: "Tempo decorrido",
+    output: "Saída",
+  },
+  issues: {
+    title: "Problemas",
+    noIssues: "Nenhum problema relatado",
+    copyCsv: "Copiar CSV",
+    copied: "Copiado",
+    copyCsvTooltip: "Copiar problemas como CSV",
+    copyCsvAria: "Copiar problemas como CSV",
+    download: "Baixar",
+    downloadCsvTooltip: "Baixar problemas como CSV",
+    downloadCsvAria: "Baixar problemas como CSV",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "erro",
+    warning: "aviso",
+  },
+} as const;
+
+export default reports;

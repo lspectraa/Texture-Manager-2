@@ -1,0 +1,160 @@
+import { invoke } from "@tauri-apps/api/core";
+
+export type IconEditorSize = {
+  width: number;
+  height: number;
+};
+
+export type IconEditorPoint = {
+  x: number;
+  y: number;
+};
+
+export type IconEditorRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type IconEditorFrameInfo = {
+  name: string;
+  textureRect: IconEditorRect;
+  spriteSize: IconEditorSize;
+  spriteSourceSize: IconEditorSize;
+  spriteOffset: IconEditorPoint;
+  textureRotated: boolean;
+};
+
+export type IconEditorSheetInfo = {
+  plistPath: string;
+  atlasPath: string;
+  atlasSize: IconEditorSize;
+  frames: IconEditorFrameInfo[];
+};
+
+export type IconEditorFrameUpdate = {
+  name: string;
+  spriteOffset: IconEditorPoint;
+};
+
+export type IconEditorFrameTextureUpdate = {
+  name: string;
+  pngDataUrl: string;
+  spriteSize: IconEditorSize;
+  spriteSourceSize: IconEditorSize;
+  spriteOffset: IconEditorPoint;
+  textureRotated: boolean;
+  isNewFrame?: boolean;
+};
+
+export type IconEditorRenameResult = {
+  plistPath: string;
+  atlasPath: string;
+};
+
+export type IconEditorExtractedFrame = {
+  name: string;
+  pngDataUrl: string;
+};
+
+export const getIconEditorSheetInfo = async (
+  plistPath: string,
+): Promise<IconEditorSheetInfo> =>
+  invoke<IconEditorSheetInfo>("icon_editor_sheet_info", { plistPath });
+
+export const getIconEditorPngDataUrl = async (texturePath: string): Promise<string> =>
+  invoke<string>("icon_editor_png_data_url", { texturePath });
+
+export const saveIconEditorPlist = async (
+  plistPath: string,
+  updates: IconEditorFrameUpdate[],
+  removedFrameNames?: string[],
+  frameTextureUpdates?: IconEditorFrameTextureUpdate[],
+): Promise<void> => {
+  await invoke<void>("icon_editor_save_plist", {
+    plistPath,
+    updates,
+    removedFrameNames: removedFrameNames ?? [],
+    frameTextureUpdates: frameTextureUpdates ?? [],
+  });
+};
+
+export const importIconEditorFrameTexture = async (
+  plistPath: string,
+  frameName: string,
+  texturePath: string,
+): Promise<void> => {
+  await invoke<void>("icon_editor_import_frame", {
+    plistPath,
+    frameName,
+    texturePath,
+  });
+};
+
+export type IconEditorRotateDirection = "clockwise" | "counterClockwise";
+
+export const rotateIconEditorFrame = async (
+  plistPath: string,
+  frameName: string,
+  direction: IconEditorRotateDirection,
+): Promise<void> => {
+  await invoke<void>("icon_editor_rotate_frame", { plistPath, frameName, direction });
+};
+
+export const addIconEditorFrameTexture = async (
+  plistPath: string,
+  frameName: string,
+  texturePath: string,
+): Promise<void> => {
+  await invoke<void>("icon_editor_add_frame", {
+    plistPath,
+    frameName,
+    texturePath,
+  });
+};
+
+export const extractIconEditorFrames = async (
+  plistPath: string,
+): Promise<IconEditorExtractedFrame[]> =>
+  invoke<IconEditorExtractedFrame[]>("icon_editor_extract_frames", { plistPath });
+
+export const ICON_EDITOR_RENAME_TARGET_PLIST_EXISTS =
+  "target plist name already exists in destination directory";
+export const ICON_EDITOR_RENAME_TARGET_PNG_EXISTS =
+  "target png name already exists in destination directory";
+
+export const isIconEditorRenameTargetConflict = (error: unknown): boolean => {
+  const text = error instanceof Error ? error.message : String(error);
+  return (
+    text.includes(ICON_EDITOR_RENAME_TARGET_PLIST_EXISTS) ||
+    text.includes(ICON_EDITOR_RENAME_TARGET_PNG_EXISTS)
+  );
+};
+
+export const renameIconEditorSheet = async (
+  plistPath: string,
+  newStem: string,
+): Promise<IconEditorRenameResult> =>
+  invoke<IconEditorRenameResult>("icon_editor_rename_sheet", { plistPath, newStem });
+
+export const swapRenameIconEditorSheet = async (
+  plistPath: string,
+  newStem: string,
+): Promise<IconEditorRenameResult> =>
+  invoke<IconEditorRenameResult>("icon_editor_swap_rename_sheet", { plistPath, newStem });
+
+export const copyIconEditorSheet = async (
+  plistPath: string,
+  newStem: string,
+  updates: IconEditorFrameUpdate[],
+  removedFrameNames?: string[],
+  frameTextureUpdates?: IconEditorFrameTextureUpdate[],
+): Promise<IconEditorRenameResult> =>
+  invoke<IconEditorRenameResult>("icon_editor_copy_sheet", {
+    plistPath,
+    newStem,
+    updates,
+    removedFrameNames: removedFrameNames ?? [],
+    frameTextureUpdates: frameTextureUpdates ?? [],
+  });

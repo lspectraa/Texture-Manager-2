@@ -1,0 +1,55 @@
+{
+  "name": "texture-manager-2",
+  "private": true,
+  "version": "0.0.2",
+  "type": "module",
+  "description": "Geometry Dash texture tooling remake",
+  "author": "Spectra",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lspectraa/Texture-Manager-2.git"
+  },
+  "homepage": "https://github.com/lspectraa/Texture-Manager-2",
+  "bugs": {
+    "url": "https://github.com/lspectraa/Texture-Manager-2/issues"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri",
+    "check:env": "powershell -ExecutionPolicy Bypass -File ./scripts/check-prereqs.ps1",
+    "phase0:verify": "npm run check:env && npm run build",
+    "sync:version": "powershell -ExecutionPolicy Bypass -File ./scripts/sync-version.ps1",
+    "setup:updater-signing": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-updater-signing.ps1",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-opener": "^2",
+    "@tauri-apps/plugin-process": "^2.3.1",
+    "@tauri-apps/plugin-updater": "^2.10.1",
+    "html2canvas": "^1.4.1",
+    "i18next": "^26.3.6",
+    "lucide-react": "^1.8.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-i18next": "^17.0.10"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2",
+    "@tauri-apps/cli": "^2",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "typescript": "~5.8.3",
+    "vite": "^7.3.6",
+    "vitest": "^4.1.10"
+  }
+}

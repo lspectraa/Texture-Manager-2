@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "실행 결과",
+  expandPanelAria: "실행 결과 패널 펼치기",
+  collapsePanelAria: "실행 결과 패널 접기",
+  showPanel: "실행 결과 표시",
+  hidePanel: "실행 결과 숨기기",
+  status: {
+    running: "실행 중",
+    complete: "완료",
+    warnings: "경고",
+    runFailed: "실행 실패",
+    errorsFound: "오류 발견",
+    ready: "준비됨",
+  },
+  progress: {
+    aria: "작업 진행 중",
+    cancelling: "취소하는 중…",
+    completed: "완료됨",
+    completedWithWarnings: "경고와 함께 완료됨",
+    completedWithErrors: "오류와 함께 완료됨",
+    working: "처리 중…",
+    gamesheet: "게임시트",
+    sprites_one: "{{completed}} / {{total}} 스프라이트",
+    sprites_other: "{{completed}} / {{total}} 스프라이트",
+    plists_one: "{{completed}} / {{total}} plist",
+    plists_other: "{{completed}} / {{total}} plist",
+    preparing: "작업 준비 중…",
+    cancel: "취소",
+  },
+  alerts: {
+    defaultsLoadError: "기본값 로드 오류",
+    runError: "실행 오류",
+  },
+  empty: {
+    title: "아직 실행한 작업이 없습니다",
+    hint: "도구를 실행하면 결과, 소요 시간, 문제가 여기에 표시됩니다.",
+  },
+  summary: {
+    processed: "처리됨",
+    elapsed: "소요 시간",
+    output: "출력",
+  },
+  issues: {
+    title: "문제",
+    noIssues: "보고된 문제가 없습니다",
+    copyCsv: "CSV 복사",
+    copied: "복사됨",
+    copyCsvTooltip: "문제 목록을 CSV로 복사",
+    copyCsvAria: "문제 목록을 CSV로 복사",
+    download: "다운로드",
+    downloadCsvTooltip: "문제 목록을 CSV로 다운로드",
+    downloadCsvAria: "문제 목록을 CSV로 다운로드",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "오류",
+    warning: "경고",
+  },
+} as const;
+
+export default reports;

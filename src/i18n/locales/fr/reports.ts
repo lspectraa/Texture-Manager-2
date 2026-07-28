@@ -1,0 +1,61 @@
+const reports = {
+  panelTitle: "Résultat de l’exécution",
+  expandPanelAria: "Déplier le panneau de résultats",
+  collapsePanelAria: "Replier le panneau de résultats",
+  showPanel: "Afficher les résultats",
+  hidePanel: "Masquer les résultats",
+  status: {
+    running: "En cours",
+    complete: "Terminé",
+    warnings: "Avertissements",
+    runFailed: "Échec de l’exécution",
+    errorsFound: "Erreurs détectées",
+    ready: "Prêt",
+  },
+  progress: {
+    aria: "Opération en cours",
+    cancelling: "Annulation…",
+    completed: "Terminé",
+    completedWithWarnings: "Terminé avec des avertissements",
+    completedWithErrors: "Terminé avec des erreurs",
+    working: "Traitement…",
+    gamesheet: "Gamesheet",
+    sprites_one: "{{completed}} / {{total}} sprite",
+    sprites_other: "{{completed}} / {{total}} sprites",
+    plists_one: "{{completed}} / {{total}} plist",
+    plists_other: "{{completed}} / {{total}} plists",
+    preparing: "Préparation de l’opération…",
+    cancel: "Annuler",
+  },
+  alerts: {
+    defaultsLoadError: "Erreur de chargement des valeurs par défaut",
+    runError: "Erreur d’exécution",
+  },
+  empty: {
+    title: "Aucune opération n’a encore été exécutée",
+    hint: "Lancez un outil pour voir ici les résultats, les durées et les problèmes.",
+  },
+  summary: {
+    processed: "Traités",
+    elapsed: "Durée",
+    output: "Sortie",
+  },
+  issues: {
+    title: "Problèmes",
+    noIssues: "Aucun problème signalé",
+    copyCsv: "Copier le CSV",
+    copied: "Copié",
+    copyCsvTooltip: "Copier les problèmes au format CSV",
+    copyCsvAria: "Copier les problèmes au format CSV",
+    download: "Télécharger",
+    downloadCsvTooltip: "Télécharger les problèmes au format CSV",
+    downloadCsvAria: "Télécharger les problèmes au format CSV",
+    occurrence: "x{{count}}",
+  },
+  severity: {
+    error: "erreur",
+    warning: "avertissement",
+  },
+} as const;
+
+export default reports;

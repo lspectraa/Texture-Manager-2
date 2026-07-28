@@ -1,0 +1,1124 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useTranslation } from "react-i18next";
+import type {
+  GeodeButtonsOptions,
+  GeodeButtonsVariant,
+  GeodeButtonsVariantRule,
+  HsvDelta,
+} from "../../domain/operations";
+import { isTauriRuntime } from "../../services/tauriOperations";
+import {
+  autoSelectGeodeButtonsPlist,
+  getGeodeButtonsDefaultInputDir,
+  getGeodeButtonsTargetIndex,
+  getGeodeButtonsTemplatePreviewDataUrl,
+  GeodeButtonsTargetGroup,
+} from "../../services/tauriGeodeButtons";
+import { PickFolderFn } from "./types";
+import {
+  FolderPathField,
+  ToolFilePathField,
+  ToolPage,
+  ToolPageHeader,
+  ToolSection,
+} from "./layout";
+
+type GeodeButtonsToolPanelProps = {
+  inputDir: string;
+  outputDir: string;
+  options: GeodeButtonsOptions;
+  onInputDirChange: (value: string) => void;
+  onOutputDirChange: (value: string) => void;
+  onOptionsChange: (next: GeodeButtonsOptions) => void;
+  pickFolder: PickFolderFn;
+};
+
+const defaultHsv = (): HsvDelta => ({ hueDeg: 0, satDelta: 0, valDelta: 0 });
+
+function getVariantRule(rules: GeodeButtonsVariantRule[], variant: GeodeButtonsVariant): HsvDelta {
+  return rules.find((rule) => rule.variant === variant)?.hsv ?? defaultHsv();
+}
+
+function parseVariantFromFamilyId(familyId: string | null): GeodeButtonsVariant | null {
+  if (!familyId) return null;
+  const slug = familyId.split(":")[1] ?? "";
+  if (slug === "primary" || slug === "secondary" || slug === "gray" || slug === "error" || slug === "info" || slug === "pink") {
+    return slug;
+  }
+  if (slug === "darkAqua" || slug === "darkPurple") {
+    return slug;
+  }
+  return null;
+}
+
+function resolveAdjustVariant(familyId: string | null): GeodeButtonsVariant {
+  const parsed = parseVariantFromFamilyId(familyId);
+  return parsed ?? "primary";
+}
+
+function resolveFamilyHsv(
+  options: GeodeButtonsOptions,
+  familyId: string,
+  variant: GeodeButtonsVariant,
+): HsvDelta {
+  const familyMap = options.familyVariantRules?.[familyId];
+  if (familyMap && familyMap[variant]) {
+    return familyMap[variant];
+  }
+  return getVariantRule(options.variantRules, variant);
+}
+
+function resolveGroupHsv(options: GeodeButtonsOptions, familyId: string): HsvDelta {
+  return resolveFamilyHsv(options, familyId, resolveAdjustVariant(familyId));
+}
+
+type FamilyGroupId = "uiChrome" | "circle" | "editorBase" | "account";
+const VARIANT_ORDER: Record<GeodeButtonsVariant, number> = {
+  primary: 0,
+  secondary: 1,
+  darkAqua: 2,
+  darkPurple: 3,
+  gray: 4,
+  info: 5,
+  pink: 6,
+  error: 7,
+};
+
+function parseFamilyMeta(familyId: string): { baseType: string; variant: GeodeButtonsVariant | null } {
+  const [baseType, rawVariant] = familyId.split(":");
+  const variant =
+    rawVariant === "primary" ||
+    rawVariant === "secondary" ||
+    rawVariant === "darkAqua" ||
+    rawVariant === "darkPurple" ||
+    rawVariant === "gray" ||
+    rawVariant === "error" ||
+    rawVariant === "info" ||
+    rawVariant === "pink"
+      ? rawVariant
+      : null;
+  return { baseType: baseType ?? familyId, variant };
+}
+
+function resolveGroup(baseType: string): FamilyGroupId {
+  if (baseType === "category" || baseType === "cross" || baseType === "tabs" || baseType === "iconSelect") return "uiChrome";
+  if (baseType === "circle") return "circle";
+  if (baseType === "editorBase") return "editorBase";
+  return "account";
+}
+
+function groupLabelKey(groupId: FamilyGroupId): string {
+  switch (groupId) {
+    case "uiChrome":
+      return "geodeButtons.groups.menus";
+    case "circle":
+      return "geodeButtons.groups.circle";
+    case "editorBase":
+      return "geodeButtons.groups.editorBase";
+    case "account":
+      return "geodeButtons.groups.account";
+    default: {
+      const _exhaustive: never = groupId;
+      return _exhaustive;
+    }
+  }
+}
+
+function clamp01(v: number): number {
+  return Math.min(1, Math.max(0, v));
+}
+
+function applyValueDeltaRgb(r: number, g: number, b: number, valDelta: number): [number, number, number] {
+  const d = clamp01(Math.abs(valDelta));
+  if (valDelta >= 0) {
+    // Photoshop-like brightness: +1.0 pushes every channel to white.
+    return [r + (1 - r) * d, g + (1 - g) * d, b + (1 - b) * d];
+  }
+  // -1.0 pushes every channel to black.
+  return [r * (1 - d), g * (1 - d), b * (1 - d)];
+}
+
+function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  const v = max;
+  const s = max <= 1e-6 ? 0 : delta / max;
+  let h = 0;
+  if (delta > 1e-6) {
+    if (max === r) h = ((g - b) / delta) % 6;
+    else if (max === g) h = (b - r) / delta + 2;
+    else h = (r - g) / delta + 4;
+    h /= 6;
+    if (h < 0) h += 1;
+  }
+  return [h, s, v];
+}
+
+function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
+  const h6 = ((h % 1) + 1) % 1 * 6;
+  const i = Math.floor(h6);
+  const f = h6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - f * s);
+  const t = v * (1 - (1 - f) * s);
+  switch (i) {
+    case 0:
+      return [v, t, p];
+    case 1:
+      return [q, v, p];
+    case 2:
+      return [p, v, t];
+    case 3:
+      return [p, q, v];
+    case 4:
+      return [t, p, v];
+    default:
+      return [v, p, q];
+  }
+}
+
+type RgbColor = [number, number, number];
+type HsvChannel = keyof HsvDelta;
+
+const DEFAULT_TRACK_COLOR: RgbColor = [0.18, 0.72, 0.64];
+const TRACK_STOP_COUNT = 13;
+
+function applyHsvDeltaToRgb(color: RgbColor, hsv: HsvDelta): RgbColor {
+  let [h, s, v] = rgbToHsv(...color);
+  h = ((h + hsv.hueDeg / 360) % 1 + 1) % 1;
+  s = clamp01(s + hsv.satDelta);
+  v = clamp01(v);
+  return applyValueDeltaRgb(...hsvToRgb(h, s, v), hsv.valDelta);
+}
+
+function rgbCss(color: RgbColor): string {
+  return `rgb(${color.map((channel) => Math.round(clamp01(channel) * 255)).join(" ")})`;
+}
+
+function buildHsvTrackGradient(
+  baseColor: RgbColor,
+  selectedHsv: HsvDelta,
+  channel: HsvChannel,
+  min: number,
+  max: number,
+): string {
+  const stops = Array.from({ length: TRACK_STOP_COUNT }, (_, index) => {
+    const position = index / (TRACK_STOP_COUNT - 1);
+    const hsv = { ...selectedHsv, [channel]: min + (max - min) * position };
+    return `${rgbCss(applyHsvDeltaToRgb(baseColor, hsv))} ${Math.round(position * 100)}%`;
+  });
+  return `linear-gradient(90deg, ${stops.join(", ")})`;
+}
+
+function sliderTrackStyle(
+  gradient: string,
+  thumbColor: RgbColor,
+): CSSProperties & Record<"--tm-geode-track" | "--tm-geode-thumb", string> {
+  return {
+    "--tm-geode-track": gradient,
+    "--tm-geode-thumb": rgbCss(thumbColor),
+  };
+}
+
+async function sampleRepresentativeColor(src: string): Promise<RgbColor | null> {
+  if (!src.trim()) return null;
+  try {
+    const resolvedSrc = await resolvePreviewImageSrc(src);
+    const img = await loadImageElement(resolvedSrc);
+    const size = 32;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0, size, size);
+    const pixels = ctx.getImageData(0, 0, size, size).data;
+    let totalWeight = 0;
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    for (let index = 0; index < pixels.length; index += 4) {
+      const alpha = pixels[index + 3] / 255;
+      if (alpha < 0.15) continue;
+      const color: RgbColor = [
+        pixels[index] / 255,
+        pixels[index + 1] / 255,
+        pixels[index + 2] / 255,
+      ];
+      const [, saturation, value] = rgbToHsv(...color);
+      const weight = alpha * (0.25 + saturation) * (0.35 + value);
+      red += color[0] * weight;
+      green += color[1] * weight;
+      blue += color[2] * weight;
+      totalWeight += weight;
+    }
+    if (totalWeight <= 1e-6) return null;
+    return [red / totalWeight, green / totalWeight, blue / totalWeight];
+  } catch {
+    return null;
+  }
+}
+
+/** Normalize paths from the OS / file URLs so Rust and the asset protocol see a consistent path. */
+function normalizeFilesystemPath(path: string): string {
+  let s = path.trim();
+  if (s.toLowerCase().startsWith("file://")) {
+    s = s.slice("file://".length);
+    if (s.startsWith("/") && /^\/[a-zA-Z]:\//.test(s)) {
+      s = s.slice(1);
+    }
+    try {
+      s = decodeURIComponent(s);
+    } catch {
+      /* keep s */
+    }
+  }
+  return s;
+}
+
+async function resolvePreviewImageSrc(path: string): Promise<string> {
+  if (!path.trim()) {
+    return path;
+  }
+  if (path.startsWith("data:")) {
+    return path;
+  }
+  const normalizedFs = normalizeFilesystemPath(path);
+  if (isTauriRuntime()) {
+    const fromBackend = await getGeodeButtonsTemplatePreviewDataUrl(normalizedFs);
+    if (fromBackend) {
+      return fromBackend;
+    }
+    return "";
+  }
+  return normalizedFs.replace(/\\/g, "/");
+}
+
+/** Disk template images decoded once; HSV preview only redraws from this bitmap. */
+const geodeTemplateImageByPath = new Map<string, HTMLImageElement>();
+const geodeTemplateImageInflight = new Map<string, Promise<HTMLImageElement | null>>();
+
+function invalidateDiskTemplateCache(path: string): void {
+  const key = normalizeFilesystemPath(path);
+  if (!key.trim()) return;
+  geodeTemplateImageByPath.delete(key);
+  geodeTemplateImageInflight.delete(key);
+}
+
+async function getOrLoadDiskTemplateImage(path: string): Promise<HTMLImageElement | null> {
+  const key = normalizeFilesystemPath(path);
+  if (!key.trim()) {
+    return null;
+  }
+  const cached = geodeTemplateImageByPath.get(key);
+  if (cached?.complete && cached.naturalWidth > 0) {
+    return cached;
+  }
+  let inflight = geodeTemplateImageInflight.get(key);
+  if (!inflight) {
+    inflight = (async (): Promise<HTMLImageElement | null> => {
+      try {
+        const url = await resolvePreviewImageSrc(key);
+        const img = await loadImageElement(url);
+        geodeTemplateImageByPath.set(key, img);
+        return img;
+      } catch {
+        return null;
+      } finally {
+        geodeTemplateImageInflight.delete(key);
+      }
+    })();
+    geodeTemplateImageInflight.set(key, inflight);
+  }
+  return inflight;
+}
+
+async function decodeImageToCanvasDataUrl(img: HTMLImageElement, hsv: HsvDelta): Promise<string | null> {
+  const size = 104;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.clearRect(0, 0, size, size);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+  const scale = Math.min(size / Math.max(1, img.width), size / Math.max(1, img.height));
+  const dw = Math.max(1, Math.round(img.width * scale));
+  const dh = Math.max(1, Math.round(img.height * scale));
+  const ox = Math.floor((size - dw) / 2);
+  const oy = Math.floor((size - dh) / 2);
+  ctx.drawImage(img, ox, oy, dw, dh);
+  const data = ctx.getImageData(0, 0, size, size);
+  const hueDelta = hsv.hueDeg / 360;
+  const pixels = data.data;
+  for (let i = 0; i < pixels.length; i += 4) {
+    const a = pixels[i + 3];
+    if (a === 0) continue;
+    const r = pixels[i] / 255;
+    const g = pixels[i + 1] / 255;
+    const b = pixels[i + 2] / 255;
+    let [h, s, v] = rgbToHsv(r, g, b);
+    h = ((h + hueDelta) % 1 + 1) % 1;
+    if (s <= 1e-6 && hsv.satDelta > 0) {
+      s = 0;
+    } else {
+      s = clamp01(s + hsv.satDelta);
+    }
+    v = clamp01(v);
+    const [nr, ng, nb] = hsvToRgb(h, s, v);
+    const [vr, vg, vb] = applyValueDeltaRgb(clamp01(nr), clamp01(ng), clamp01(nb), hsv.valDelta);
+    pixels[i] = Math.round(clamp01(vr) * 255);
+    pixels[i + 1] = Math.round(clamp01(vg) * 255);
+    pixels[i + 2] = Math.round(clamp01(vb) * 255);
+  }
+  ctx.putImageData(data, 0, 0);
+  return canvas.toDataURL("image/png");
+}
+
+async function loadImageElement(src: string): Promise<HTMLImageElement> {
+  const img = new Image();
+  img.decoding = "async";
+  img.src = src;
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("failed to load image"));
+  });
+  return img;
+}
+
+async function generatePreviewDataUrl(templatePath: string, hsv: HsvDelta): Promise<string | null> {
+  if (!templatePath.trim()) return null;
+  try {
+    let img: HTMLImageElement | null = null;
+    if (templatePath.startsWith("data:")) {
+      img = await loadImageElement(templatePath);
+    } else {
+      img = await getOrLoadDiskTemplateImage(templatePath);
+    }
+    if (!img) return null;
+    return await decodeImageToCanvasDataUrl(img, hsv);
+  } catch {
+    return null;
+  }
+}
+
+async function previewForGroupSource(
+  familyTemplatePath: string,
+  basePreview: string,
+  hsv: HsvDelta,
+): Promise<string | null> {
+  if (familyTemplatePath.trim()) {
+    const fromTemplate = await generatePreviewDataUrl(familyTemplatePath, hsv);
+    if (fromTemplate) return fromTemplate;
+  }
+  if (basePreview.trim()) {
+    return generatePreviewDataUrl(basePreview, hsv);
+  }
+  return null;
+}
+
+type FloatStepperProps = {
+  value: number;
+  step: number;
+  min: number;
+  max: number;
+  onChange: (value: number) => void;
+};
+
+function FloatStepper({ value, step, min, max, onChange }: FloatStepperProps) {
+  const clamp = (v: number): number => Math.min(max, Math.max(min, v));
+  const decimals = Math.max(0, (String(step).split(".")[1] ?? "").length);
+  const roundToStep = (v: number): number => Number(v.toFixed(decimals));
+  return (
+    <div className="tm-number-input-wrap tm-geode-number-wrap">
+      <input
+        type="number"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => {
+          const next = Number.parseFloat(event.target.value);
+          if (Number.isFinite(next)) {
+            onChange(clamp(roundToStep(next)));
+          }
+        }}
+      />
+      <div className="tm-number-stepper" aria-hidden="true">
+        <button
+          type="button"
+          className="tm-number-step-btn"
+          tabIndex={-1}
+          onClick={() => onChange(clamp(roundToStep(value + step)))}
+        >
+          <ChevronUp size={11} />
+        </button>
+        <button
+          type="button"
+          className="tm-number-step-btn"
+          tabIndex={-1}
+          onClick={() => onChange(clamp(roundToStep(value - step)))}
+        >
+          <ChevronDown size={11} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function stemAndParentFromPlistPath(plist: string): { stem: string; parent: string } {
+  const slash = Math.max(plist.lastIndexOf("/"), plist.lastIndexOf("\\"));
+  const fileName = slash >= 0 ? plist.slice(slash + 1) : plist;
+  const stem = fileName.replace(/\.plist$/i, "");
+  const parent = slash >= 0 ? plist.slice(0, slash) : "";
+  return { stem, parent };
+}
+
+export function GeodeButtonsToolPanel({
+  inputDir,
+  outputDir,
+  options,
+  onInputDirChange,
+  onOutputDirChange,
+  onOptionsChange,
+  pickFolder,
+}: GeodeButtonsToolPanelProps) {
+  const { t } = useTranslation(["tools", "errors"]);
+  const [plistPath, setPlistPath] = useState<string>("");
+  const [useCustomSheet, setUseCustomSheet] = useState(false);
+  const [targets, setTargets] = useState<GeodeButtonsTargetGroup[] | null>(null);
+  const [targetsError, setTargetsError] = useState<string | null>(null);
+  const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
+  const [previewByFamily, setPreviewByFamily] = useState<Record<string, string>>({});
+  const [basePreviewByFamily, setBasePreviewByFamily] = useState<Record<string, string>>({});
+  const [trackBaseColor, setTrackBaseColor] = useState<RgbColor>(DEFAULT_TRACK_COLOR);
+  const prevFamilyTemplatesRef = useRef<Record<string, string>>(options.templates.familyTemplates);
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
+
+  const selectedFamily = useMemo(
+    () => targets?.find((g) => g.id === selectedFamilyId) ?? null,
+    [targets, selectedFamilyId],
+  );
+
+  const groupedTargets = useMemo(() => {
+    const source = targets ?? [];
+    const grouped: Record<FamilyGroupId, GeodeButtonsTargetGroup[]> = {
+      uiChrome: [],
+      circle: [],
+      editorBase: [],
+      account: [],
+    };
+    for (const group of source) {
+      const meta = parseFamilyMeta(group.id);
+      grouped[resolveGroup(meta.baseType)].push(group);
+    }
+    const sortItems = (items: GeodeButtonsTargetGroup[]): GeodeButtonsTargetGroup[] =>
+      items.slice().sort((a, b) => {
+        const ma = parseFamilyMeta(a.id);
+        const mb = parseFamilyMeta(b.id);
+        const va = ma.variant ? VARIANT_ORDER[ma.variant] : Number.MAX_SAFE_INTEGER;
+        const vb = mb.variant ? VARIANT_ORDER[mb.variant] : Number.MAX_SAFE_INTEGER;
+        if (va !== vb) return va - vb;
+        return a.label.localeCompare(b.label);
+      });
+    return [
+      { id: "uiChrome" as const, label: t(groupLabelKey("uiChrome")), items: sortItems(grouped.uiChrome) },
+      { id: "circle" as const, label: t(groupLabelKey("circle")), items: sortItems(grouped.circle) },
+      { id: "editorBase" as const, label: t(groupLabelKey("editorBase")), items: sortItems(grouped.editorBase) },
+      { id: "account" as const, label: t(groupLabelKey("account")), items: sortItems(grouped.account) },
+    ].filter((group) => group.items.length > 0);
+  }, [t, targets]);
+
+  const selectedVariant = useMemo(() => parseVariantFromFamilyId(selectedFamilyId), [selectedFamilyId]);
+  const selectedAdjustVariant = useMemo(
+    () => resolveAdjustVariant(selectedFamilyId),
+    [selectedFamilyId],
+  );
+  const selectedHsv = useMemo(() => {
+    if (!selectedFamilyId) return defaultHsv();
+    return resolveFamilyHsv(options, selectedFamilyId, selectedAdjustVariant);
+  }, [options, selectedFamilyId, selectedAdjustVariant]);
+
+  const selectedTemplatePath = useMemo(() => {
+    if (!selectedFamilyId) return "";
+    return options.templates.familyTemplates[selectedFamilyId] ?? "";
+  }, [options.templates.familyTemplates, selectedFamilyId]);
+
+  useEffect(() => {
+    const source =
+      selectedTemplatePath ||
+      (selectedFamilyId ? basePreviewByFamily[selectedFamilyId] ?? "" : "");
+    if (!source) {
+      setTrackBaseColor(DEFAULT_TRACK_COLOR);
+      return;
+    }
+    let alive = true;
+    sampleRepresentativeColor(source)
+      .then((color) => {
+        if (alive) setTrackBaseColor(color ?? DEFAULT_TRACK_COLOR);
+      })
+      .catch(() => {
+        if (alive) setTrackBaseColor(DEFAULT_TRACK_COLOR);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [basePreviewByFamily, selectedFamilyId, selectedTemplatePath]);
+
+  const sliderStyles = useMemo(() => {
+    const thumbColor = applyHsvDeltaToRgb(trackBaseColor, selectedHsv);
+    return {
+      hue: sliderTrackStyle(
+        buildHsvTrackGradient(trackBaseColor, selectedHsv, "hueDeg", -180, 180),
+        thumbColor,
+      ),
+      saturation: sliderTrackStyle(
+        buildHsvTrackGradient(trackBaseColor, selectedHsv, "satDelta", -1, 1),
+        thumbColor,
+      ),
+      value: sliderTrackStyle(
+        buildHsvTrackGradient(trackBaseColor, selectedHsv, "valDelta", -1, 1),
+        thumbColor,
+      ),
+    };
+  }, [selectedHsv, trackBaseColor]);
+
+  const pickTemplate = useCallback(
+    async (assign: (path: string) => void) => {
+      setTargetsError(null);
+      if (!isTauriRuntime()) {
+        setTargetsError(t("errors:runtime.filePickerUnavailable"));
+        return;
+      }
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        title: t("geodeButtons.selectTemplatePngDialog"),
+        filters: [{ name: "PNG", extensions: ["png"] }],
+      });
+      if (typeof selected === "string" && selected.trim()) {
+        assign(selected);
+      }
+    },
+    [t],
+  );
+
+  const applyPlistSelection = useCallback(
+    (resolved: string) => {
+      const normalized = normalizeFilesystemPath(resolved);
+      setPlistPath(normalized);
+      const { stem, parent } = stemAndParentFromPlistPath(normalized);
+      if (parent.trim()) {
+        onInputDirChange(parent);
+      }
+      if (stem.trim() && optionsRef.current.sheetStem !== stem) {
+        onOptionsChange({ ...optionsRef.current, sheetStem: stem });
+      }
+    },
+    [onInputDirChange, onOptionsChange],
+  );
+
+  const pickGamesheet = useCallback(async () => {
+    setTargetsError(null);
+    if (!isTauriRuntime()) {
+      setTargetsError(t("errors:runtime.filePickerUnavailable"));
+      return;
+    }
+    const selected = await open({
+      multiple: false,
+      directory: false,
+      title: t("geodeButtons.selectInputGamesheetDialog"),
+      filters: [{ name: "Plist", extensions: ["plist"] }],
+    });
+    if (typeof selected !== "string" || !selected.trim()) {
+      return;
+    }
+    setUseCustomSheet(true);
+    applyPlistSelection(selected);
+  }, [applyPlistSelection, t]);
+
+  useEffect(() => {
+    let alive = true;
+    getGeodeButtonsDefaultInputDir()
+      .then((resolved) => {
+        if (!alive) return;
+        if (resolved?.trim()) {
+          onInputDirChange(resolved);
+        } else {
+          setTargetsError(
+            t("errors:geodeButtons.gameFilesNotFound"),
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:geodeButtons.resolveDefaultInputFailed"),
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [onInputDirChange, t]);
+
+  useEffect(() => {
+    if (useCustomSheet) {
+      return;
+    }
+    if (!inputDir.trim()) {
+      setPlistPath("");
+      return;
+    }
+    let alive = true;
+    autoSelectGeodeButtonsPlist(inputDir)
+      .then((resolved) => {
+        if (!alive) return;
+        if (resolved) {
+          setPlistPath(resolved);
+          const { stem } = stemAndParentFromPlistPath(resolved);
+          if (stem.trim() && optionsRef.current.sheetStem !== stem) {
+            onOptionsChange({ ...optionsRef.current, sheetStem: stem });
+          }
+        } else {
+          setTargetsError(
+            t("errors:geodeButtons.blankSheetNotFound"),
+          );
+          setPlistPath("");
+        }
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:geodeButtons.autoSelectPlistFailed"),
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [inputDir, onOptionsChange, t, useCustomSheet]);
+
+  useEffect(() => {
+    if (!plistPath.trim()) {
+      setTargets(null);
+      setSelectedFamilyId(null);
+      return;
+    }
+    let alive = true;
+    setTargets(null);
+    setTargetsError(null);
+    getGeodeButtonsTargetIndex(plistPath, { useGameFilesCache: !useCustomSheet })
+      .then((groups) => {
+        if (!alive) return;
+        setTargets(groups);
+        setSelectedFamilyId((prev) => prev ?? groups[0]?.id ?? null);
+      })
+      .catch((err: unknown) => {
+        if (!alive) return;
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:geodeButtons.readTargetFramesFailed"),
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [plistPath, t, useCustomSheet]);
+
+  useEffect(() => {
+    if (!targets || targets.length === 0) {
+      setBasePreviewByFamily({});
+      return;
+    }
+    const next: Record<string, string> = {};
+    for (const group of targets) {
+      if (group.previewPngDataUrl) {
+        next[group.id] = group.previewPngDataUrl;
+      }
+    }
+    setBasePreviewByFamily(next);
+  }, [targets]);
+
+  useEffect(() => {
+    if (!targets || targets.length === 0) {
+      setPreviewByFamily({});
+      return;
+    }
+    let alive = true;
+    const run = async (): Promise<void> => {
+      const results = await Promise.all(
+        targets.map(async (group): Promise<[string, string | null]> => {
+          const familyTemplatePath = optionsRef.current.templates.familyTemplates[group.id] ?? "";
+          const basePreview = basePreviewByFamily[group.id] ?? "";
+          const hsv = resolveGroupHsv(optionsRef.current, group.id);
+          const preview = await previewForGroupSource(familyTemplatePath, basePreview, hsv);
+          return [group.id, preview];
+        }),
+      );
+      if (!alive) return;
+      const next: Record<string, string> = {};
+      for (const [groupId, preview] of results) {
+        if (preview) {
+          next[groupId] = preview;
+        }
+      }
+      setPreviewByFamily(next);
+    };
+    run().catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [targets, basePreviewByFamily]);
+
+  // Refresh only grid cards whose template path changed; keep each card's HSV adjustments.
+  useEffect(() => {
+    if (!targets || targets.length === 0) {
+      return;
+    }
+    const prev = prevFamilyTemplatesRef.current;
+    const curr = options.templates.familyTemplates;
+    const changedIds: string[] = [];
+    const ids = new Set([...Object.keys(prev), ...Object.keys(curr)]);
+    for (const id of ids) {
+      if ((prev[id] ?? "") !== (curr[id] ?? "")) {
+        changedIds.push(id);
+      }
+    }
+    prevFamilyTemplatesRef.current = curr;
+    if (changedIds.length === 0) {
+      return;
+    }
+
+    let alive = true;
+    const run = async (): Promise<void> => {
+      for (const familyId of changedIds) {
+        const newPath = curr[familyId] ?? "";
+        const oldPath = prev[familyId] ?? "";
+        if (oldPath) {
+          invalidateDiskTemplateCache(oldPath);
+        }
+        if (newPath) {
+          invalidateDiskTemplateCache(newPath);
+        }
+        const basePreview = basePreviewByFamily[familyId] ?? "";
+        const hsv = resolveGroupHsv(optionsRef.current, familyId);
+        const preview = await previewForGroupSource(newPath, basePreview, hsv);
+        if (!alive || !preview) {
+          continue;
+        }
+        setPreviewByFamily((existing) => ({ ...existing, [familyId]: preview }));
+      }
+    };
+    run().catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [options.templates.familyTemplates, targets, basePreviewByFamily]);
+
+  useEffect(() => {
+    if (!targets || targets.length === 0 || !selectedFamilyId) {
+      return;
+    }
+    const selectedGroup = targets.find((group) => group.id === selectedFamilyId);
+    if (!selectedGroup) {
+      return;
+    }
+    let alive = true;
+    const run = async (): Promise<void> => {
+      const basePreview = basePreviewByFamily[selectedGroup.id] ?? "";
+      const preview = await previewForGroupSource(selectedTemplatePath, basePreview, selectedHsv);
+      if (!alive || !preview) return;
+      setPreviewByFamily((prev) => ({ ...prev, [selectedGroup.id]: preview }));
+    };
+    run().catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [targets, selectedFamilyId, selectedHsv, selectedTemplatePath, basePreviewByFamily]);
+
+  const setHsvField = useCallback(
+    (partial: Partial<HsvDelta>) => {
+      if (!selectedFamilyId) return;
+      const next = { ...selectedHsv, ...partial };
+      const existingFamilyMap = options.familyVariantRules ?? {};
+      const currentForFamily = existingFamilyMap[selectedFamilyId] ?? {};
+      onOptionsChange({
+        ...options,
+        familyVariantRules: {
+          ...existingFamilyMap,
+          [selectedFamilyId]: {
+            ...currentForFamily,
+            [selectedAdjustVariant]: next,
+          },
+        },
+      });
+    },
+    [onOptionsChange, options, selectedAdjustVariant, selectedFamilyId, selectedHsv],
+  );
+
+  const currentTemplatePath = useMemo(() => {
+    if (!selectedFamilyId) return "";
+    return options.templates.familyTemplates[selectedFamilyId] ?? "";
+  }, [options.templates.familyTemplates, selectedFamilyId]);
+
+  const setFamilyTemplatePath = useCallback(
+    (familyId: string, path: string) => {
+      const normalized = normalizeFilesystemPath(path);
+      const prevPath = options.templates.familyTemplates[familyId];
+      if (prevPath) {
+        invalidateDiskTemplateCache(prevPath);
+      }
+      invalidateDiskTemplateCache(normalized);
+      onOptionsChange({
+        ...options,
+        templates: {
+          ...options.templates,
+          familyTemplates: {
+            ...options.templates.familyTemplates,
+            [familyId]: normalized,
+          },
+        },
+      });
+    },
+    [onOptionsChange, options],
+  );
+
+  const selectedVariantLabel = selectedVariant
+    ? t(`geodeButtons.variants.${selectedVariant}`)
+    : t("geodeButtons.notAvailable");
+
+  return (
+    <ToolPage accent="cyan" wide>
+      <ToolPageHeader toolId="geodeButtons" />
+
+      <ToolSection
+        title={t("common.sourceAndOutput")}
+        subtitle={t("geodeButtons.sourceDescription")}
+        icon={FolderInput}
+        columns={2}
+      >
+        <ToolFilePathField
+          label={t("geodeButtons.inputGamesheet")}
+          hint={
+            useCustomSheet
+              ? t("geodeButtons.customPlist")
+              : t("geodeButtons.cachedBlankSheet")
+          }
+          value={plistPath}
+          placeholder={t("geodeButtons.resolvingBlankSheet")}
+          browseLabel={t("common:browse")}
+          browseIcon={FileImage}
+          onBrowse={() => {
+            void pickGamesheet();
+          }}
+        />
+        <FolderPathField
+          label={t("common.outputDirectory")}
+          value={outputDir}
+          onChange={onOutputDirChange}
+          pickFolder={pickFolder}
+          placeholder="C:/path/to/output"
+        />
+      </ToolSection>
+
+      {targetsError ? <p className="tm-tool-inline-error">{targetsError}</p> : null}
+
+      <div className="tm-geode-workspace">
+        <ToolSection
+          title={t("geodeButtons.buttonFamilies")}
+          subtitle={t("geodeButtons.buttonFamiliesDescription")}
+          icon={Grid3x3}
+        >
+          {groupedTargets.map((section) => (
+            <div key={section.id} className="tm-geode-family-section">
+              <div className="tm-geode-family-section-title">{section.label}</div>
+              <div className="tm-geode-family-grid">
+                {section.items.map((group) => {
+                  const isSelected = group.id === selectedFamilyId;
+                  const hasTemplate = Boolean(options.templates.familyTemplates[group.id]);
+                  const previewSrc = previewByFamily[group.id] ?? "";
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      className={`tm-geode-family-card${isSelected ? " selected" : ""}`}
+                      onClick={() => setSelectedFamilyId(group.id)}
+                    >
+                      <div className="tm-geode-family-preview">
+                        {previewSrc ? (
+                          <img
+                            className="tm-geode-family-thumb"
+                            src={previewSrc}
+                            alt={t("geodeButtons.previewAlt", {
+                              family: group.label,
+                            })}
+                          />
+                        ) : (
+                          <span className="tm-geode-cell-missing">
+                            {t("geodeButtons.noPreview")}
+                          </span>
+                        )}
+                      </div>
+                      <div className="tm-geode-family-title">{group.label}</div>
+                      <div className="tm-geode-family-meta">
+                        {t("geodeButtons.frames", {
+                          count: group.frames.length,
+                        })}{" "}
+                        •{" "}
+                        <span className={hasTemplate ? "ok" : "missing"}>
+                          {hasTemplate
+                            ? t("geodeButtons.templateSet")
+                            : t("geodeButtons.usingDefault")}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {targets === null ? (
+            <div className="tm-geode-grid-empty">
+              {plistPath.trim()
+                ? t("geodeButtons.loadingTargets")
+                : t("geodeButtons.waitingForGamesheet")}
+            </div>
+          ) : null}
+        </ToolSection>
+
+        <ToolSection
+          className="tm-geode-adjust-panel"
+          title={t("geodeButtons.adjust")}
+          subtitle={t("geodeButtons.adjustSubtitle", {
+            family:
+              selectedFamily?.label ?? t("geodeButtons.noFamilySelected"),
+            variant: selectedVariantLabel,
+          })}
+          icon={SlidersHorizontal}
+        >
+          <ToolFilePathField
+            label={t("geodeButtons.templatePng")}
+            hint={t("geodeButtons.perFamily")}
+            value={currentTemplatePath}
+            placeholder={t("geodeButtons.selectTemplatePng")}
+            browseIcon={FileImage}
+            disabled={!selectedFamilyId}
+            onBrowse={() => {
+              const familyId = selectedFamilyId ?? "";
+              if (!familyId) return;
+              pickTemplate((path) => setFamilyTemplatePath(familyId, path));
+            }}
+          />
+
+          <div className="tm-geode-hsv-block">
+            <div className="tm-geode-block-title">
+              {t("geodeButtons.hsvDelta")}
+            </div>
+
+            <div className="tm-geode-hsv-row">
+              <label className="tm-geode-hsv-label">
+                {t("geodeButtons.hueDegrees")}
+                <input
+                  className="tm-geode-slider tm-geode-slider--hue"
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={1}
+                  value={selectedHsv.hueDeg}
+                  style={sliderStyles.hue}
+                  onChange={(e) => setHsvField({ hueDeg: Number(e.target.value) })}
+                  onInput={(e) =>
+                    setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
+                  }
+                  onDoubleClick={() => setHsvField({ hueDeg: 0 })}
+                />
+              </label>
+              <div className="tm-geode-hsv-input">
+                <FloatStepper
+                  value={selectedHsv.hueDeg}
+                  step={1}
+                  min={-180}
+                  max={180}
+                  onChange={(value) => setHsvField({ hueDeg: value })}
+                />
+              </div>
+            </div>
+
+            <div className="tm-geode-hsv-row">
+              <label className="tm-geode-hsv-label">
+                {t("geodeButtons.saturation")}
+                <input
+                  className="tm-geode-slider tm-geode-slider--sat"
+                  type="range"
+                  min={-1}
+                  max={1}
+                  step={0.01}
+                  value={selectedHsv.satDelta}
+                  style={sliderStyles.saturation}
+                  onChange={(e) => setHsvField({ satDelta: Number(e.target.value) })}
+                  onInput={(e) =>
+                    setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
+                  }
+                  onDoubleClick={() => setHsvField({ satDelta: 0 })}
+                />
+              </label>
+              <div className="tm-geode-hsv-input">
+                <FloatStepper
+                  value={selectedHsv.satDelta}
+                  step={0.01}
+                  min={-1}
+                  max={1}
+                  onChange={(value) => setHsvField({ satDelta: value })}
+                />
+              </div>
+            </div>
+
+            <div className="tm-geode-hsv-row">
+              <label className="tm-geode-hsv-label">
+                {t("geodeButtons.value")}
+                <input
+                  className="tm-geode-slider tm-geode-slider--val"
+                  type="range"
+                  min={-1}
+                  max={1}
+                  step={0.01}
+                  value={selectedHsv.valDelta}
+                  style={sliderStyles.value}
+                  onChange={(e) => setHsvField({ valDelta: Number(e.target.value) })}
+                  onInput={(e) =>
+                    setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })
+                  }
+                  onDoubleClick={() => setHsvField({ valDelta: 0 })}
+                />
+              </label>
+              <div className="tm-geode-hsv-input">
+                <FloatStepper
+                  value={selectedHsv.valDelta}
+                  step={0.01}
+                  min={-1}
+                  max={1}
+                  onChange={(value) => setHsvField({ valDelta: value })}
+                />
+              </div>
+            </div>
+
+            <p className="tm-tool-section-note">
+              {t("geodeButtons.hsvHelp")}
+            </p>
+          </div>
+        </ToolSection>
+      </div>
+    </ToolPage>
+  );
+}
+
