@@ -25,6 +25,22 @@ function Write-Status {
     Write-Output "$symbol $Label"
 }
 
+function Get-NodeMajorVersion {
+    try {
+        $raw = (& node --version 2>$null)
+        if ($null -eq $raw) {
+            return $null
+        }
+        $text = [string]$raw
+        if ($text -match '^v?(\d+)') {
+            return [int]$Matches[1]
+        }
+        return $null
+    } catch {
+        return $null
+    }
+}
+
 Write-Output "Texture Manager 2 prerequisite check"
 Write-Output "-------------------------------------"
 
@@ -33,8 +49,10 @@ $hasNpm = Test-Command "npm"
 $hasRustc = Test-Command "rustc"
 $hasCargo = Test-Command "cargo"
 $hasWinget = Test-Command "winget"
+$nodeMajor = if ($hasNode) { Get-NodeMajorVersion } else { $null }
+$nodeVersionOk = $hasNode -and ($null -ne $nodeMajor) -and ($nodeMajor -ge 24)
 
-Write-Status "node" $hasNode
+Write-Status "node (>=24)" $nodeVersionOk
 Write-Status "npm" $hasNpm
 Write-Status "rustc" $hasRustc
 Write-Status "cargo" $hasCargo
@@ -47,7 +65,11 @@ if ($hasCargo) { cargo --version }
 if ($hasWinget) { winget --version }
 
 $missing = @()
-if (-not $hasNode) { $missing += "Node.js 20+" }
+if (-not $hasNode) {
+    $missing += "Node.js 24+"
+} elseif (-not $nodeVersionOk) {
+    $missing += "Node.js 24+ (found v$nodeMajor)"
+}
 if (-not $hasNpm) { $missing += "npm" }
 if (-not $hasRustc -or -not $hasCargo) { $missing += "Rust toolchain (rustup/rustc/cargo)" }
 
@@ -58,7 +80,7 @@ if ($missing.Count -gt 0) {
     Write-Output ""
     Write-Output "Install hints (Windows):"
     Write-Output " - Rust: winget install Rustlang.Rustup"
-    Write-Output " - Node: winget install OpenJS.NodeJS.LTS"
+    Write-Output " - Node 24: winget install OpenJS.NodeJS"
     Write-Output ""
     Write-Output "After install, restart terminal and rerun:"
     Write-Output " npm run check:env"
