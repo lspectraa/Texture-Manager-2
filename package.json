@@ -1,7 +1,7 @@
 {
   "name": "texture-manager-2",
   "private": true,
-  "version": "0.0.4",
+  "version": "0.0.5",
   "type": "module",
   "description": "Geometry Dash texture tooling remake",
   "author": "Spectra",
@@ -24,7 +24,7 @@
     "tauri": "tauri",
     "check:env": "powershell -ExecutionPolicy Bypass -File ./scripts/check-prereqs.ps1",
     "phase0:verify": "npm run check:env && npm run build",
-    "sync:version": "powershell -ExecutionPolicy Bypass -File ./scripts/sync-version.ps1",
+    "sync:version": "node ./scripts/sync-version.mjs",
     "setup:updater-signing": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-updater-signing.ps1",
     "test": "vitest run",
     "test:watch": "vitest",

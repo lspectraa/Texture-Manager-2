@@ -17,6 +17,8 @@ jobs:
         include:
           - platform: windows-latest
             args: "--bundles msi"
+          - platform: macos-latest
+            args: "--bundles dmg"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +43,7 @@ jobs:
       - name: Sync version from package.json
         run: npm run sync:version
 
-      - name: Build MSI and draft GitHub release
+      - name: Build installer and draft GitHub release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -52,7 +54,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Windows MSI build of Texture Manager 2."
+          releaseBody: "Desktop builds of Texture Manager 2 (Windows MSI + macOS DMG)."
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
