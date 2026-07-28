@@ -10,4 +10,5 @@ export {
   BLEND_PRESETS,
   blendToCompositeOp,
   getEmissionRate,
+  withSyncedEmissionRate,
 } from "../domain/particleConfig";

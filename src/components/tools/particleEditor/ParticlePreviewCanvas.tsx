@@ -27,8 +27,9 @@ const FLOOR_VISIBLE_FRACTION = 0.25;
 
 /**
  * Maps Cocos point-space particle units into preview scene pixels (UHD icons /
- * gamesheets / floor). Zoom then magnifies the whole composition — never scale
- * icons independently of particles.
+ * gamesheets / floor). Preview uses scale 2 (not GD's typical Cocos factor 4)
+ * so the composition stays readable next to Icon Editor art. Zoom then
+ * magnifies icons + particles together.
  */
 const GD_PARTICLE_CONTENT_SCALE = 2;
 

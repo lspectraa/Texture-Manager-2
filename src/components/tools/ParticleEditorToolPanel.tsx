@@ -27,11 +27,14 @@ import {
   joinGameResourcePath,
   type ParticleConfig,
   type ParticlePreviewSprite,
+  type TextureSource,
 } from "../../services/tauriParticleEditor";
 import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import {
   BLEND_PRESETS,
   DEFAULT_PARTICLE_CONFIG,
+  getEmissionRate,
+  withSyncedEmissionRate,
 } from "../../domain/particleConfig";
 import {
   detectEffectKind,
@@ -121,7 +124,11 @@ function patchConfig<K extends keyof ParticleConfig>(
   key: K,
   value: ParticleConfig[K],
 ): ParticleConfig {
-  return { ...prev, [key]: value };
+  const next = { ...prev, [key]: value };
+  if (key === "maxParticles" || key === "particleLifespan") {
+    return withSyncedEmissionRate(next);
+  }
+  return next;
 }
 
 // ---------------------------------------------------------------------------
@@ -502,6 +509,8 @@ export function ParticleEditorToolPanel() {
   const [config, setConfig] = useState<ParticleConfig>(defaultParticleConfig);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [textureSrc, setTextureSrc] = useState<string | null>(null);
+  /** How the current texture was obtained — drives whether save embeds and/or writes a sibling PNG. */
+  const [textureSource, setTextureSource] = useState<TextureSource>("none");
   const [running, setRunning] = useState(true);
   const [background, setBackground] = useState<ParticleBackground>("dark");
   const [zoom, setZoom] = useState(() =>
@@ -533,11 +542,13 @@ export function ParticleEditorToolPanel() {
   historyRef.current = history;
   const configRef = useRef(config);
   const textureSrcRef = useRef(textureSrc);
+  const textureSourceRef = useRef(textureSource);
   const filePathRef = useRef(filePath);
   const effectIdRef = useRef<string | null>(effectMeta?.id ?? null);
   const usePlistSourcePositionRef = useRef(usePlistSourcePosition);
   configRef.current = config;
   textureSrcRef.current = textureSrc;
+  textureSourceRef.current = textureSource;
   filePathRef.current = filePath;
   effectIdRef.current = effectMeta?.id ?? null;
   usePlistSourcePositionRef.current = usePlistSourcePosition;
@@ -560,9 +571,7 @@ export function ParticleEditorToolPanel() {
   );
 
   const emissionRate =
-    config.particleLifespan > 0
-      ? (config.maxParticles / config.particleLifespan).toFixed(1)
-      : "—";
+    config.particleLifespan > 0 ? getEmissionRate(config).toFixed(1) : "—";
 
   const positionTypeHints = useMemo(
     () =>
@@ -640,6 +649,7 @@ export function ParticleEditorToolPanel() {
       const base: ParticleEditorSnapshot = {
         config: configRef.current,
         textureSrc: textureSrcRef.current,
+        textureSource: textureSourceRef.current,
         filePath: filePathRef.current,
         effectId: effectIdRef.current,
         usePlistSourcePosition: usePlistSourcePositionRef.current,
@@ -659,11 +669,13 @@ export function ParticleEditorToolPanel() {
     applyingHistoryRef.current = true;
     configRef.current = snapshot.config;
     textureSrcRef.current = snapshot.textureSrc;
+    textureSourceRef.current = snapshot.textureSource;
     filePathRef.current = snapshot.filePath;
     effectIdRef.current = snapshot.effectId;
     usePlistSourcePositionRef.current = snapshot.usePlistSourcePosition;
     setConfig(snapshot.config);
     setTextureSrc(snapshot.textureSrc);
+    setTextureSource(snapshot.textureSource);
     setFilePath(snapshot.filePath);
     setUsePlistSourcePosition(snapshot.usePlistSourcePosition);
     if (snapshot.effectId) {
@@ -816,6 +828,7 @@ export function ParticleEditorToolPanel() {
       const kind = detectEffectKind(basename) ?? null;
       setConfig(result.config);
       setTextureSrc(result.texturePngDataUrl);
+      setTextureSource(result.textureSource);
       setFilePath(selected);
       setEffectMeta(kind);
       setResetKey((k) => k + 1);
@@ -823,6 +836,7 @@ export function ParticleEditorToolPanel() {
       commitHistory({
         config: result.config,
         textureSrc: result.texturePngDataUrl,
+        textureSource: result.textureSource,
         filePath: selected,
         effectId: kind?.id ?? null,
         usePlistSourcePosition,
@@ -856,16 +870,22 @@ export function ParticleEditorToolPanel() {
       }
       setBusy(true);
       try {
+        const hasTexture = Boolean(textureSrc);
+        const hasFileName = Boolean(config.textureFileName.trim());
         await saveParticleEditor({
           path: targetPath,
           config,
-          embedTexture: false,
-          writeSiblingPng: false,
+          texturePngDataUrl: textureSrc ?? undefined,
+          // Prefer sibling PNG when a filename is known; keep embeds when the
+          // source was embedded or there is no sibling name to write.
+          writeSiblingPng: hasTexture && hasFileName,
+          embedTexture: hasTexture && (textureSource === "embedded" || !hasFileName),
         });
         setFilePath(targetPath);
         commitHistory({
           config,
           textureSrc,
+          textureSource,
           filePath: targetPath,
           effectId: effectMeta?.id ?? null,
           usePlistSourcePosition,
@@ -876,7 +896,16 @@ export function ParticleEditorToolPanel() {
         setBusy(false);
       }
     },
-    [filePath, config, textureSrc, effectMeta, usePlistSourcePosition, commitHistory, t],
+    [
+      filePath,
+      config,
+      textureSrc,
+      textureSource,
+      effectMeta,
+      usePlistSourcePosition,
+      commitHistory,
+      t,
+    ],
   );
 
   const handleNew = useCallback(() => {
@@ -884,6 +913,7 @@ export function ParticleEditorToolPanel() {
     setConfig(next);
     setFilePath(null);
     setTextureSrc(null);
+    setTextureSource("none");
     setError(null);
     setEffectMeta(null);
     setResetKey((k) => k + 1);
@@ -891,6 +921,7 @@ export function ParticleEditorToolPanel() {
     commitHistory({
       config: next,
       textureSrc: null,
+      textureSource: "none",
       filePath: null,
       effectId: null,
       usePlistSourcePosition,
@@ -930,11 +961,13 @@ export function ParticleEditorToolPanel() {
         // Copy settings only — do not mark the stock Resources file as opened.
         setConfig(result.config);
         setTextureSrc(result.texturePngDataUrl);
+        setTextureSource(result.textureSource);
         setFilePath(null);
         setResetKey((k) => k + 1);
         commitHistory({
           config: result.config,
           textureSrc: result.texturePngDataUrl,
+          textureSource: result.textureSource,
           filePath: null,
           effectId: found.id,
           usePlistSourcePosition,
@@ -977,12 +1010,14 @@ export function ParticleEditorToolPanel() {
       const dataUrl = await loadParticleEditorTexture(selected);
       const name = selected.split(/[\\/]/).pop() ?? "";
       setTextureSrc(dataUrl);
+      setTextureSource("sibling");
       textureSrcRef.current = dataUrl;
       updateConfig((prev) => {
         const next = { ...prev, textureFileName: name };
         commitHistory({
           config: next,
           textureSrc: dataUrl,
+          textureSource: "sibling",
           filePath: filePathRef.current,
           effectId: effectIdRef.current,
           usePlistSourcePosition: usePlistSourcePositionRef.current,
@@ -1630,6 +1665,24 @@ export function ParticleEditorToolPanel() {
                     <h3 className="tm-pe-block-title">
                       {t("particleEditor.blocks.radiusMode")}
                     </h3>
+                    <ValueVarianceField
+                      label={t("particleEditor.fields.angle")}
+                      hint={t("particleEditor.fields.angleHint")}
+                      unit="°"
+                      value={config.angle}
+                      variance={config.angleVariance}
+                      min={0}
+                      max={360}
+                      step={1}
+                      decimals={1}
+                      defaultValue={D.angle}
+                      defaultVariance={D.angleVariance}
+                      varianceLabel={t("particleEditor.fields.variance")}
+                      resetHint={resetHint}
+                      onCommit={commitHistory}
+                      onChangeValue={(v) => set("angle", v)}
+                      onChangeVariance={(v) => set("angleVariance", v)}
+                    />
                     <ValueVarianceField
                       label={t("particleEditor.fields.maxRadius")}
                       hint={t("particleEditor.fields.maxRadiusHint")}

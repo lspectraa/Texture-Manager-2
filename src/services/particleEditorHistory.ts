@@ -1,9 +1,12 @@
 import type { ParticleConfig } from "../domain/particleConfig";
 import { defaultParticleConfig } from "../domain/particleConfig";
+import type { TextureSource } from "./tauriParticleEditor";
 
 export type ParticleEditorSnapshot = {
   config: ParticleConfig;
   textureSrc: string | null;
+  /** How the current texture was resolved — used for save embed vs sibling PNG. */
+  textureSource: TextureSource;
   filePath: string | null;
   effectId: string | null;
   usePlistSourcePosition: boolean;
@@ -20,6 +23,7 @@ export const PARTICLE_EDITOR_HISTORY_LIMIT = 100;
 export const emptyParticleEditorSnapshot = (): ParticleEditorSnapshot => ({
   config: defaultParticleConfig(),
   textureSrc: null,
+  textureSource: "none",
   filePath: null,
   effectId: null,
   usePlistSourcePosition: false,
@@ -30,6 +34,7 @@ export const cloneParticleEditorSnapshot = (
 ): ParticleEditorSnapshot => ({
   config: { ...snapshot.config },
   textureSrc: snapshot.textureSrc,
+  textureSource: snapshot.textureSource,
   filePath: snapshot.filePath,
   effectId: snapshot.effectId,
   usePlistSourcePosition: snapshot.usePlistSourcePosition,
@@ -41,6 +46,7 @@ export const particleEditorSnapshotsEqual = (
 ): boolean => {
   if (
     left.textureSrc !== right.textureSrc ||
+    left.textureSource !== right.textureSource ||
     left.filePath !== right.filePath ||
     left.effectId !== right.effectId ||
     left.usePlistSourcePosition !== right.usePlistSourcePosition

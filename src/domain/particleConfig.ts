@@ -127,6 +127,19 @@ export function getEmissionRate(config: ParticleConfig): number {
   return config.maxParticles / config.particleLifespan;
 }
 
+/**
+ * Keep `emissionRate` in sync with Cocos2d convention after max/lifespan edits.
+ * Callers that change `maxParticles` or `particleLifespan` should apply this.
+ */
+export function withSyncedEmissionRate(config: ParticleConfig): ParticleConfig {
+  const emissionRate =
+    config.particleLifespan > 0
+      ? config.maxParticles / config.particleLifespan
+      : config.maxParticles;
+  if (config.emissionRate === emissionRate) return config;
+  return { ...config, emissionRate };
+}
+
 /** Default config: a golden-orange additive fountain emitter. */
 export const DEFAULT_PARTICLE_CONFIG: ParticleConfig = {
   emitterType: 0,

@@ -438,11 +438,17 @@ fn parse_particle_config(dict: &Dictionary) -> ParticleConfig {
             .unwrap_or(def.y_coord_flipped),
         opacity_modify_rgb: dict_get_bool(dict, "opacityModifyRGB")
             .unwrap_or(def.opacity_modify_rgb),
-        max_radius: dict_get_f64(dict, "maxRadius").unwrap_or(def.max_radius),
+        max_radius: dict_get_f64(dict, "maxRadius")
+            .or_else(|| dict_get_f64(dict, "startRadius"))
+            .unwrap_or(def.max_radius),
         max_radius_variance: dict_get_f64(dict, "maxRadiusVariance")
+            .or_else(|| dict_get_f64(dict, "startRadiusVariance"))
             .unwrap_or(def.max_radius_variance),
-        min_radius: dict_get_f64(dict, "minRadius").unwrap_or(def.min_radius),
+        min_radius: dict_get_f64(dict, "minRadius")
+            .or_else(|| dict_get_f64(dict, "endRadius"))
+            .unwrap_or(def.min_radius),
         min_radius_variance: dict_get_f64(dict, "minRadiusVariance")
+            .or_else(|| dict_get_f64(dict, "endRadiusVariance"))
             .unwrap_or(def.min_radius_variance),
         rotate_per_second: dict_get_f64(dict, "rotatePerSecond")
             .unwrap_or(def.rotate_per_second),

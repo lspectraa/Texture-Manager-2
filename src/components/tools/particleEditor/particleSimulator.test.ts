@@ -126,7 +126,7 @@ describe("Gravity mode – angle=90, gravityy=-300 (dragEffect-like)", () => {
   });
 });
 
-describe("contentScale maps Cocos points into UHD scene pixels", () => {
+describe("contentScale maps Cocos points into scene pixels", () => {
   it("scales size, speed, and gravity together", () => {
     const cfg: ParticleConfig = {
       ...straightUpConfig(),
@@ -139,6 +139,7 @@ describe("contentScale maps Cocos points into UHD scene pixels", () => {
       gravityy: -300,
     };
     const emitter = new ParticleEmitter(cfg);
+    // Arbitrary multiplier (preview uses 2; this checks the math path).
     emitter.contentScale = 4;
     emitter.setEmitterWorldPos(0, 0);
     const p = emitter.spawnParticle();
@@ -361,6 +362,34 @@ describe("positionType: Free vs. Grouped world position", () => {
     const worldY = emitter.centerY - p.y;
     expectApprox(worldX, 300, "Grouped worldX (moved with emitter)");
     expectApprox(worldY, 150, "Grouped worldY");
+  });
+
+  it("Relative (1): startPos shifts by emitter delta on update", () => {
+    const cfg: ParticleConfig = {
+      ...straightUpConfig(),
+      positionType: 1,
+      emissionRate: 1000,
+      maxParticles: 1,
+      particleLifespan: 10,
+      particleLifespanVariance: 0,
+      duration: -1,
+    };
+    const emitter = new ParticleEmitter(cfg);
+    emitter.setEmitterWorldPos(100, 200);
+    emitter.reset();
+    emitter.update(0.05);
+    const particles = emitter.getParticles();
+    expect(particles.length).toBe(1);
+    const p = particles[0]!;
+    expectApprox(p.startPosX, 100, "Relative startPosX at spawn");
+    expectApprox(p.startPosY, 200, "Relative startPosY at spawn");
+
+    emitter.setEmitterWorldPos(300, 200);
+    emitter.update(0.001);
+
+    expectApprox(p.startPosX, 300, "Relative startPosX after emitter move");
+    expectApprox(p.startPosY, 200, "Relative startPosY unchanged in Y");
+    expectApprox(p.startPosX + p.x, 300, "Relative worldX follows emitter translate");
   });
 });
 

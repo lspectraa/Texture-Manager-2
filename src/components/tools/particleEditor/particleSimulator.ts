@@ -411,11 +411,19 @@ export class ParticleEmitter {
 
   /**
    * Multiplies Cocos point-space linear quantities into scene pixels.
-   * Geometry Dash UHD uses contentScaleFactor 4 — set this so particle sizes /
-   * speeds match UHD icon and gamesheet art drawn at native pixel size.
-   * Preview zoom then upscales the whole composition (icons + particles) together.
+   * Particle Editor preview uses contentScale 2 so sizes/speeds match UHD icons
+   * and gamesheets drawn at native pixels under the shared stage zoom.
+   * (Geometry Dash's Cocos contentScaleFactor is often 4; preview intentionally
+   * uses 2 so the composition stays readable next to Icon Editor art.)
    */
   contentScale = 1;
+
+  /**
+   * Previous emitter world position — used to shift Relative particles by the
+   * emitter's frame-to-frame delta (Cocos2d PositionType::RELATIVE).
+   */
+  private _prevWorldX = 0;
+  private _prevWorldY = 0;
 
   constructor(cfg: ParticleConfig, tex?: ParticleTexture | null) {
     this.cfg = { ...cfg };
@@ -445,6 +453,8 @@ export class ParticleEmitter {
     this.particles = [];
     this.emitCounter = 0;
     this.elapsed = 0;
+    this._prevWorldX = this._worldX;
+    this._prevWorldY = this._worldY;
   }
 
   // ── Position ───────────────────────────────────────────────────────────────
@@ -487,6 +497,21 @@ export class ParticleEmitter {
   update(dt: number): void {
     // Cap delta to prevent spiral-of-death on tab background resume
     const step = Math.min(dt, 0.05);
+
+    // Relative (1): translate each particle's spawn anchor by emitter movement
+    // so trails follow the emitter without being locked in local space (Grouped).
+    const posType = this.cfg.positionType ?? 0;
+    const dx = this._worldX - this._prevWorldX;
+    const dy = this._worldY - this._prevWorldY;
+    if (posType === 1 && this.particles.length > 0 && (dx !== 0 || dy !== 0)) {
+      for (const p of this.particles) {
+        p.startPosX += dx;
+        p.startPosY += dy;
+      }
+    }
+    this._prevWorldX = this._worldX;
+    this._prevWorldY = this._worldY;
+
     this.elapsed += step;
 
     const cfg = this.cfg;
@@ -541,7 +566,8 @@ export class ParticleEmitter {
       //
       // Free (0):     particle stays in the world as the emitter moves.
       //               worldPos = spawnEmitterPos + localPhysicsPos
-      // Relative (1): same as Free for a root-level node (our canvas has no parent transform).
+      // Relative (1): same draw formula as Free; startPos is shifted each update
+      //               by the emitter's frame delta so particles translate with it.
       // Grouped (2):  particle locked to current emitter pos.
       //               worldPos = currentEmitterPos + localPhysicsPos
       //
@@ -555,7 +581,7 @@ export class ParticleEmitter {
         worldX = this._worldX + p.x;
         worldY = this._worldY - p.y;
       } else {
-        // Free / Relative: anchored to emitter pos at spawn
+        // Free / Relative: anchored to (possibly shifted) spawn emitter pos
         worldX = p.startPosX + p.x;
         worldY = p.startPosY - p.y;
       }
