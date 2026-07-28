@@ -26,9 +26,15 @@ const common = {
   about: {
     title: "정보",
     closeAria: "정보 대화 상자 닫기",
-    copyright: "© {{year}} {{holder}}. All rights reserved.",
+    copyright: "© {{year}} {{holder}}.",
     description:
       "Geometry Dash 텍스처 작업을 위해 만들어졌습니다 — 집중형 데스크톱 도구로 게임시트를 분할, 병합, 포팅, 편집하세요.",
+    licenseHeading: "라이선스",
+    licenseName: "GNU GPLv3 (또는 그 이후)",
+    licenseSummary:
+      "자유 소프트웨어입니다. GNU 일반 공중 사용 허가서에 따라 재배포하고 수정할 수 있습니다. 보증은 없습니다.",
+    licenseLink: "전체 라이선스 보기",
+    licenseHint: "GitHub에서 LICENSE를 엽니다",
     version: "버전",
     github: "GitHub 프로젝트",
     githubHint: "소스 코드 및 이슈",

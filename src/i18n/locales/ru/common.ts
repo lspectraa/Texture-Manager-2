@@ -28,9 +28,15 @@ const common: AppLocaleResources["common"] = {
   about: {
     title: "О программе",
     closeAria: "Закрыть окно «О программе»",
-    copyright: "© {{year}} {{holder}}. Все права защищены.",
+    copyright: "© {{year}} {{holder}}.",
     description:
       "Создано для работы с текстурами Geometry Dash — разделяйте, объединяйте, переносите и редактируйте игровые атласы с помощью удобного набора инструментов для компьютера.",
+    licenseHeading: "Лицензия",
+    licenseName: "GNU GPLv3 (или более поздняя)",
+    licenseSummary:
+      "Свободное ПО: вы можете распространять и изменять его на условиях GNU General Public License. Гарантии отсутствуют.",
+    licenseLink: "Посмотреть полную лицензию",
+    licenseHint: "Открывает LICENSE на GitHub",
     version: "Версия",
     github: "Проект на GitHub",
     githubHint: "Исходный код и сообщения об ошибках",

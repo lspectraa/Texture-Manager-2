@@ -26,9 +26,15 @@ const common = {
   about: {
     title: "Sobre",
     closeAria: "Fechar a janela Sobre",
-    copyright: "© {{year}} {{holder}}. Todos os direitos reservados.",
+    copyright: "© {{year}} {{holder}}.",
     description:
       "Feito para fluxos de trabalho de texturas do Geometry Dash — divida, junte, converta e edite gamesheets com um kit de desktop focado.",
+    licenseHeading: "Licença",
+    licenseName: "GNU GPLv3 (ou posterior)",
+    licenseSummary:
+      "Software livre: você pode redistribuí-lo e modificá-lo sob a Licença Pública Geral GNU. Não há garantia.",
+    licenseLink: "Ver licença completa",
+    licenseHint: "Abre LICENSE no GitHub",
     version: "Versão",
     github: "Projeto no GitHub",
     githubHint: "Código-fonte e problemas",

@@ -26,9 +26,15 @@ const common = {
   about: {
     title: "关于",
     closeAria: "关闭关于对话框",
-    copyright: "© {{year}} {{holder}}。保留所有权利。",
+    copyright: "© {{year}} {{holder}}。",
     description:
       "专为 Geometry Dash 贴图工作流打造——用一套专注的桌面工具拆分、合并、移植和编辑 gamesheet。",
+    licenseHeading: "许可证",
+    licenseName: "GNU GPLv3（或更高版本）",
+    licenseSummary:
+      "自由软件：您可依据 GNU 通用公共许可证重新分发和修改。不作任何担保。",
+    licenseLink: "查看完整许可证",
+    licenseHint: "在 GitHub 上打开 LICENSE",
     version: "版本",
     github: "GitHub 项目",
     githubHint: "源代码与问题反馈",

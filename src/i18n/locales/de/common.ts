@@ -26,9 +26,15 @@ const common = {
   about: {
     title: "Über",
     closeAria: "Info-Dialog schließen",
-    copyright: "© {{year}} {{holder}}. Alle Rechte vorbehalten.",
+    copyright: "© {{year}} {{holder}}.",
     description:
       "Für Geometry-Dash-Textur-Workflows gebaut — Gamesheets aufteilen, zusammenführen, portieren und bearbeiten in einem fokussierten Desktop-Toolkit.",
+    licenseHeading: "Lizenz",
+    licenseName: "GNU GPLv3 (oder neuer)",
+    licenseSummary:
+      "Freie Software: Sie dürfen sie unter der GNU General Public License weitergeben und verändern. Es besteht keine Gewährleistung.",
+    licenseLink: "Vollständige Lizenz anzeigen",
+    licenseHint: "Öffnet LICENSE auf GitHub",
     version: "Version",
     github: "Projekt auf GitHub",
     githubHint: "Quellcode und Issues",

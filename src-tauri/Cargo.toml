@@ -3,6 +3,7 @@ name = "texture-manager-2"
 version = "0.0.2"
 description = "Geometry Dash texture tooling remake"
 authors = ["Spectra"]
+license = "GPL-3.0-or-later"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -252,6 +252,82 @@ body {
   color: var(--tm-text-muted);
 }
 
+.tm-copyright-dialog-license {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(155, 204, 255, 0.2);
+  background: rgba(98, 165, 255, 0.06);
+}
+
+.tm-copyright-dialog-license-head {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.tm-copyright-dialog-license-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(161, 211, 255, 0.28);
+  background: rgba(98, 165, 255, 0.12);
+  color: #e8f4ff;
+}
+
+.tm-copyright-dialog-license-titles {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tm-copyright-dialog-license-heading {
+  margin: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(186, 214, 244, 0.68);
+}
+
+.tm-copyright-dialog-license-name {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: #f2f8ff;
+}
+
+.tm-copyright-dialog-license-spdx {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.68rem;
+  font-weight: 650;
+  color: rgba(198, 214, 236, 0.78);
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(161, 211, 255, 0.28);
+  background: rgba(12, 20, 32, 0.35);
+  white-space: nowrap;
+}
+
+.tm-copyright-dialog-license-summary {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--tm-text-muted);
+}
+
+.tm-copyright-dialog-license-link {
+  margin: 0;
+}
+
 .tm-copyright-dialog-links {
   display: flex;
   flex-direction: column;
@@ -7011,6 +7087,31 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 [data-theme="light"] .tm-copyright-dialog-link:hover {
   border-color: rgba(21, 120, 230, 0.45);
   background: linear-gradient(130deg, rgba(21, 120, 230, 0.12), rgba(11, 158, 196, 0.08));
+}
+
+[data-theme="light"] .tm-copyright-dialog-license {
+  border-color: rgba(21, 120, 230, 0.2);
+  background: rgba(21, 120, 230, 0.05);
+}
+
+[data-theme="light"] .tm-copyright-dialog-license-icon {
+  border-color: rgba(21, 120, 230, 0.28);
+  background: rgba(21, 120, 230, 0.1);
+  color: #1578e6;
+}
+
+[data-theme="light"] .tm-copyright-dialog-license-heading {
+  color: var(--tm-text-dim);
+}
+
+[data-theme="light"] .tm-copyright-dialog-license-name {
+  color: var(--tm-heading);
+}
+
+[data-theme="light"] .tm-copyright-dialog-license-spdx {
+  border-color: rgba(21, 120, 230, 0.28);
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--tm-text-dim);
 }
 
 [data-theme="light"] .tm-copyright-dialog-link-label,

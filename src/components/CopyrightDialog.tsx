@@ -1,8 +1,16 @@
 import { useEffect, useId } from "react";
-import { Code2, ExternalLink, MessageCircle, Play, X } from "lucide-react";
+import {
+  Code2,
+  ExternalLink,
+  MessageCircle,
+  Play,
+  Scale,
+  X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   APP_LINKS,
+  APP_LICENSE_SPDX,
   APP_VERSION,
   COPYRIGHT_HOLDER,
   COPYRIGHT_YEAR,
@@ -101,9 +109,54 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
             holder: COPYRIGHT_HOLDER,
           })}
         </p>
-        <p className="tm-copyright-dialog-copy">
-          {t("about.description")}
-        </p>
+        <p className="tm-copyright-dialog-copy">{t("about.description")}</p>
+
+        <section
+          className="tm-copyright-dialog-license"
+          aria-label={t("about.licenseHeading")}
+        >
+          <div className="tm-copyright-dialog-license-head">
+            <span className="tm-copyright-dialog-license-icon" aria-hidden>
+              <Scale size={16} strokeWidth={1.85} />
+            </span>
+            <div className="tm-copyright-dialog-license-titles">
+              <p className="tm-copyright-dialog-license-heading">
+                {t("about.licenseHeading")}
+              </p>
+              <p className="tm-copyright-dialog-license-name">
+                {t("about.licenseName")}
+              </p>
+            </div>
+            <span className="tm-copyright-dialog-license-spdx">
+              {APP_LICENSE_SPDX}
+            </span>
+          </div>
+          <p className="tm-copyright-dialog-license-summary">
+            {t("about.licenseSummary")}
+          </p>
+          <button
+            type="button"
+            className="tm-copyright-dialog-link tm-copyright-dialog-license-link"
+            onClick={() => {
+              void openExternalUrl(APP_LINKS.license);
+            }}
+          >
+            <span className="tm-copyright-dialog-link-copy">
+              <span className="tm-copyright-dialog-link-label">
+                {t("about.licenseLink")}
+              </span>
+              <span className="tm-copyright-dialog-link-hint">
+                {t("about.licenseHint")}
+              </span>
+            </span>
+            <ExternalLink
+              className="tm-copyright-dialog-link-external"
+              size={14}
+              strokeWidth={2}
+              aria-hidden
+            />
+          </button>
+        </section>
 
         <div className="tm-copyright-dialog-links">
           {LINK_ITEMS.map((item) => {
@@ -143,7 +196,9 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
           <span className="tm-copyright-dialog-version-label">
             {t("about.version")}
           </span>
-          <span className="tm-copyright-dialog-version-value">v{APP_VERSION}</span>
+          <span className="tm-copyright-dialog-version-value">
+            v{APP_VERSION}
+          </span>
         </div>
       </div>
     </div>

@@ -28,9 +28,15 @@ const common: AppLocaleResources["common"] = {
   about: {
     title: "Acerca de",
     closeAria: "Cerrar el cuadro de diálogo Acerca de",
-    copyright: "© {{year}} {{holder}}. Todos los derechos reservados.",
+    copyright: "© {{year}} {{holder}}.",
     description:
       "Creado para flujos de trabajo de texturas de Geometry Dash: divide, combina, adapta y edita gamesheets con un conjunto de herramientas de escritorio especializado.",
+    licenseHeading: "Licencia",
+    licenseName: "GNU GPLv3 (o posterior)",
+    licenseSummary:
+      "Software libre: puedes redistribuirlo y modificarlo bajo la Licencia Pública General de GNU. No hay garantía.",
+    licenseLink: "Ver licencia completa",
+    licenseHint: "Abre LICENSE en GitHub",
     version: "Versión",
     github: "Proyecto en GitHub",
     githubHint: "Código fuente e incidencias",
