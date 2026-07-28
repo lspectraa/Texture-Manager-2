@@ -571,6 +571,24 @@ body {
   --tm-layout-report-width: var(--tm-shell-rail-width);
 }
 
+.tm-main-column {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-self: stretch;
+  /* Keep banner/panel compositing isolated from the report-column gap (WebView2). */
+  isolation: isolate;
+}
+
+.tm-main-column > .tm-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Override .tm-panel { height: 100% } so the panel does not overflow past the banner. */
+  height: auto;
+}
+
 .tm-layout--animating .tm-panel-body,
 .tm-layout--animating .tm-sidebar-scroll,
 .tm-layout--animating .tm-report-body-inner,
@@ -8324,35 +8342,95 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 .tm-update-banner {
   position: relative;
   z-index: 5;
+  overflow: hidden;
+  flex: 0 0 auto;
+  margin: 0;
+  border-radius: 16px;
+  border: 1px solid rgba(140, 205, 255, 0.38);
+  background:
+    linear-gradient(
+      125deg,
+      rgba(28, 52, 92, 0.97) 0%,
+      rgba(14, 24, 44, 0.98) 42%,
+      rgba(16, 30, 54, 0.97) 100%
+    );
+  /* Avoid backdrop-filter here — WebView2 bleeds a soft gradient into the
+     layout gap beside the main column until a hover repaint clears it. */
+  box-shadow:
+    0 10px 24px rgba(3, 8, 22, 0.35),
+    0 0 0 1px rgba(120, 190, 255, 0.08) inset,
+    0 1px 0 rgba(210, 232, 255, 0.12) inset;
+  transform: translateZ(0);
+  animation: tm-update-banner-in 280ms ease-out;
+}
+
+.tm-update-banner::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(
+    180deg,
+    #9fd0ff 0%,
+    var(--tm-accent) 45%,
+    var(--tm-accent-3) 100%
+  );
+}
+
+.tm-update-banner-glow {
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 42%;
+  max-width: 220px;
+  height: 100%;
+  background: radial-gradient(
+    ellipse at 80% 40%,
+    rgba(121, 183, 255, 0.16) 0%,
+    rgba(93, 224, 200, 0.05) 45%,
+    transparent 72%
+  );
+}
+
+.tm-update-banner-body {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin: 12px 16px 0;
-  padding: 12px 14px;
-  border-radius: 14px;
-  border: 1px solid rgba(120, 190, 255, 0.28);
-  background: rgba(18, 28, 42, 0.78);
-  backdrop-filter: blur(10px);
+  gap: 14px 18px;
+  padding: 16px 18px 16px 20px;
 }
 
 .tm-update-banner-main {
   display: flex;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
   min-width: 0;
-  flex: 1 1 280px;
+  flex: 1 1 300px;
 }
 
 .tm-update-banner-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  background: rgba(110, 180, 255, 0.14);
-  color: #9fd0ff;
+  width: 38px;
+  height: 38px;
+  margin-top: 1px;
+  border-radius: 12px;
+  border: 1px solid rgba(160, 214, 255, 0.35);
+  background: linear-gradient(
+    145deg,
+    rgba(130, 190, 255, 0.28),
+    rgba(90, 150, 255, 0.1)
+  );
+  color: #d7ecff;
+  box-shadow:
+    0 8px 18px rgba(40, 100, 180, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.18);
   flex: 0 0 auto;
 }
 
@@ -8360,14 +8438,44 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  flex: 1 1 auto;
+}
+
+.tm-update-banner-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
 }
 
 .tm-update-banner-title {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 0.98rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--tm-heading);
+  line-height: 1.25;
+}
+
+.tm-update-banner-version-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(150, 210, 255, 0.28);
+  background: rgba(8, 16, 34, 0.45);
+  color: var(--tm-accent);
+  font-size: 0.72rem;
   font-weight: 650;
-  color: var(--tm-text);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.tm-update-banner-version-arrow {
+  color: var(--tm-text-dim);
+  font-weight: 500;
 }
 
 .tm-update-banner-meta,
@@ -8377,39 +8485,233 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 .tm-update-banner-error {
   margin: 0;
   font-size: 0.8rem;
-  line-height: 1.4;
-  color: var(--tm-muted);
+  line-height: 1.45;
+  color: var(--tm-text-muted);
 }
 
 .tm-update-banner-notes {
   white-space: pre-wrap;
-  max-height: 4.5em;
+  max-height: 3.2em;
   overflow: auto;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(6, 12, 28, 0.35);
+  border: 1px solid rgba(140, 190, 255, 0.12);
+  color: var(--tm-text-dim);
+  font-size: 0.74rem;
 }
 
 .tm-update-banner-warning {
-  color: #ffd59a;
+  color: var(--tm-warning-text);
 }
 
 .tm-update-banner-error {
-  color: #ffd0d8;
+  color: var(--tm-danger-text);
+}
+
+.tm-update-banner-progress-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+  max-width: 360px;
+}
+
+.tm-update-banner-progress {
+  color: #c8e4ff;
+  font-weight: 600;
+  font-size: 0.76rem;
+}
+
+.tm-update-banner-progress-track {
+  height: 5px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(8, 16, 34, 0.55);
+  border: 1px solid rgba(150, 200, 255, 0.16);
+}
+
+.tm-update-banner-progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--tm-accent), var(--tm-accent-3));
+  box-shadow: 0 0 12px rgba(121, 183, 255, 0.45);
+  transition: width 160ms ease;
+}
+
+.tm-update-banner-progress-fill--indeterminate {
+  width: 38%;
+  animation: tm-update-banner-progress-slide 1.1s ease-in-out infinite;
 }
 
 .tm-update-banner-actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
   flex: 0 0 auto;
 }
 
+.tm-update-banner-install {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 11px;
+  border: 1px solid rgba(190, 230, 255, 0.72);
+  background: linear-gradient(
+    130deg,
+    rgba(98, 168, 255, 0.88),
+    rgba(72, 198, 188, 0.62) 52%,
+    rgba(120, 130, 255, 0.72)
+  );
+  color: #f8fbff;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow:
+    0 10px 24px rgba(40, 110, 200, 0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+  transition:
+    transform var(--tm-fast) ease,
+    box-shadow var(--tm-fast) ease,
+    border-color var(--tm-fast) ease,
+    filter var(--tm-fast) ease;
+}
+
+.tm-update-banner-install:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(200, 235, 255, 0.9);
+  box-shadow: var(--tm-shadow-glow);
+  filter: brightness(1.05);
+}
+
+.tm-update-banner-install:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.tm-update-banner-later {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--tm-text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    color var(--tm-fast) ease,
+    background var(--tm-fast) ease,
+    border-color var(--tm-fast) ease;
+}
+
+.tm-update-banner-later:hover:not(:disabled) {
+  color: var(--tm-text);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(160, 200, 255, 0.16);
+}
+
+.tm-update-banner-later:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tm-update-banner-spin {
+  animation: tm-progress-spin 0.9s linear infinite;
+}
+
+@keyframes tm-update-banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes tm-update-banner-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(280%);
+  }
+}
+
 [data-theme="light"] .tm-update-banner {
-  border-color: rgba(40, 110, 180, 0.2);
-  background: rgba(255, 255, 255, 0.82);
+  border-color: rgba(50, 120, 190, 0.28);
+  background: linear-gradient(
+    125deg,
+    rgba(225, 240, 255, 0.98) 0%,
+    rgba(248, 251, 255, 0.99) 48%,
+    rgba(236, 246, 255, 0.98) 100%
+  );
+  box-shadow:
+    0 10px 22px rgba(40, 80, 140, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.65) inset;
 }
 
 [data-theme="light"] .tm-update-banner-icon {
-  background: rgba(40, 120, 200, 0.1);
+  border-color: rgba(70, 140, 210, 0.28);
+  background: linear-gradient(
+    145deg,
+    rgba(120, 180, 240, 0.28),
+    rgba(90, 150, 220, 0.1)
+  );
+  color: #1f5f9e;
+  box-shadow: 0 6px 14px rgba(60, 120, 190, 0.12);
+}
+
+[data-theme="light"] .tm-update-banner-version-pill {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(70, 140, 210, 0.22);
   color: #2a6fad;
+}
+
+[data-theme="light"] .tm-update-banner-notes {
+  background: rgba(255, 255, 255, 0.55);
+  border-color: rgba(70, 140, 210, 0.14);
+  color: #4a6488;
+}
+
+[data-theme="light"] .tm-update-banner-progress-track {
+  background: rgba(40, 90, 150, 0.08);
+  border-color: rgba(70, 140, 210, 0.16);
+}
+
+[data-theme="light"] .tm-update-banner-progress {
+  color: #2a6fad;
+}
+
+[data-theme="light"] .tm-update-banner-install {
+  color: #0b1a33;
+  border-color: rgba(70, 140, 210, 0.45);
+  background: linear-gradient(
+    130deg,
+    rgba(150, 200, 255, 0.85),
+    rgba(170, 235, 220, 0.55) 55%,
+    rgba(190, 180, 255, 0.55)
+  );
+  box-shadow: 0 8px 18px rgba(70, 130, 200, 0.18);
+}
+
+[data-theme="light"] .tm-update-banner-later {
+  color: #5a7194;
+}
+
+[data-theme="light"] .tm-update-banner-later:hover:not(:disabled) {
+  color: #1e3558;
+  background: rgba(40, 100, 180, 0.06);
+  border-color: rgba(70, 140, 210, 0.18);
 }
 
 [data-theme="light"] .tm-update-banner-warning {

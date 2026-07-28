@@ -1227,13 +1227,6 @@ function App() {
         options={shellBackgroundOptions}
         opacity={appSettings.appBackgroundOpacity}
       />
-      {availableUpdate && !updateBannerDismissed && !needsOnboarding ? (
-        <AppUpdateBanner
-          update={availableUpdate}
-          operationRunning={isRunning}
-          onDismiss={() => setUpdateBannerDismissed(true)}
-        />
-      ) : null}
       {isRunning ? (
         <div
           className={`tm-progress-overlay tm-progress-state-${overlayState}`}
@@ -1352,30 +1345,39 @@ function App() {
           onCopyrightClick={() => setIsCopyrightOpen(true)}
         />
 
-        <section
-          className={`tm-panel tm-glass-card${
-            isIconEditor ? " tm-panel-icon-editor" : ""
-          }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
-            isGeodeButtons ? " tm-panel-geode" : ""
-          }`}
-        >
-          <GlassFrost />
-          <div className="tm-panel-body">{toolPanel}</div>
-
-          {showRunAction ? (
-            <div className="tm-tool-actions">
-              <button
-                type="button"
-                className="tm-tool-run-btn"
-                onClick={executeSelectedOperation}
-                disabled={isRunning}
-              >
-                <Sparkles size={16} />
-                {isRunning ? t("tools:common.running") : t("tools:common.runOperation")}
-              </button>
-            </div>
+        <div className="tm-main-column">
+          {availableUpdate && !updateBannerDismissed ? (
+            <AppUpdateBanner
+              update={availableUpdate}
+              operationRunning={isRunning}
+              onDismiss={() => setUpdateBannerDismissed(true)}
+            />
           ) : null}
-        </section>
+          <section
+            className={`tm-panel tm-glass-card${
+              isIconEditor ? " tm-panel-icon-editor" : ""
+            }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
+              isGeodeButtons ? " tm-panel-geode" : ""
+            }`}
+          >
+            <GlassFrost />
+            <div className="tm-panel-body">{toolPanel}</div>
+
+            {showRunAction ? (
+              <div className="tm-tool-actions">
+                <button
+                  type="button"
+                  className="tm-tool-run-btn"
+                  onClick={executeSelectedOperation}
+                  disabled={isRunning}
+                >
+                  <Sparkles size={16} />
+                  {isRunning ? t("tools:common.running") : t("tools:common.runOperation")}
+                </button>
+              </div>
+            ) : null}
+          </section>
+        </div>
 
         {showOperationAndReport ? (
           <section

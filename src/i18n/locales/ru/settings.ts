@@ -87,9 +87,9 @@ const settings: AppLocaleResources["settings"] = {
     installing: "Загрузка и установка…",
     downloading: "Загрузка обновления… {{percent}}%",
     installAndRestart: "Установить и перезапустить",
-    availableTitle: "Доступно обновление {{version}}",
+    availableTitle: "Доступно обновление",
     availableMeta:
-      "У вас v{{current}}. Перезапуск установит обновление.",
+      "Установите и перезапустите, чтобы перейти с v{{current}} на v{{version}}.",
     waitForOperation:
       "Дождитесь завершения текущей операции перед установкой.",
     later: "Позже",

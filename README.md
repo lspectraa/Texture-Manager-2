@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="branding/tpm2%20icon.svg" alt="Texture Manager 2" width="128" />
+</p>
+
 # Texture Manager 2
 
 **Geometry Dash texture tooling** — edit icons, split and merge sheets, add glow, build Geode-style buttons, convert packs between game versions, and more.
