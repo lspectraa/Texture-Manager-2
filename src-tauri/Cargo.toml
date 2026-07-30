@@ -1,6 +1,6 @@
 [package]
 name = "texture-manager-2"
-version = "0.1.0"
+version = "0.1.1"
 description = "Geometry Dash texture tooling remake"
 authors = ["Spectra"]
 license = "GPL-3.0-or-later"
