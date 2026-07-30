@@ -561,6 +561,88 @@ pub fn icon_editor_extract_frames(
     Ok(extracted)
 }
 
+/// Load gamesheet frame sprites as RGBA images (same atlas resolution as the Icon Editor).
+///
+/// Used by Glow Maker / Particle Editor custom-icon previews so PNG lookup and frame
+/// crops match the path that already works in the Icon Editor.
+pub(crate) fn icon_editor_load_sheet_sprites(
+    plist_path: &Path,
+) -> Result<(Value, BTreeMap<String, RgbaImage>), AppError> {
+    ensure_existing_user_file(plist_path)?;
+    let plist_root = Value::from_file(plist_path)
+        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+    icon_editor_load_sheet_sprites_from_atlas(plist_path, &atlas_path, plist_root)
+}
+
+/// Like [`icon_editor_load_sheet_sprites`], but crops from a caller-chosen atlas PNG.
+pub(crate) fn icon_editor_load_sheet_sprites_from_atlas(
+    plist_path: &Path,
+    atlas_path: &Path,
+    plist_root: Value,
+) -> Result<(Value, BTreeMap<String, RgbaImage>), AppError> {
+    ensure_existing_user_file(plist_path)?;
+    if !atlas_path.is_file() {
+        return Err(AppError::InvalidPath(
+            "icon sheet PNG not found next to the selected plist (same folder / same stem)",
+        ));
+    }
+    let root_dict = plist_root
+        .as_dictionary()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let frames_dict = frames_dictionary(root_dict)?;
+    if frames_dict.is_empty() {
+        return Err(AppError::InvalidOperation(
+            "icon sheet has no sprite frames to preview",
+        ));
+    }
+    let atlas_rgba = image::open(atlas_path)
+        .map_err(|err| {
+            AppError::ParseError(format!(
+                "failed to open icon sheet PNG `{}`: {err}",
+                atlas_path.display()
+            ))
+        })?
+        .to_rgba8();
+
+    let mut sprites: BTreeMap<String, RgbaImage> = BTreeMap::new();
+    for (frame_name, frame_value) in frames_dict {
+        let Some(frame_dict) = frame_value.as_dictionary() else {
+            continue;
+        };
+        let Ok(texture_rect_raw) = get_required_string(frame_dict, "textureRect") else {
+            continue;
+        };
+        let Ok(sprite_size_raw) = get_required_string(frame_dict, "spriteSize") else {
+            continue;
+        };
+        let Ok(texture_rect) = parse_texture_rect(texture_rect_raw) else {
+            continue;
+        };
+        let Ok(sprite_size) = parse_pair_u32(sprite_size_raw) else {
+            continue;
+        };
+        let texture_rotated = frame_dict
+            .get("textureRotated")
+            .and_then(Value::as_boolean)
+            .unwrap_or(false);
+        let sprite =
+            extract_frame_sprite_from_atlas(&atlas_rgba, &texture_rect, sprite_size, texture_rotated)?;
+        sprites.insert(frame_name.clone(), sprite);
+    }
+
+    if sprites.is_empty() {
+        return Err(AppError::InvalidOperation(
+            "icon sheet has no extractable sprite frames to preview",
+        ));
+    }
+
+    Ok((plist_root, sprites))
+}
+
 /// PNG data URL for webview previews of user-picked files outside the asset protocol scope.
 pub fn icon_editor_png_data_url(texture_path: &Path) -> Result<String, AppError> {
     ensure_readable_image_file(texture_path)?;
@@ -1117,11 +1199,20 @@ fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathB
         else {
             continue;
         };
-        let Ok(candidate) = join_under_parent(plist_parent, file_name) else {
+        // Prefer same-folder basename even if metadata includes a relative path.
+        let base_name = Path::new(file_name)
+            .file_name()
+            .and_then(|value| value.to_str())
+            .unwrap_or(file_name);
+        let candidate = plist_parent.join(base_name);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+        let Ok(scoped) = join_under_parent(plist_parent, file_name) else {
             continue;
         };
-        if candidate.exists() {
-            return Ok(candidate);
+        if scoped.is_file() {
+            return Ok(scoped);
         }
     }
 

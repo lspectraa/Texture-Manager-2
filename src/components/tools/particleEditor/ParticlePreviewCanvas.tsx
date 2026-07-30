@@ -56,10 +56,16 @@ export interface ParticlePreviewCanvasProps {
    */
   zoom?: number;
   /**
-   * Controls emitter-attach animation and silhouette drawing.
-   * "static" (default) preserves drag-to-reposition behavior.
-   */
+ * Controls emitter-attach animation and silhouette drawing.
+ * "static" (default) preserves drag-to-reposition behavior.
+ */
   previewMode?: PreviewMode;
+  /**
+   * When true, icon-particle modes (drag, ship scrape, trail, speed burst)
+   * animate along their path. When false (default), the icon stays centered
+   * (ground-centered for scrape modes).
+   */
+  animateIconMovement?: boolean;
   /**
    * Increment this value to reset the emitter (kill all live particles
    * and restart emission from t=0). Useful for oneShot and speedBurst effects.
@@ -357,12 +363,16 @@ function originYForGroundContact(
 /**
  * Compute the scene-space path point for the current frame (ground line / sweep).
  * Callers convert ground contact into the Cocos node origin using sprite anchors.
+ *
+ * When `animate` is false, icon-moving modes stay pinned at center (ground Y for
+ * scrape modes) instead of sliding / sweeping.
  */
 function computePathPos(
   mode: PreviewMode,
   t: number,
   w: number,
   h: number,
+  animate: boolean,
 ): { x: number; y: number } {
   const cx = w / 2;
   const cy = h / 2;
@@ -370,14 +380,17 @@ function computePathPos(
 
   switch (mode) {
     case "dragSlide": {
+      if (!animate) return { x: cx, y: groundY };
       const x = cx + Math.sin((t / 4) * Math.PI * 2) * (w * 0.35);
       return { x, y: groundY };
     }
     case "shipScrape": {
+      if (!animate) return { x: cx, y: groundY };
       const x = cx + Math.sin((t / 4) * Math.PI * 2) * (w * 0.35);
       return { x, y: groundY };
     }
     case "trailFollow": {
+      if (!animate) return { x: cx, y: cy };
       const x = cx + Math.sin((t / 3) * Math.PI * 2) * (w * 0.38);
       return { x, y: cy };
     }
@@ -386,6 +399,7 @@ function computePathPos(
     case "portalAura":
       return { x: cx, y: cy };
     case "speedBurst": {
+      if (!animate) return { x: cx, y: cy };
       const SWEEP_S = 1.4;
       const PERIOD = SWEEP_S + 0.4;
       const phase = t % PERIOD;
@@ -599,6 +613,7 @@ export function ParticlePreviewCanvas({
   background,
   zoom = 1,
   previewMode = "static",
+  animateIconMovement = false,
   resetKey,
   usePlistSourcePosition = false,
   previewIconSrc = null,
@@ -628,10 +643,12 @@ export function ParticlePreviewCanvas({
   const runningRef = useRef(running);
   const backgroundRef = useRef(background);
   const previewModeRef = useRef(previewMode);
+  const animateIconMovementRef = useRef(animateIconMovement);
   const zoomRef = useRef(zoom);
   runningRef.current = running;
   backgroundRef.current = background;
   previewModeRef.current = previewMode;
+  animateIconMovementRef.current = animateIconMovement;
   zoomRef.current = zoom;
 
   useEffect(() => {
@@ -843,7 +860,13 @@ export function ParticlePreviewCanvas({
         }
 
         if (mode !== "static") {
-          const path = computePathPos(mode, t, w, h);
+          const path = computePathPos(
+            mode,
+            t,
+            w,
+            h,
+            animateIconMovementRef.current,
+          );
           const origin = emitterOriginFromPath(
             mode,
             path,

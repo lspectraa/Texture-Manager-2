@@ -577,12 +577,19 @@ async fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<Str
 async fn glow_maker_preview_cmd(
     options: GlowMakerOptions,
     refresh: Option<bool>,
+    icon_plist_path: Option<String>,
     game_files: tauri::State<'_, GameFilesState>,
 ) -> Result<String, String> {
     let layout = game_files.snapshot();
     let refresh = refresh.unwrap_or(false);
     run_blocking(move || {
-        glow_maker_preview_data_url(&layout, &options, refresh).map_err(|err| err.to_string())
+        glow_maker_preview_data_url(
+            &layout,
+            &options,
+            refresh,
+            icon_plist_path.as_deref(),
+        )
+        .map_err(|err| err.to_string())
     })
     .await
 }
@@ -591,13 +598,19 @@ async fn glow_maker_preview_cmd(
 async fn particle_editor_preview_icon_cmd(
     refresh: Option<bool>,
     kind: Option<String>,
+    icon_plist_path: Option<String>,
     game_files: tauri::State<'_, GameFilesState>,
 ) -> Result<ParticlePreviewSprite, String> {
     let layout = game_files.snapshot();
     let refresh = refresh.unwrap_or(false);
     run_blocking(move || {
-        random_uhd_icon_preview_data_url(&layout, refresh, kind.as_deref())
-            .map_err(|err| err.to_string())
+        random_uhd_icon_preview_data_url(
+            &layout,
+            refresh,
+            kind.as_deref(),
+            icon_plist_path.as_deref(),
+        )
+        .map_err(|err| err.to_string())
     })
     .await
 }

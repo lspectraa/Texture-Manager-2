@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Eye, Palette, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Eye, FileImage, Palette, RefreshCw, SlidersHorizontal, X } from "lucide-react";
+import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { getGlowMakerPreviewDataUrl } from "../../services/tauriGlowMaker";
+import { isTauriRuntime } from "../../services/tauriOperations";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -48,8 +50,9 @@ export function GlowMakerToolPanel({
   const { t } = useTranslation("tools");
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(true);
-  const [previewError, setPreviewError] = useState(false);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
+  const [customIconPlistPath, setCustomIconPlistPath] = useState("");
   const previewGenRef = useRef(0);
   const refreshPendingRef = useRef(false);
 
@@ -59,7 +62,7 @@ export function GlowMakerToolPanel({
     const refresh = refreshPendingRef.current;
     refreshPendingRef.current = false;
     setPreviewLoading(true);
-    setPreviewError(false);
+    setPreviewError(null);
 
     const timer = window.setTimeout(() => {
       getGlowMakerPreviewDataUrl({
@@ -68,19 +71,25 @@ export function GlowMakerToolPanel({
         rainbowGlow,
         compositeLayers,
         refresh,
+        iconPlistPath: customIconPlistPath || null,
       })
-        .then((url) => {
+        .then((result) => {
           if (!alive || gen !== previewGenRef.current) return;
-          if (url) {
-            setPreviewSrc(url);
-            setPreviewError(false);
+          if (result && "dataUrl" in result) {
+            setPreviewSrc(result.dataUrl);
+            setPreviewError(null);
+          } else if (result && "error" in result) {
+            setPreviewSrc(null);
+            setPreviewError(result.error);
           } else {
-            setPreviewError(true);
+            setPreviewSrc(null);
+            setPreviewError(t("glowMaker.previewError"));
           }
         })
         .catch(() => {
           if (!alive || gen !== previewGenRef.current) return;
-          setPreviewError(true);
+          setPreviewSrc(null);
+          setPreviewError(t("glowMaker.previewError"));
         })
         .finally(() => {
           if (!alive || gen !== previewGenRef.current) return;
@@ -92,12 +101,50 @@ export function GlowMakerToolPanel({
       alive = false;
       window.clearTimeout(timer);
     };
-  }, [thickness, tolerance, rainbowGlow, compositeLayers, previewRefreshKey]);
+  }, [
+    thickness,
+    tolerance,
+    rainbowGlow,
+    compositeLayers,
+    previewRefreshKey,
+    customIconPlistPath,
+    t,
+  ]);
 
   const refreshPreviewIcon = (): void => {
+    if (customIconPlistPath) {
+      setPreviewRefreshKey((key) => key + 1);
+      return;
+    }
     refreshPendingRef.current = true;
     setPreviewRefreshKey((key) => key + 1);
   };
+
+  const pickCustomIcon = async (): Promise<void> => {
+    if (!isTauriRuntime()) return;
+    try {
+      const selected = await open({
+        title: t("glowMaker.customIconDialogTitle"),
+        filters: [
+          { name: t("glowMaker.customIconPlistFilter"), extensions: ["plist"] },
+        ],
+        multiple: false,
+        directory: false,
+      });
+      if (typeof selected !== "string" || !selected.trim()) return;
+      setCustomIconPlistPath(selected);
+    } catch {
+      // Dialog cancelled / unavailable — keep current icon.
+    }
+  };
+
+  const clearCustomIcon = (): void => {
+    setCustomIconPlistPath("");
+    refreshPendingRef.current = true;
+    setPreviewRefreshKey((key) => key + 1);
+  };
+
+  const hasCustomIcon = Boolean(customIconPlistPath.trim());
 
   return (
     <ToolPage accent="cyan">
@@ -159,15 +206,44 @@ export function GlowMakerToolPanel({
           className={`tm-glow-preview${previewLoading ? " tm-glow-preview--loading" : ""}`}
           aria-busy={previewLoading}
         >
-          <button
-            type="button"
-            className="tm-glow-preview-refresh"
-            onClick={refreshPreviewIcon}
-            disabled={previewLoading}
-          >
-            <RefreshCw size={14} aria-hidden />
-            {t("glowMaker.refreshPreview")}
-          </button>
+          <div className="tm-glow-preview-actions">
+            <button
+              type="button"
+              className="tm-glow-preview-action"
+              onClick={refreshPreviewIcon}
+              disabled={previewLoading || hasCustomIcon}
+              title={
+                hasCustomIcon
+                  ? t("glowMaker.refreshPreviewDisabledCustom")
+                  : undefined
+              }
+            >
+              <RefreshCw size={14} aria-hidden />
+              {t("glowMaker.refreshPreview")}
+            </button>
+            <button
+              type="button"
+              className="tm-glow-preview-action"
+              onClick={() => void pickCustomIcon()}
+              disabled={previewLoading}
+              title={t("glowMaker.customIconHint")}
+            >
+              <FileImage size={14} aria-hidden />
+              {t("glowMaker.customIcon")}
+            </button>
+            {hasCustomIcon ? (
+              <button
+                type="button"
+                className="tm-glow-preview-action"
+                onClick={clearCustomIcon}
+                disabled={previewLoading}
+                title={t("glowMaker.clearCustomIcon")}
+              >
+                <X size={14} aria-hidden />
+                {t("glowMaker.clearCustomIcon")}
+              </button>
+            ) : null}
+          </div>
           {previewSrc && !previewError ? (
             <img
               className="tm-glow-preview-thumb"
@@ -177,7 +253,7 @@ export function GlowMakerToolPanel({
           ) : (
             <span className="tm-glow-preview-status">
               {previewError
-                ? t("glowMaker.previewError")
+                ? previewError
                 : t("glowMaker.previewLoading")}
             </span>
           )}

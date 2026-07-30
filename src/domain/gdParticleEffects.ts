@@ -19,6 +19,26 @@ export type PreviewMode =
   | "ambientPinned" // Static/ambient emitter (starFall spawns from top)
   | "static";       // Manual drag emitter; user repositions freely
 
+/** True when the preview path animates an icon (vs already pinned / manual). */
+export function previewModeAnimatesIcon(mode: PreviewMode): boolean {
+  switch (mode) {
+    case "dragSlide":
+    case "shipScrape":
+    case "trailFollow":
+    case "speedBurst":
+      return true;
+    case "oneShot":
+    case "portalAura":
+    case "ambientPinned":
+    case "static":
+      return false;
+    default: {
+      const _exhaustive: never = mode;
+      return _exhaustive;
+    }
+  }
+}
+
 /** Gameplay group for catalog organization and UI grouping. */
 export type EffectGroup =
   | "playerTrails"
@@ -68,6 +88,35 @@ export interface GDParticleEffect {
    * would be misleading.
    */
   attachSprite?: EffectAttachSprite;
+}
+
+/**
+ * True when the preview draws a selectable player/icon silhouette (New icon /
+ * Custom icon apply). Attach-only effects (portals, pads, pickups) are excluded.
+ */
+export function effectUsesCustomizablePreviewIcon(
+  effect: GDParticleEffect | null,
+): boolean {
+  if (!effect) {
+    return false;
+  }
+  switch (effect.previewMode) {
+    case "dragSlide":
+    case "shipScrape":
+    case "speedBurst":
+      return true;
+    case "trailFollow":
+      return effect.attachSprite == null;
+    case "oneShot":
+    case "portalAura":
+    case "ambientPinned":
+    case "static":
+      return false;
+    default: {
+      const _exhaustive: never = effect.previewMode;
+      return _exhaustive;
+    }
+  }
 }
 
 /** Object gamesheet holding portals, speed pads, and pickups. */

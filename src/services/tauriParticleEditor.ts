@@ -78,23 +78,33 @@ export const loadParticleEditorTexture = async (
   invoke<string>("particle_editor_load_texture", { path });
 
 /**
- * Random eligible UHD icon from GD Resources/icons (no glow), for preview silhouettes.
+ * Eligible UHD icon from GD Resources/icons (no glow), for preview silhouettes.
  *
  * Pass `kind: "ship"` to restrict the pool to ship sheets (ship-drag effects).
+ * Pass `iconPlistPath` to load a specific icon gamesheet instead of a random pick.
  * Includes the Cocos/node origin (`anchorX/Y`) inside the image.
  */
 export const getParticlePreviewIconDataUrl = async (
   refresh = false,
   kind?: "ship" | null,
+  iconPlistPath?: string | null,
 ): Promise<ParticlePreviewSprite | null> => {
   if (!isTauriRuntime()) {
     return null;
   }
   try {
-    return await invoke<ParticlePreviewSprite>("particle_editor_preview_icon_cmd", {
+    const path = iconPlistPath?.trim() || null;
+    const payload: Record<string, unknown> = {
       refresh,
-      kind: kind === "ship" ? "ship" : null,
-    });
+      kind: path ? null : kind === "ship" ? "ship" : null,
+    };
+    if (path) {
+      payload.iconPlistPath = path;
+    }
+    return await invoke<ParticlePreviewSprite>(
+      "particle_editor_preview_icon_cmd",
+      payload,
+    );
   } catch {
     return null;
   }

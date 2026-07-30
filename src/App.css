@@ -682,41 +682,103 @@ body {
   --tm-sidebar-group-head-height: 22px;
   --tm-shell-interaction-gutter: 8px;
   --tm-sidebar-pad-inline: calc(12px + var(--tm-shell-interaction-gutter));
-  --tm-sidebar-copyright-slot: calc((2 * var(--tm-nav-btn-block-height)) + 20px);
+  /* Visual thumb width (::-webkit-scrollbar). */
+  --tm-sidebar-scrollbar-size: 8px;
+  /* Space reserved by scrollbar-gutter: stable — keep footer in sync. */
+  --tm-sidebar-scrollbar-gutter: 10px;
   position: relative;
   min-height: 0;
   height: 100%;
   padding: 0;
   overflow: visible;
-  scrollbar-gutter: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--tm-scrollbar) transparent;
+}
+
+/*
+ * Clips nav scroll + footer to the glass shape. Frost stays a sibling of this
+ * node so overflow here does not disable WebView2 backdrop-filter.
+ */
+.tm-sidebar-chrome {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+/* Height container only while expanded — pin cue is for the full-width footer. */
+.tm-sidebar:not(.tm-sidebar--collapsed) {
+  container-type: size;
+  container-name: tm-sidebar;
+}
+
+@property --tm-sidebar-scrollbar-alpha {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
 }
 
 .tm-sidebar-scroll {
-  height: 100%;
+  flex: 1 1 auto;
   min-height: 0;
-  padding: 14px var(--tm-sidebar-pad-inline) calc(12px + var(--tm-sidebar-copyright-slot));
+  height: auto;
+  padding: 14px var(--tm-sidebar-pad-inline) 12px;
   overflow-x: hidden;
   overflow-y: auto;
-  border-radius: inherit;
+  overscroll-behavior: contain;
   scrollbar-gutter: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--tm-scrollbar) transparent;
+  --tm-sidebar-scrollbar-alpha: 0;
+  scrollbar-color: color-mix(
+      in srgb,
+      var(--tm-scrollbar) calc(var(--tm-sidebar-scrollbar-alpha) * 100%),
+      transparent
+    )
+    transparent;
+  transition: --tm-sidebar-scrollbar-alpha 360ms ease;
   box-sizing: border-box;
 }
 
 .tm-sidebar-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: var(--tm-sidebar-scrollbar-size);
 }
 
 .tm-sidebar-scroll::-webkit-scrollbar-track {
   background: transparent;
+  margin-block: 8px;
 }
 
 .tm-sidebar-scroll::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: var(--tm-scrollbar);
+  border: 2px solid transparent;
+  background: color-mix(
+    in srgb,
+    var(--tm-scrollbar) calc(var(--tm-sidebar-scrollbar-alpha) * 100%),
+    transparent
+  );
+  background-clip: padding-box;
+}
+
+/* Show scrollbar only while the sidebar is hovered / focused. */
+.tm-sidebar-chrome:hover .tm-sidebar-scroll,
+.tm-sidebar-chrome:focus-within .tm-sidebar-scroll,
+.tm-sidebar-scroll:hover,
+.tm-sidebar-scroll:focus-within {
+  --tm-sidebar-scrollbar-alpha: 1;
+}
+
+.tm-sidebar-chrome:hover .tm-sidebar-scroll:hover::-webkit-scrollbar-thumb:hover,
+.tm-sidebar-scroll:hover::-webkit-scrollbar-thumb:hover {
+  background: color-mix(
+    in srgb,
+    var(--tm-scrollbar-strong) calc(var(--tm-sidebar-scrollbar-alpha) * 100%),
+    transparent
+  );
+  background-clip: padding-box;
 }
 
 /*
@@ -724,7 +786,6 @@ body {
  * bright 1px fringe in the padding gap. Keep radius only on the inner side.
  */
 .tm-sidebar.tm-glass-card {
-  scrollbar-gutter: auto;
   margin-left: -12px;
   width: calc(100% + 12px);
   max-width: none;
@@ -752,6 +813,7 @@ body {
   grid-auto-rows: auto;
   row-gap: 12px;
   align-content: start;
+  scrollbar-gutter: stable;
 }
 
 .tm-sidebar:not(.tm-sidebar--collapsed) .tm-nav-btn {
@@ -1359,26 +1421,31 @@ body {
 }
 
 .tm-sidebar-footer {
-  position: absolute;
-  bottom: 12px;
+  position: relative;
   z-index: 2;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
   box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 4px var(--tm-sidebar-pad-inline) 12px;
 }
 
-/* Win over `.tm-glass-card > * { position: relative }` so the footer stays pinned. */
-.tm-sidebar.tm-glass-card > .tm-sidebar-footer {
-  position: absolute;
-  z-index: 2;
-}
-
+/* Match .tm-sidebar-scroll's scrollbar-gutter: stable so footer buttons
+   share the same content width as the nav list. */
 .tm-sidebar:not(.tm-sidebar--collapsed) .tm-sidebar-footer {
-  left: var(--tm-sidebar-pad-inline);
-  right: var(--tm-sidebar-pad-inline);
-  width: calc(100% - 4px - (2 * var(--tm-sidebar-pad-inline)));
-  max-width: calc(100% - 4px - (2 * var(--tm-sidebar-pad-inline)));
+  padding-inline-end: calc(
+    var(--tm-sidebar-pad-inline) + var(--tm-sidebar-scrollbar-gutter)
+  );
+}
+
+.tm-sidebar:not(.tm-sidebar--collapsed) .tm-sidebar-footer .tm-sidebar-settings,
+.tm-sidebar:not(.tm-sidebar--collapsed) .tm-sidebar-footer .tm-sidebar-copyright {
+  width: calc(100% - 4px);
+  max-width: calc(100% - 4px);
   margin-inline: 2px;
 }
 
@@ -1387,9 +1454,6 @@ body {
   /* Keep position:relative from .tm-nav-btn so each ::before rail is
      scoped to its own button (static would bind both rails to the footer). */
   position: relative;
-  width: 100%;
-  max-width: 100%;
-  margin-inline: 0;
   left: auto;
   right: auto;
   height: var(--tm-nav-btn-block-height, 50px);
@@ -1440,11 +1504,8 @@ body {
 
 .tm-sidebar--collapsed .tm-sidebar-footer,
 .tm-sidebar--animating.tm-sidebar--collapsed .tm-sidebar-footer {
-  left: calc(var(--tm-sidebar-pad-inline) + 2px);
-  right: auto;
-  width: auto;
-  max-width: none;
-  margin-inline: 0;
+  align-items: flex-start;
+  padding-inline: var(--tm-sidebar-pad-inline);
 }
 
 
@@ -1509,6 +1570,8 @@ body {
 .tm-panel-body > .tm-tool-page {
   width: 100%;
   min-height: 100%;
+  /* Prevent short windows from flex-shrinking home and clipping the hero. */
+  flex-shrink: 0;
 }
 
 .tm-panel-icon-editor .tm-panel-body > .tm-icon-editor {
@@ -2162,6 +2225,8 @@ body {
   gap: 28px;
   width: 100%;
   padding: 4px 2px 12px;
+  container-type: inline-size;
+  container-name: tm-home;
 }
 
 .tm-panel.tm-panel-home,
@@ -3015,6 +3080,8 @@ body {
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 20px;
   align-items: center;
+  flex-shrink: 0;
+  min-height: min-content;
   padding: 22px 24px;
   border-radius: var(--tm-radius-md);
   border: 1px solid var(--tm-border-soft);
@@ -3065,7 +3132,8 @@ body {
 
 .tm-home-title {
   margin: 0 0 10px;
-  font-size: clamp(1.55rem, 2.4vw, 2rem);
+  /* Size from the panel container, not the viewport — avoids early shrink under DPI scale. */
+  font-size: clamp(1.55rem, 1.35rem + 1.6cqw, 2rem);
   letter-spacing: -0.03em;
   line-height: 1.15;
   color: var(--tm-heading);
@@ -3536,11 +3604,20 @@ body {
   color: var(--tm-text-dim);
 }
 
-.tm-glow-preview-refresh {
+.tm-glow-preview-actions {
   position: absolute;
   top: 10px;
   right: 10px;
   z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  max-width: calc(100% - 20px);
+}
+
+.tm-glow-preview-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3563,14 +3640,14 @@ body {
     opacity var(--tm-fast) ease;
 }
 
-.tm-glow-preview-refresh:hover:not(:disabled) {
-  border-color: rgba(140, 230, 245, 0.52);
+.tm-glow-preview-action:hover:not(:disabled) {
+  border-color: rgba(120, 210, 230, 0.55);
   background:
-    linear-gradient(155deg, rgba(72, 190, 210, 0.3), rgba(72, 190, 210, 0.12)),
+    linear-gradient(155deg, rgba(72, 190, 210, 0.32), rgba(72, 190, 210, 0.12)),
     rgba(10, 18, 40, 0.9);
 }
 
-.tm-glow-preview-refresh:disabled {
+.tm-glow-preview-action:disabled {
   opacity: 0.55;
   cursor: default;
 }
@@ -6445,7 +6522,9 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   box-shadow: 0 0 0 2px rgba(121, 183, 255, 0.38);
 }
 
-@media (max-width: 1320px) {
+/* Drop the report column when the shell is genuinely tight — raised past
+   1320 so 125% DPI on common 1080p/1440p windows doesn't compact too early. */
+@media (max-width: 1500px) {
   .tm-layout {
     --tm-layout-nav-width: 252px;
     grid-template-columns: var(--tm-layout-nav-width) minmax(0, 1fr);
@@ -6468,14 +6547,6 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     min-height: var(--tm-shell-rail-width);
   }
 
-  .tm-home-card-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .tm-home-card-grid-featured {
-    grid-template-columns: 1fr;
-  }
-
   .tm-geode-workspace {
     grid-template-columns: 1fr;
   }
@@ -6486,6 +6557,58 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     overflow: visible;
   }
 }
+
+/*
+ * Pin cue when the sidebar is short enough that the nav list scrolls —
+ * keyed to sidebar height, not viewport width.
+ */
+@container tm-sidebar (max-height: 980px) {
+  .tm-sidebar-scroll {
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 calc(100% - 18px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      #000 0%,
+      #000 calc(100% - 18px),
+      transparent 100%
+    );
+  }
+
+  .tm-sidebar-footer {
+    padding-top: 12px;
+    box-shadow:
+      0 -14px 20px -14px rgba(2, 8, 22, 0.55),
+      inset 0 1px 0 color-mix(in srgb, var(--tm-border-soft) 70%, transparent);
+  }
+
+  .tm-sidebar-footer::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: calc(var(--tm-sidebar-pad-inline) + 2px);
+    right: calc(
+      var(--tm-sidebar-pad-inline) + var(--tm-sidebar-scrollbar-gutter) + 2px
+    );
+    height: 1px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--tm-border-strong) 55%, transparent) 22%,
+      color-mix(in srgb, var(--tm-border-strong) 55%, transparent) 78%,
+      transparent 100%
+    );
+    pointer-events: none;
+  }
+}
+
+/* Home density keys off the main panel width (see @container tm-panel below),
+   not the viewport — otherwise dropping the report column (which WIDENS the
+   panel) incorrectly also compacted the home grids. */
 
 @media (max-width: 980px) {
   .tm-shell {
@@ -6514,6 +6637,36 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     gap: 22px;
   }
 
+  .tm-tool-section-cols-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .tm-tool-page-header-main {
+    flex-direction: column;
+  }
+
+  .tm-form-row-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .tm-icon-editor-role-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+}
+
+/* Compact home when the home column itself is narrow (independent of shell columns). */
+@container tm-home (max-width: 820px) {
+  .tm-home-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tm-home-card-grid-featured {
+    grid-template-columns: 1fr;
+  }
+}
+
+@container tm-home (max-width: 560px) {
   .tm-home-hero {
     grid-template-columns: 1fr;
     padding: 18px;
@@ -6535,23 +6688,6 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   .tm-home-card-grid-featured {
     grid-template-columns: 1fr;
   }
-
-  .tm-tool-section-cols-2 {
-    grid-template-columns: 1fr;
-  }
-
-  .tm-tool-page-header-main {
-    flex-direction: column;
-  }
-
-  .tm-form-row-2 {
-    grid-template-columns: 1fr;
-  }
-
-  .tm-icon-editor-role-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
 }
 
 /* =============================================================================
@@ -9550,6 +9686,7 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 .tm-translation-quality {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.75rem;
   padding: 0.75rem 0.9rem;
   border: 1px solid color-mix(in srgb, var(--tm-warning, #f5b942) 38%, transparent);
@@ -9558,7 +9695,7 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 }
 
 .tm-translation-quality--banner {
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .tm-translation-quality-copy {
@@ -9942,6 +10079,32 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   align-items: center;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.tm-panel label.tm-pe-icon-move-toggle,
+.tm-pe-stage-transport .tm-pe-icon-move-toggle {
+  /* Override `.tm-panel label` column/margin so it sits on the stage toolbar baseline. */
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  align-self: center;
+  margin: 0 0 0 4px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(140, 170, 210, 0.22);
+  background: rgba(18, 28, 48, 0.55);
+  font-size: 0.75rem;
+  gap: 8px;
+  min-height: 28px;
+  box-sizing: border-box;
+}
+
+.tm-pe-icon-move-toggle:hover {
+  border-color: rgba(140, 170, 210, 0.4);
+}
+
+.tm-pe-icon-move-toggle .tm-tool-toggle-copy {
+  font-size: 0.75rem;
 }
 
 .tm-pe-zoom {

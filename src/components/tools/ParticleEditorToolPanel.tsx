@@ -13,6 +13,8 @@ import {
   ZoomIn,
   ZoomOut,
   RefreshCw,
+  FileImage,
+  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { open, save } from "@tauri-apps/plugin-dialog";
@@ -40,6 +42,8 @@ import {
   detectEffectKind,
   getEffectsByGroup,
   EFFECT_GROUP_ORDER,
+  previewModeAnimatesIcon,
+  effectUsesCustomizablePreviewIcon,
   type EffectGroup,
   type GDParticleEffect,
   type PreviewMode,
@@ -532,6 +536,9 @@ export function ParticleEditorToolPanel() {
   const [showColorVariance, setShowColorVariance] = useState(false);
   const [showAdvancedBlend, setShowAdvancedBlend] = useState(false);
   const [previewIcon, setPreviewIcon] = useState<ParticlePreviewSprite | null>(null);
+  const [customIconPlistPath, setCustomIconPlistPath] = useState<string | null>(null);
+  /** When true, icon-particle preview modes animate along their path. Default: centered. */
+  const [animateIconMovement, setAnimateIconMovement] = useState(false);
   const [attachSpriteAsset, setAttachSpriteAsset] = useState<ParticlePreviewSprite | null>(null);
   const [history, setHistory] = useState<ParticleEditorHistoryState>(() => {
     const present = emptyParticleEditorSnapshot();
@@ -554,6 +561,17 @@ export function ParticleEditorToolPanel() {
   usePlistSourcePositionRef.current = usePlistSourcePosition;
 
   const previewMode: PreviewMode = effectMeta?.previewMode ?? "static";
+  const showsIconMovementToggle = previewModeAnimatesIcon(previewMode);
+  const showsPreviewIconControls = effectUsesCustomizablePreviewIcon(effectMeta);
+  const hasCustomIcon = Boolean(customIconPlistPath?.trim());
+  const customIconPlistPathRef = useRef(customIconPlistPath);
+  customIconPlistPathRef.current = customIconPlistPath;
+
+  useEffect(() => {
+    if (!showsPreviewIconControls && customIconPlistPath) {
+      setCustomIconPlistPath(null);
+    }
+  }, [showsPreviewIconControls, customIconPlistPath]);
   const attachSprite = effectMeta?.attachSprite ?? null;
   const isGravity = config.emitterType === 0;
   const forever = config.duration < 0;
@@ -756,13 +774,14 @@ export function ParticleEditorToolPanel() {
   useEffect(() => {
     let cancelled = false;
     const kind = effectMeta?.defaultIcon === "ship" ? "ship" : null;
-    void getParticlePreviewIconDataUrl(false, kind).then((sprite) => {
+    const path = customIconPlistPath;
+    void getParticlePreviewIconDataUrl(false, kind, path).then((sprite) => {
       if (!cancelled && sprite) setPreviewIcon(sprite);
     });
     return () => {
       cancelled = true;
     };
-  }, [effectMeta?.defaultIcon]);
+  }, [effectMeta?.defaultIcon, customIconPlistPath]);
 
   useEffect(() => {
     if (!attachSprite) {
@@ -789,7 +808,44 @@ export function ParticleEditorToolPanel() {
           : effectMeta?.defaultIcon === "ship"
             ? "ship"
             : null;
-    void getParticlePreviewIconDataUrl(true, kind).then((sprite) => {
+    const path = customIconPlistPathRef.current;
+    // Custom sheet: reloading the same path is a no-op for appearance; skip unless clearing.
+    if (path?.trim()) {
+      void getParticlePreviewIconDataUrl(false, kind, path).then((sprite) => {
+        if (sprite) setPreviewIcon(sprite);
+      });
+      return;
+    }
+    void getParticlePreviewIconDataUrl(true, kind, null).then((sprite) => {
+      if (sprite) setPreviewIcon(sprite);
+    });
+  }, [effectMeta?.defaultIcon]);
+
+  const pickCustomPreviewIcon = useCallback(async () => {
+    if (!isTauriRuntime()) {
+      setError(t("particleEditor.errors.desktopOnlyOpen"));
+      return;
+    }
+    try {
+      const selected = await open({
+        title: t("particleEditor.dialogs.customIconTitle"),
+        filters: [
+          { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
+        ],
+        multiple: false,
+        directory: false,
+      });
+      if (typeof selected !== "string" || !selected.trim()) return;
+      setCustomIconPlistPath(selected);
+    } catch {
+      // Dialog cancelled / unavailable.
+    }
+  }, [t]);
+
+  const clearCustomPreviewIcon = useCallback(() => {
+    setCustomIconPlistPath(null);
+    const kind = effectMeta?.defaultIcon === "ship" ? "ship" : null;
+    void getParticlePreviewIconDataUrl(true, kind, null).then((sprite) => {
       if (sprite) setPreviewIcon(sprite);
     });
   }, [effectMeta?.defaultIcon]);
@@ -1257,17 +1313,64 @@ export function ParticleEditorToolPanel() {
                     <span>{t("particleEditor.stage.restart")}</span>
                   </button>
                 </ParticleToolbarTip>
-                <ParticleToolbarTip label={t("particleEditor.stage.refreshIconTooltip")}>
-                  <button
-                    type="button"
-                    className="tm-icon-editor-toolbar-btn"
-                    onClick={() => refreshPreviewIcon()}
-                    aria-label={t("particleEditor.stage.refreshIcon")}
-                  >
-                    <RefreshCw size={14} aria-hidden />
-                    <span>{t("particleEditor.stage.refreshIcon")}</span>
-                  </button>
-                </ParticleToolbarTip>
+                {showsPreviewIconControls ? (
+                  <>
+                    <ParticleToolbarTip
+                      label={
+                        hasCustomIcon
+                          ? t("particleEditor.stage.refreshIconDisabledCustom")
+                          : t("particleEditor.stage.refreshIconTooltip")
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="tm-icon-editor-toolbar-btn"
+                        onClick={() => refreshPreviewIcon()}
+                        disabled={hasCustomIcon}
+                        aria-label={t("particleEditor.stage.refreshIcon")}
+                      >
+                        <RefreshCw size={14} aria-hidden />
+                        <span>{t("particleEditor.stage.refreshIcon")}</span>
+                      </button>
+                    </ParticleToolbarTip>
+                    <ParticleToolbarTip label={t("particleEditor.stage.customIconTooltip")}>
+                      <button
+                        type="button"
+                        className="tm-icon-editor-toolbar-btn"
+                        onClick={() => void pickCustomPreviewIcon()}
+                        aria-label={t("particleEditor.stage.customIcon")}
+                      >
+                        <FileImage size={14} aria-hidden />
+                        <span>{t("particleEditor.stage.customIcon")}</span>
+                      </button>
+                    </ParticleToolbarTip>
+                    {hasCustomIcon ? (
+                      <ParticleToolbarTip label={t("particleEditor.stage.clearCustomIconTooltip")}>
+                        <button
+                          type="button"
+                          className="tm-icon-editor-toolbar-btn"
+                          onClick={clearCustomPreviewIcon}
+                          aria-label={t("particleEditor.stage.clearCustomIcon")}
+                        >
+                          <X size={14} aria-hidden />
+                          <span>{t("particleEditor.stage.clearCustomIcon")}</span>
+                        </button>
+                      </ParticleToolbarTip>
+                    ) : null}
+                  </>
+                ) : null}
+                {showsIconMovementToggle ? (
+                  <label className="tm-tool-toggle tm-pe-icon-move-toggle">
+                    <input
+                      type="checkbox"
+                      checked={animateIconMovement}
+                      onChange={(event) => setAnimateIconMovement(event.target.checked)}
+                    />
+                    <span className="tm-tool-toggle-copy">
+                      {t("particleEditor.stage.animateIconMovement")}
+                    </span>
+                  </label>
+                ) : null}
               </div>
             </div>
 
@@ -1279,6 +1382,7 @@ export function ParticleEditorToolPanel() {
                 background={background}
                 zoom={zoom}
                 previewMode={previewMode}
+                animateIconMovement={animateIconMovement}
                 resetKey={resetKey}
                 usePlistSourcePosition={usePlistSourcePosition}
                 previewIconSrc={previewIcon?.dataUrl ?? null}
