@@ -4662,6 +4662,8 @@ select:focus-visible {
   backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
   overflow: visible;
+  container-type: inline-size;
+  container-name: tm-icon-editor-top-bar;
 }
 
 .tm-icon-editor-top-bar-track {
@@ -4673,6 +4675,12 @@ select:focus-visible {
   min-width: 0;
   overflow-x: auto;
   scrollbar-width: thin;
+}
+
+/* Single-row mode: row wrappers disappear so groups share one flex line. */
+.tm-icon-editor-top-bar-primary,
+.tm-icon-editor-top-bar-secondary {
+  display: contents;
 }
 
 .tm-app-tooltip {
@@ -5092,6 +5100,59 @@ select:focus-visible {
   min-height: 42px;
   padding: 11px 14px;
   font-size: 0.96rem;
+}
+
+/*
+  When the bar is too narrow for a usable icon-name field (~most of a typical
+  sheet name), stack file/name controls above undo/save/zoom/toggles.
+*/
+@container tm-icon-editor-top-bar (max-width: 1500px) {
+  .tm-icon-editor-top-bar-track {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 8px;
+    overflow-x: visible;
+  }
+
+  .tm-icon-editor-top-bar-primary,
+  .tm-icon-editor-top-bar-secondary {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px 10px;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .tm-icon-editor-top-bar-secondary {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+
+  .tm-icon-editor-toolbar-divider--row-break {
+    display: none;
+  }
+
+  .tm-icon-editor-toolbar-group--file {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .tm-icon-editor-rename {
+    flex: 1 1 auto;
+    min-width: 220px;
+  }
+}
+
+@container tm-icon-editor-top-bar (max-width: 820px) {
+  .tm-icon-editor-top-bar-brand span {
+    display: none;
+  }
+
+  .tm-icon-editor-rename {
+    min-width: 160px;
+  }
 }
 
 .tm-icon-editor-hide-glow {

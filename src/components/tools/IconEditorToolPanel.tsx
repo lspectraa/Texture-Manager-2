@@ -2776,198 +2776,205 @@ export function IconEditorToolPanel() {
     <div className="tm-icon-editor">
       <header className="tm-icon-editor-top-bar">
         <div className="tm-icon-editor-top-bar-track">
-        <div className="tm-icon-editor-top-bar-brand">
-          <Palette size={18} strokeWidth={1.75} />
-          <span>{t("navigation:tools.iconEditor.label")}</span>
-        </div>
-        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-        <div className="tm-icon-editor-toolbar-group tm-icon-editor-toolbar-group--file">
-          <IconEditorToolbarTip label={t("toolbar.reloadTooltip")}>
-            <button
-              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              type="button"
-              aria-label={t("toolbar.reloadAria")}
-              onClick={() => reloadSheet().catch(() => {})}
-              disabled={!sheetInfo || isBusy}
-            >
-              <RefreshCw size={15} aria-hidden />
-            </button>
-          </IconEditorToolbarTip>
-          <IconEditorToolbarTip label={t("toolbar.openTooltip")}>
-            <button
-              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              type="button"
-              aria-label={t("toolbar.openAria")}
-              onClick={() => openSheet().catch(() => {})}
-              disabled={isBusy}
-            >
-              <FolderOpen size={15} aria-hidden />
-            </button>
-          </IconEditorToolbarTip>
-          <div className="tm-icon-editor-rename">
-            <label>
-              <div className="tm-folder-input">
-                <input
-                  value={renameValue}
-                  onChange={(event) => setRenameValue(event.target.value)}
-                  placeholder="icons-hd"
-                />
-                <IconEditorToolbarTip label={t("toolbar.renameTooltip")}>
+          <div className="tm-icon-editor-top-bar-primary">
+            <div className="tm-icon-editor-top-bar-brand">
+              <Palette size={18} strokeWidth={1.75} />
+              <span>{t("navigation:tools.iconEditor.label")}</span>
+            </div>
+            <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+            <div className="tm-icon-editor-toolbar-group tm-icon-editor-toolbar-group--file">
+              <IconEditorToolbarTip label={t("toolbar.reloadTooltip")}>
+                <button
+                  className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                  type="button"
+                  aria-label={t("toolbar.reloadAria")}
+                  onClick={() => reloadSheet().catch(() => {})}
+                  disabled={!sheetInfo || isBusy}
+                >
+                  <RefreshCw size={15} aria-hidden />
+                </button>
+              </IconEditorToolbarTip>
+              <IconEditorToolbarTip label={t("toolbar.openTooltip")}>
+                <button
+                  className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                  type="button"
+                  aria-label={t("toolbar.openAria")}
+                  onClick={() => openSheet().catch(() => {})}
+                  disabled={isBusy}
+                >
+                  <FolderOpen size={15} aria-hidden />
+                </button>
+              </IconEditorToolbarTip>
+              <div className="tm-icon-editor-rename">
+                <label>
+                  <div className="tm-folder-input">
+                    <input
+                      value={renameValue}
+                      onChange={(event) => setRenameValue(event.target.value)}
+                      placeholder="icons-hd"
+                    />
+                    <IconEditorToolbarTip label={t("toolbar.renameTooltip")}>
+                      <button
+                        type="button"
+                        className="tm-icon-editor-toolbar-btn"
+                        aria-label={t("toolbar.renameAria")}
+                        onClick={() => renameSheet().catch(() => {})}
+                        disabled={!sheetInfo || isBusy}
+                      >
+                        <PencilLine size={14} aria-hidden />
+                        {t("common:rename")}
+                      </button>
+                    </IconEditorToolbarTip>
+                    <IconEditorToolbarTip label={t("toolbar.saveCopyTooltip")}>
+                      <button
+                        type="button"
+                        className="tm-icon-editor-toolbar-btn"
+                        aria-label={t("toolbar.saveCopyAria")}
+                        onClick={() => saveCopy().catch(() => {})}
+                        disabled={!canSaveCopy || isBusy}
+                      >
+                        <Copy size={14} aria-hidden />
+                        {t("common:saveCopy")}
+                      </button>
+                    </IconEditorToolbarTip>
+                  </div>
+                </label>
+              </div>
+              <IconEditorToolbarTip label={t("toolbar.downloadTooltip")}>
+                <button
+                  className="tm-icon-editor-toolbar-btn"
+                  type="button"
+                  aria-label={t("toolbar.downloadAria")}
+                  onClick={() => downloadCurrentIconPng().catch(() => {})}
+                  disabled={!sheetInfo || isBusy}
+                >
+                  <Download size={15} aria-hidden />
+                  {t("toolbar.download")}
+                </button>
+              </IconEditorToolbarTip>
+            </div>
+          </div>
+          <div
+            className="tm-icon-editor-toolbar-divider tm-icon-editor-toolbar-divider--row-break"
+            aria-hidden
+          />
+          <div className="tm-icon-editor-top-bar-secondary">
+            <div className="tm-icon-editor-toolbar-group">
+              <IconEditorToolbarTip
+                label={t("toolbar.undoTooltip")}
+                shortcut={t("toolbar.undoShortcut")}
+              >
+                <button
+                  type="button"
+                  className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                  aria-label={`${t("toolbar.undo")} (${t("toolbar.undoShortcut")})`}
+                  onClick={undoEdits}
+                  disabled={!sheetInfo || isBusy || !canUndoEdits}
+                >
+                  <Undo2 size={15} aria-hidden />
+                </button>
+              </IconEditorToolbarTip>
+              <IconEditorToolbarTip
+                label={t("toolbar.redoTooltip")}
+                shortcut={t("toolbar.redoShortcut")}
+              >
+                <button
+                  type="button"
+                  className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                  aria-label={`${t("toolbar.redo")} (${t("toolbar.redoShortcut")})`}
+                  onClick={redoEdits}
+                  disabled={!sheetInfo || isBusy || !canRedoEdits}
+                >
+                  <Redo2 size={15} aria-hidden />
+                </button>
+              </IconEditorToolbarTip>
+            </div>
+            <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+            <div className="tm-icon-editor-toolbar-group">
+              <IconEditorToolbarTip
+                label={saveTooltip}
+                shortcut={sheetInfo && !isBusy ? t("toolbar.saveShortcut") : undefined}
+              >
+                <button
+                  type="button"
+                  className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
+                  aria-label={
+                    sheetInfo && !isBusy
+                      ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
+                      : saveTooltip
+                  }
+                  onClick={() => saveOffsets().catch(() => {})}
+                  disabled={!sheetInfo || isBusy}
+                >
+                  <Save size={15} aria-hidden />
+                  {isBusy ? t("saveStatus.saving") : saveStatusLabel}
+                </button>
+              </IconEditorToolbarTip>
+            </div>
+            <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+            <div className="tm-icon-editor-toolbar-group">
+              <div className="tm-icon-editor-zoom-row">
+                <IconEditorToolbarTip label={t("toolbar.zoomOut")}>
                   <button
                     type="button"
-                    className="tm-icon-editor-toolbar-btn"
-                    aria-label={t("toolbar.renameAria")}
-                    onClick={() => renameSheet().catch(() => {})}
-                    disabled={!sheetInfo || isBusy}
+                    className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                    aria-label={t("toolbar.zoomOut")}
+                    onClick={() => setZoom((value) => clampZoom(value - 0.1))}
                   >
-                    <PencilLine size={14} aria-hidden />
-                    {t("common:rename")}
+                    <ZoomOut size={15} aria-hidden />
                   </button>
                 </IconEditorToolbarTip>
-                <IconEditorToolbarTip label={t("toolbar.saveCopyTooltip")}>
+                <span className="chip">{Math.round(zoom * 100)}%</span>
+                <IconEditorToolbarTip label={t("toolbar.zoomIn")}>
                   <button
                     type="button"
-                    className="tm-icon-editor-toolbar-btn"
-                    aria-label={t("toolbar.saveCopyAria")}
-                    onClick={() => saveCopy().catch(() => {})}
-                    disabled={!canSaveCopy || isBusy}
+                    className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                    aria-label={t("toolbar.zoomIn")}
+                    onClick={() => setZoom((value) => clampZoom(value + 0.1))}
                   >
-                    <Copy size={14} aria-hidden />
-                    {t("common:saveCopy")}
+                    <ZoomIn size={15} aria-hidden />
+                  </button>
+                </IconEditorToolbarTip>
+                <IconEditorToolbarTip
+                  label={t("toolbar.resetZoomTooltip", {
+                    percent: Math.round(autoResolutionZoom * 100),
+                  })}
+                >
+                  <button
+                    type="button"
+                    className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                    aria-label={t("toolbar.resetZoom")}
+                    onClick={() => setZoom(autoResolutionZoom)}
+                  >
+                    <RotateCcw size={15} aria-hidden />
                   </button>
                 </IconEditorToolbarTip>
               </div>
-            </label>
+            </div>
+            <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+            <div className="tm-icon-editor-toolbar-group">
+              <IconEditorToolbarTip label={t("toolbar.hideGlowTooltip")}>
+                <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
+                  <input
+                    type="checkbox"
+                    checked={hideGlow}
+                    onChange={(event) => setHideGlow(event.target.checked)}
+                  />
+                  {t("toolbar.hideGlow")}
+                </label>
+              </IconEditorToolbarTip>
+              <IconEditorToolbarTip label={t("toolbar.hideBorderTooltip")}>
+                <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
+                  <input
+                    type="checkbox"
+                    checked={hideLayerBorders}
+                    onChange={(event) => setHideLayerBorders(event.target.checked)}
+                  />
+                  {t("toolbar.hideBorder")}
+                </label>
+              </IconEditorToolbarTip>
+            </div>
           </div>
-          <IconEditorToolbarTip label={t("toolbar.downloadTooltip")}>
-            <button
-              className="tm-icon-editor-toolbar-btn"
-              type="button"
-              aria-label={t("toolbar.downloadAria")}
-              onClick={() => downloadCurrentIconPng().catch(() => {})}
-              disabled={!sheetInfo || isBusy}
-            >
-              <Download size={15} aria-hidden />
-              {t("toolbar.download")}
-            </button>
-          </IconEditorToolbarTip>
-        </div>
-        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-        <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip
-            label={t("toolbar.undoTooltip")}
-            shortcut={t("toolbar.undoShortcut")}
-          >
-            <button
-              type="button"
-              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              aria-label={`${t("toolbar.undo")} (${t("toolbar.undoShortcut")})`}
-              onClick={undoEdits}
-              disabled={!sheetInfo || isBusy || !canUndoEdits}
-            >
-              <Undo2 size={15} aria-hidden />
-            </button>
-          </IconEditorToolbarTip>
-          <IconEditorToolbarTip
-            label={t("toolbar.redoTooltip")}
-            shortcut={t("toolbar.redoShortcut")}
-          >
-            <button
-              type="button"
-              className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-              aria-label={`${t("toolbar.redo")} (${t("toolbar.redoShortcut")})`}
-              onClick={redoEdits}
-              disabled={!sheetInfo || isBusy || !canRedoEdits}
-            >
-              <Redo2 size={15} aria-hidden />
-            </button>
-          </IconEditorToolbarTip>
-        </div>
-        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-        <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip
-            label={saveTooltip}
-            shortcut={sheetInfo && !isBusy ? t("toolbar.saveShortcut") : undefined}
-          >
-            <button
-              type="button"
-              className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
-              aria-label={
-                sheetInfo && !isBusy
-                  ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
-                  : saveTooltip
-              }
-              onClick={() => saveOffsets().catch(() => {})}
-              disabled={!sheetInfo || isBusy}
-            >
-              <Save size={15} aria-hidden />
-              {isBusy ? t("saveStatus.saving") : saveStatusLabel}
-            </button>
-          </IconEditorToolbarTip>
-        </div>
-        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-        <div className="tm-icon-editor-toolbar-group">
-          <div className="tm-icon-editor-zoom-row">
-            <IconEditorToolbarTip label={t("toolbar.zoomOut")}>
-              <button
-                type="button"
-                className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-                aria-label={t("toolbar.zoomOut")}
-                onClick={() => setZoom((value) => clampZoom(value - 0.1))}
-              >
-                <ZoomOut size={15} aria-hidden />
-              </button>
-            </IconEditorToolbarTip>
-            <span className="chip">{Math.round(zoom * 100)}%</span>
-            <IconEditorToolbarTip label={t("toolbar.zoomIn")}>
-              <button
-                type="button"
-                className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-                aria-label={t("toolbar.zoomIn")}
-                onClick={() => setZoom((value) => clampZoom(value + 0.1))}
-              >
-                <ZoomIn size={15} aria-hidden />
-              </button>
-            </IconEditorToolbarTip>
-            <IconEditorToolbarTip
-              label={t("toolbar.resetZoomTooltip", {
-                percent: Math.round(autoResolutionZoom * 100),
-              })}
-            >
-              <button
-                type="button"
-                className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
-                aria-label={t("toolbar.resetZoom")}
-                onClick={() => setZoom(autoResolutionZoom)}
-              >
-                <RotateCcw size={15} aria-hidden />
-              </button>
-            </IconEditorToolbarTip>
-          </div>
-        </div>
-        <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-        <div className="tm-icon-editor-toolbar-group">
-          <IconEditorToolbarTip label={t("toolbar.hideGlowTooltip")}>
-            <label className="checkbox tm-icon-editor-hide-glow tm-icon-editor-viewport-hud-hide-glow">
-              <input
-                type="checkbox"
-                checked={hideGlow}
-                onChange={(event) => setHideGlow(event.target.checked)}
-              />
-              {t("toolbar.hideGlow")}
-            </label>
-          </IconEditorToolbarTip>
-          <IconEditorToolbarTip label={t("toolbar.hideBorderTooltip")}>
-            <label className="checkbox tm-icon-editor-hide-border tm-icon-editor-viewport-hud-hide-border">
-              <input
-                type="checkbox"
-                checked={hideLayerBorders}
-                onChange={(event) => setHideLayerBorders(event.target.checked)}
-              />
-              {t("toolbar.hideBorder")}
-            </label>
-          </IconEditorToolbarTip>
-        </div>
         </div>
       </header>
       {toolbarError ? (

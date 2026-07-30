@@ -18,7 +18,9 @@ jobs:
           - platform: windows-latest
             args: "--bundles msi"
           - platform: macos-latest
-            args: "--bundles dmg"
+            args: "--target aarch64-apple-darwin --bundles dmg"
+          - platform: macos-latest
+            args: "--target x86_64-apple-darwin --bundles dmg"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v5
@@ -31,6 +33,8 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -54,7 +58,7 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Desktop builds of Texture Manager 2 (Windows MSI + macOS DMG)."
+          releaseBody: "Desktop builds of Texture Manager 2 (Windows MSI + macOS DMG for Apple Silicon and Intel)."
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
