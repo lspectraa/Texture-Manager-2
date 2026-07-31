@@ -1,12 +1,20 @@
 import { useEffect, useRef, useCallback } from "react";
 import { ParticleConfig } from "../../../domain/particleConfig";
-import { type PreviewMode } from "../../../domain/gdParticleEffects";
+import {
+  previewModeAnimatesIcon,
+  type PreviewMode,
+} from "../../../domain/gdParticleEffects";
 import { ParticleEmitter } from "./particleSimulator";
 
 // ─── Background type ──────────────────────────────────────────────────────────
 
 /** Canvas background modes. "gd" uses the bundled Geometry Dash game background. */
 export type ParticleBackground = "checkerboard" | "dark" | "gd";
+
+/** Discrete multipliers for the icon-path treadmill / background scroll. */
+export type IconPathSpeed = 0.5 | 1 | 2 | 3 | 4;
+
+export const ICON_PATH_SPEEDS: readonly IconPathSpeed[] = [0.5, 1, 2, 3, 4];
 
 const GD_BACKGROUND_SRC = "/icon-editor-bg/game-bg-01.png";
 const GD_FLOOR_SRC = "/icon-editor-bg/ground-square-01.png";
@@ -36,6 +44,17 @@ const GD_PARTICLE_CONTENT_SCALE = 2;
 /** Fallback cube edge when no preview icon is loaded (~typical UHD player cube). */
 const FALLBACK_CUBE_SIZE = 120;
 
+/**
+ * Scene pixels/second at icon-path speed 1×. Free particles and the GD background
+ * scroll at this rate so the icon can stay locked while motion is simulated.
+ */
+const BASE_ICON_TRAVEL_SPEED = 280;
+
+/** Preview-icon alpha when the transparent-icon toggle is on. */
+const PREVIEW_ICON_TRANSPARENT_ALPHA = 0.28;
+/** Default preview-icon / attach-sprite alpha. */
+const PREVIEW_ICON_OPAQUE_ALPHA = 0.95;
+
 /** Scene-space Y of the walkable ground line for the current stage height. */
 function groundLineY(sceneHeight: number): number {
   return Math.max(0, sceneHeight - GD_FLOOR_TILE * FLOOR_VISIBLE_FRACTION);
@@ -62,10 +81,20 @@ export interface ParticlePreviewCanvasProps {
   previewMode?: PreviewMode;
   /**
    * When true, icon-particle modes (drag, ship scrape, trail, speed burst)
-   * animate along their path. When false (default), the icon stays centered
-   * (ground-centered for scrape modes).
+   * simulate travel with the icon locked (particles + optional GD bg scroll).
+   * When false (default), the icon stays put and can be dragged.
    */
   animateIconMovement?: boolean;
+  /**
+   * Multiplier for the icon-path treadmill / background scroll speed.
+   * Only applied while `animateIconMovement` is true.
+   */
+  iconPathSpeed?: IconPathSpeed;
+  /**
+   * When true, draw the preview player icon semi-transparent so particles read
+   * more clearly through / over it.
+   */
+  previewIconTransparent?: boolean;
   /**
    * Increment this value to reset the emitter (kill all live particles
    * and restart emission from t=0). Useful for oneShot and speedBurst effects.
@@ -95,8 +124,8 @@ export interface ParticlePreviewCanvasProps {
   /** Cocos node-origin Y within `attachSpriteSrc`. */
   attachSpriteAnchorY?: number;
   /**
-   * Called while the user drags on the canvas in "static" mode to reposition
-   * the emitter. Values are Cocos2d-coordinate offsets from scene center (y-up).
+   * Called while the user drags on the canvas to reposition the emitter.
+   * Values are Cocos2d-coordinate offsets from scene center (y-up).
    */
   onEmitterMove?: (cocos2dX: number, cocos2dY: number) => void;
 }
@@ -175,6 +204,7 @@ function drawCoverImage(
   sourceHeight: number,
   w: number,
   h: number,
+  scrollX = 0,
 ): void {
   if (sourceWidth <= 0 || sourceHeight <= 0) {
     return;
@@ -183,7 +213,20 @@ function drawCoverImage(
   const dw = sourceWidth * scale;
   const dh = sourceHeight * scale;
   // Top-anchored cover (matches icon editor game bg object-position).
-  ctx.drawImage(source, (w - dw) / 2, 0, dw, dh);
+  const baseX = (w - dw) / 2;
+  if (scrollX === 0 || dw <= 0) {
+    ctx.drawImage(source, baseX, 0, dw, dh);
+    return;
+  }
+  // Wrap so the sky scrolls right→left seamlessly under a locked icon.
+  const period = Math.max(dw, w);
+  const offset = ((scrollX % period) + period) % period;
+  for (let x = baseX - offset; x < w; x += period) {
+    ctx.drawImage(source, x, 0, dw, dh);
+  }
+  for (let x = baseX - offset - period; x > -dw; x -= period) {
+    ctx.drawImage(source, x, 0, dw, dh);
+  }
 }
 
 /** Tiled floor strip anchored with its top edge on the ground line. */
@@ -193,18 +236,20 @@ function drawGdFloor(
   w: number,
   h: number,
   floorTopY: number,
+  scrollX = 0,
 ): void {
   const tinted = tintedImage(floor, GD_FLOOR_TINT);
   if (!tinted) {
     return;
   }
+  const tileOffset = ((scrollX % GD_FLOOR_TILE) + GD_FLOOR_TILE) % GD_FLOOR_TILE;
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, floorTopY, w, h - floorTopY);
   ctx.clip();
   ctx.imageSmoothingEnabled = false;
   for (let y = floorTopY; y < h; y += GD_FLOOR_TILE) {
-    for (let x = 0; x < w; x += GD_FLOOR_TILE) {
+    for (let x = -tileOffset; x < w; x += GD_FLOOR_TILE) {
       ctx.drawImage(tinted, x, y, GD_FLOOR_TILE, GD_FLOOR_TILE);
     }
   }
@@ -228,6 +273,7 @@ function drawBackground(
   gdImage: HTMLImageElement | null,
   gdFloor: HTMLImageElement | null,
   floorTopY: number,
+  scrollX = 0,
 ): void {
   switch (mode) {
     case "checkerboard":
@@ -245,7 +291,7 @@ function drawBackground(
     case "gd": {
       const tintedBg = gdImage?.complete ? tintedImage(gdImage, GD_BACKGROUND_TINT) : null;
       if (tintedBg) {
-        drawCoverImage(ctx, tintedBg, tintedBg.width, tintedBg.height, w, h);
+        drawCoverImage(ctx, tintedBg, tintedBg.width, tintedBg.height, w, h, scrollX);
       } else {
         const grad = ctx.createLinearGradient(0, 0, 0, h);
         grad.addColorStop(0, "#1a3a5c");
@@ -254,7 +300,7 @@ function drawBackground(
         ctx.fillRect(0, 0, w, h);
       }
       if (gdFloor?.complete) {
-        drawGdFloor(ctx, gdFloor, w, h, floorTopY);
+        drawGdFloor(ctx, gdFloor, w, h, floorTopY, scrollX);
       }
       break;
     }
@@ -328,16 +374,17 @@ function drawPreviewIconAtOrigin(
   originX: number,
   originY: number,
   anchor: SpriteAnchor | null,
+  alpha = PREVIEW_ICON_OPAQUE_ALPHA,
 ): void {
   if (icon?.complete) {
     const a = anchor ?? centerAnchor(icon);
-    if (drawSpriteAtOrigin(ctx, icon, originX, originY, a)) {
+    if (drawSpriteAtOrigin(ctx, icon, originX, originY, a, alpha)) {
       return;
     }
   }
   // Fallback cube: node origin at center (matches offset-0 player cubes).
   const s = FALLBACK_CUBE_SIZE * 0.85;
-  ctx.globalAlpha = 0.82;
+  ctx.globalAlpha = alpha * 0.86;
   ctx.fillStyle = "#7eb8f7";
   ctx.fillRect(originX - s / 2, originY - s / 2, s, s);
   ctx.fillStyle = "rgba(0,0,0,0.25)";
@@ -358,59 +405,31 @@ function originYForGroundContact(
 }
 
 
-// ─── Preview mode: emitter position animation ─────────────────────────────────
+// ─── Preview mode: emitter position ───────────────────────────────────────────
 
 /**
- * Compute the scene-space path point for the current frame (ground line / sweep).
- * Callers convert ground contact into the Cocos node origin using sprite anchors.
- *
- * When `animate` is false, icon-moving modes stay pinned at center (ground Y for
- * scrape modes) instead of sliding / sweeping.
+ * Locked / default scene-space attach point for the icon + emitter.
+ * Animated modes no longer slide the icon; travel is simulated via particle
+ * world-scroll and (for GD) background scroll instead.
  */
-function computePathPos(
+function lockedPathPos(
   mode: PreviewMode,
-  t: number,
   w: number,
   h: number,
-  animate: boolean,
 ): { x: number; y: number } {
   const cx = w / 2;
   const cy = h / 2;
   const groundY = groundLineY(h);
 
   switch (mode) {
-    case "dragSlide": {
-      if (!animate) return { x: cx, y: groundY };
-      const x = cx + Math.sin((t / 4) * Math.PI * 2) * (w * 0.35);
-      return { x, y: groundY };
-    }
-    case "shipScrape": {
-      if (!animate) return { x: cx, y: groundY };
-      const x = cx + Math.sin((t / 4) * Math.PI * 2) * (w * 0.35);
-      return { x, y: groundY };
-    }
-    case "trailFollow": {
-      if (!animate) return { x: cx, y: cy };
-      const x = cx + Math.sin((t / 3) * Math.PI * 2) * (w * 0.38);
-      return { x, y: cy };
-    }
+    case "dragSlide":
+    case "shipScrape":
+      return { x: cx, y: groundY };
+    case "trailFollow":
     case "oneShot":
-      return { x: cx, y: cy };
     case "portalAura":
-      return { x: cx, y: cy };
-    case "speedBurst": {
-      if (!animate) return { x: cx, y: cy };
-      const SWEEP_S = 1.4;
-      const PERIOD = SWEEP_S + 0.4;
-      const phase = t % PERIOD;
-      if (phase < SWEEP_S) {
-        const x = (phase / SWEEP_S) * (w + 120) - 60;
-        return { x, y: cy };
-      }
-      return { x: w + 60, y: cy };
-    }
+    case "speedBurst":
     case "ambientPinned":
-      return { x: cx, y: cy };
     case "static":
       return { x: cx, y: cy };
     default: {
@@ -455,6 +474,10 @@ function emitterOriginFromPath(
   }
 }
 
+function previewIconAlpha(transparent: boolean): number {
+  return transparent ? PREVIEW_ICON_TRANSPARENT_ALPHA : PREVIEW_ICON_OPAQUE_ALPHA;
+}
+
 // ─── Preview mode: silhouette rendering ──────────────────────────────────────
 
 type SilhouetteAssets = {
@@ -462,6 +485,7 @@ type SilhouetteAssets = {
   previewIconAnchor: SpriteAnchor | null;
   attachSprite: HTMLImageElement | null;
   attachSpriteAnchor: SpriteAnchor | null;
+  previewIconTransparent: boolean;
 };
 
 function drawModeSilhouette(
@@ -474,7 +498,14 @@ function drawModeSilhouette(
   h: number,
   assets: SilhouetteAssets,
 ): void {
-  const { previewIcon, previewIconAnchor, attachSprite, attachSpriteAnchor } = assets;
+  const {
+    previewIcon,
+    previewIconAnchor,
+    attachSprite,
+    attachSpriteAnchor,
+    previewIconTransparent,
+  } = assets;
+  const iconAlpha = previewIconAlpha(previewIconTransparent);
   const attach = attachSprite?.complete ? attachSprite : null;
   const attachAnchor = attach ? (attachSpriteAnchor ?? centerAnchor(attach)) : null;
   const iconAnchor = previewIcon?.complete
@@ -484,14 +515,14 @@ function drawModeSilhouette(
 
   switch (mode) {
     case "dragSlide": {
-      drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor);
+      drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor, iconAlpha);
       break;
     }
     case "shipScrape": {
       if (previewIcon?.complete) {
-        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor);
+        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor, iconAlpha);
       } else {
-        ctx.globalAlpha = 0.82;
+        ctx.globalAlpha = iconAlpha * 0.86;
         ctx.fillStyle = "#7eb8f7";
         ctx.beginPath();
         ctx.moveTo(emitterX + 70, emitterY + 25);
@@ -507,7 +538,7 @@ function drawModeSilhouette(
       if (attach && attachAnchor) {
         drawSpriteAtOrigin(ctx, attach, emitterX, emitterY, attachAnchor);
       } else {
-        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor);
+        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor, iconAlpha);
       }
       break;
     }
@@ -566,9 +597,7 @@ function drawModeSilhouette(
         ctx.fillRect(gx + 39, gateY, 5, gateH);
         ctx.globalAlpha = 1;
       }
-      if (emitterX >= -60 && emitterX <= w + 60) {
-        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor);
-      }
+      drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor, iconAlpha);
       break;
     }
     case "ambientPinned": {
@@ -596,13 +625,14 @@ function drawModeSilhouette(
  * The canvas always fills its container; `zoom` magnifies the scene around the
  * centre so a small emitter can be inspected without resizing the panel.
  *
- * In **static** mode (default), drag anywhere on the canvas to reposition
- * the emitter origin.
+ * In **static** mode, or in icon-path modes while `animateIconMovement` is off,
+ * drag anywhere on the canvas to reposition the emitter / icon.
  *
- * In any other `previewMode`, the emitter moves automatically on a
- * mode-specific path and either the real game object (`attachSpriteSrc`) or a
- * generic silhouette is drawn each frame before the particle layer. Dragging is
- * disabled in animated modes.
+ * When `animateIconMovement` is on, the icon locks to the mode's default attach
+ * point and travel is simulated by scrolling Free particles (and the GD
+ * background when selected) right→left — no back-and-forth icon path.
+ * Mode silhouettes (player icon / attach sprite) are drawn above the particle
+ * layer so the icon sits on top of the effect.
  *
  * Increment `resetKey` to kill all live particles and restart from t=0.
  */
@@ -614,6 +644,8 @@ export function ParticlePreviewCanvas({
   zoom = 1,
   previewMode = "static",
   animateIconMovement = false,
+  iconPathSpeed = 1,
+  previewIconTransparent = false,
   resetKey,
   usePlistSourcePosition = false,
   previewIconSrc = null,
@@ -630,7 +662,10 @@ export function ParticlePreviewCanvas({
   const rafRef = useRef<number>(0);
   const lastMsRef = useRef<number | null>(null);
   const draggingRef = useRef(false);
+  /** True after the user repositions the icon while path animation is off. */
+  const hasManualOffsetRef = useRef(false);
   const modeTimeRef = useRef(0);
+  const bgScrollRef = useRef(0);
   const gdImageRef = useRef<HTMLImageElement | null>(null);
   const gdFloorRef = useRef<HTMLImageElement | null>(null);
   const previewIconRef = useRef<HTMLImageElement | null>(null);
@@ -644,12 +679,31 @@ export function ParticlePreviewCanvas({
   const backgroundRef = useRef(background);
   const previewModeRef = useRef(previewMode);
   const animateIconMovementRef = useRef(animateIconMovement);
+  const iconPathSpeedRef = useRef(iconPathSpeed);
+  const previewIconTransparentRef = useRef(previewIconTransparent);
   const zoomRef = useRef(zoom);
   runningRef.current = running;
   backgroundRef.current = background;
   previewModeRef.current = previewMode;
   animateIconMovementRef.current = animateIconMovement;
+  iconPathSpeedRef.current = iconPathSpeed;
+  previewIconTransparentRef.current = previewIconTransparent;
   zoomRef.current = zoom;
+
+  const snapEmitterToLockedOrigin = useCallback((mode: PreviewMode): void => {
+    const emitter = emitterRef.current;
+    if (!emitter) return;
+    const { w, h } = sceneSizeRef.current;
+    const path = lockedPathPos(mode, w, h);
+    const origin = emitterOriginFromPath(
+      mode,
+      path,
+      previewIconRef.current,
+      previewIconAnchorRef.current,
+    );
+    emitter.centerX = origin.x;
+    emitter.centerY = origin.y;
+  }, []);
 
   useEffect(() => {
     if (
@@ -792,19 +846,24 @@ export function ParticlePreviewCanvas({
   useEffect(() => {
     emitterRef.current?.reset();
     modeTimeRef.current = 0;
-    if (previewMode === "static") {
-      const em = emitterRef.current;
-      if (em) {
-        em.centerX = sceneSizeRef.current.w / 2;
-        em.centerY = sceneSizeRef.current.h / 2;
-      }
-    }
-  }, [previewMode]);
+    bgScrollRef.current = 0;
+    hasManualOffsetRef.current = false;
+    snapEmitterToLockedOrigin(previewMode);
+  }, [previewMode, snapEmitterToLockedOrigin]);
 
   useEffect(() => {
     emitterRef.current?.reset();
     modeTimeRef.current = 0;
+    bgScrollRef.current = 0;
   }, [resetKey]);
+
+  useEffect(() => {
+    if (animateIconMovement && previewModeAnimatesIcon(previewMode)) {
+      hasManualOffsetRef.current = false;
+      bgScrollRef.current = 0;
+      snapEmitterToLockedOrigin(previewMode);
+    }
+  }, [animateIconMovement, previewMode, snapEmitterToLockedOrigin]);
 
   useEffect(() => {
     const em = emitterRef.current;
@@ -841,46 +900,41 @@ export function ParticlePreviewCanvas({
       const sceneChanged = prevScene.w !== w || prevScene.h !== h;
       sceneSizeRef.current = { w, h };
       const mode = previewModeRef.current;
+      const animatePath =
+        animateIconMovementRef.current && previewModeAnimatesIcon(mode);
 
-      if (mode === "static" && sceneChanged && !draggingRef.current) {
-        emitter.centerX = w / 2;
-        emitter.centerY = h / 2;
+      if (sceneChanged && !draggingRef.current && !hasManualOffsetRef.current) {
+        snapEmitterToLockedOrigin(mode);
       }
 
       if (runningRef.current) {
         const prevT = modeTimeRef.current;
         modeTimeRef.current += dt;
-        const t = modeTimeRef.current;
+        const travelSpeed = BASE_ICON_TRAVEL_SPEED * iconPathSpeedRef.current;
 
-        if (mode === "speedBurst") {
-          const PERIOD = 1.4 + 0.4;
-          if (Math.floor(t / PERIOD) > Math.floor(prevT / PERIOD)) {
-            emitter.reset();
+        if (animatePath) {
+          // Icon stays locked; Free particles + GD bg scroll as if travelling right.
+          const scrollDx = travelSpeed * dt;
+          emitter.scrollWorld(-scrollDx, 0);
+          bgScrollRef.current += scrollDx;
+          snapEmitterToLockedOrigin(mode);
+
+          // Finite-duration speed pads still need a periodic re-fire.
+          if (mode === "speedBurst") {
+            const PERIOD = 1.8;
+            if (Math.floor(modeTimeRef.current / PERIOD) > Math.floor(prevT / PERIOD)) {
+              emitter.reset();
+            }
           }
-        }
-
-        if (mode !== "static") {
-          const path = computePathPos(
-            mode,
-            t,
-            w,
-            h,
-            animateIconMovementRef.current,
-          );
-          const origin = emitterOriginFromPath(
-            mode,
-            path,
-            previewIconRef.current,
-            previewIconAnchorRef.current,
-          );
-          emitter.centerX = origin.x;
-          emitter.centerY = origin.y;
         }
 
         emitter.update(dt);
       }
 
       const t = modeTimeRef.current;
+      const bgScroll =
+        animatePath && backgroundRef.current === "gd" ? bgScrollRef.current : 0;
+
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvasW, canvasH);
       ctx.save();
@@ -895,7 +949,12 @@ export function ParticlePreviewCanvas({
         gdImageRef.current,
         gdFloorRef.current,
         groundLineY(h),
+        bgScroll,
       );
+
+      // Particles first, then icon/attach silhouette on top so the player icon
+      // reads clearly over the trail (transparent-icon toggle still applies).
+      emitter.draw(ctx);
 
       if (mode !== "static") {
         drawModeSilhouette(ctx, mode, emitter.centerX, emitter.centerY, t, w, h, {
@@ -903,10 +962,9 @@ export function ParticlePreviewCanvas({
           previewIconAnchor: previewIconAnchorRef.current,
           attachSprite: attachSpriteRef.current,
           attachSpriteAnchor: attachSpriteAnchorRef.current,
+          previewIconTransparent: previewIconTransparentRef.current,
         });
       }
-
-      emitter.draw(ctx);
       ctx.restore();
 
       rafRef.current = requestAnimationFrame(frame);
@@ -917,6 +975,12 @@ export function ParticlePreviewCanvas({
       cancelAnimationFrame(rafRef.current);
       lastMsRef.current = null;
     };
+  }, [snapEmitterToLockedOrigin]);
+
+  const canDragIcon = useCallback((): boolean => {
+    const mode = previewModeRef.current;
+    if (mode === "static") return true;
+    return previewModeAnimatesIcon(mode) && !animateIconMovementRef.current;
   }, []);
 
   const applyDrag = useCallback(
@@ -933,6 +997,7 @@ export function ParticlePreviewCanvas({
 
       emitter.centerX = sceneX;
       emitter.centerY = sceneY;
+      hasManualOffsetRef.current = true;
 
       onEmitterMove?.(sceneX - w / 2, h / 2 - sceneY);
     },
@@ -941,11 +1006,11 @@ export function ParticlePreviewCanvas({
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent<HTMLCanvasElement>): void => {
-      if (previewModeRef.current !== "static") return;
+      if (!canDragIcon()) return;
       draggingRef.current = true;
       applyDrag(e);
     },
-    [applyDrag],
+    [applyDrag, canDragIcon],
   );
 
   const handleMouseMove = useCallback(
@@ -959,14 +1024,16 @@ export function ParticlePreviewCanvas({
     draggingRef.current = false;
   }, []);
 
-  const isStatic = previewMode === "static";
+  const iconDraggable =
+    previewMode === "static" ||
+    (previewModeAnimatesIcon(previewMode) && !animateIconMovement);
 
   return (
     <div className="tm-pe-canvas-host" ref={hostRef}>
       <canvas
         ref={canvasRef}
         className="tm-particle-canvas"
-        style={{ cursor: isStatic ? "crosshair" : "default" }}
+        style={{ cursor: iconDraggable ? "crosshair" : "default" }}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={stopDrag}

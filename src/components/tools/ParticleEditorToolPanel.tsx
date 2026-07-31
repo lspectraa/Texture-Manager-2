@@ -61,6 +61,8 @@ import { AppSelect, type AppSelectOption } from "../AppSelect";
 import { AppTooltip } from "../AppTooltip";
 import {
   ParticlePreviewCanvas,
+  ICON_PATH_SPEEDS,
+  type IconPathSpeed,
   type ParticleBackground,
 } from "./particleEditor/ParticlePreviewCanvas";
 
@@ -537,8 +539,10 @@ export function ParticleEditorToolPanel() {
   const [showAdvancedBlend, setShowAdvancedBlend] = useState(false);
   const [previewIcon, setPreviewIcon] = useState<ParticlePreviewSprite | null>(null);
   const [customIconPlistPath, setCustomIconPlistPath] = useState<string | null>(null);
-  /** When true, icon-particle preview modes animate along their path. Default: centered. */
+  /** When true, icon-particle preview modes simulate travel with a locked icon. */
   const [animateIconMovement, setAnimateIconMovement] = useState(false);
+  const [iconPathSpeed, setIconPathSpeed] = useState<IconPathSpeed>(1);
+  const [previewIconTransparent, setPreviewIconTransparent] = useState(false);
   const [attachSpriteAsset, setAttachSpriteAsset] = useState<ParticlePreviewSprite | null>(null);
   const [history, setHistory] = useState<ParticleEditorHistoryState>(() => {
     const present = emptyParticleEditorSnapshot();
@@ -1357,19 +1361,54 @@ export function ParticleEditorToolPanel() {
                         </button>
                       </ParticleToolbarTip>
                     ) : null}
+                    <label className="tm-tool-toggle tm-pe-icon-move-toggle">
+                      <input
+                        type="checkbox"
+                        checked={previewIconTransparent}
+                        onChange={(event) => setPreviewIconTransparent(event.target.checked)}
+                      />
+                      <span className="tm-tool-toggle-copy">
+                        {t("particleEditor.stage.transparentIcon")}
+                      </span>
+                    </label>
                   </>
                 ) : null}
                 {showsIconMovementToggle ? (
-                  <label className="tm-tool-toggle tm-pe-icon-move-toggle">
-                    <input
-                      type="checkbox"
-                      checked={animateIconMovement}
-                      onChange={(event) => setAnimateIconMovement(event.target.checked)}
-                    />
-                    <span className="tm-tool-toggle-copy">
-                      {t("particleEditor.stage.animateIconMovement")}
-                    </span>
-                  </label>
+                  <>
+                    <label className="tm-tool-toggle tm-pe-icon-move-toggle">
+                      <input
+                        type="checkbox"
+                        checked={animateIconMovement}
+                        onChange={(event) => setAnimateIconMovement(event.target.checked)}
+                      />
+                      <span className="tm-tool-toggle-copy">
+                        {t("particleEditor.stage.animateIconMovement")}
+                      </span>
+                    </label>
+                    {animateIconMovement ? (
+                      <div
+                        className="tm-pe-icon-speed"
+                        role="group"
+                        aria-label={t("particleEditor.stage.iconPathSpeed")}
+                      >
+                        <span className="tm-pe-icon-speed-label">
+                          {t("particleEditor.stage.iconPathSpeed")}
+                        </span>
+                        {ICON_PATH_SPEEDS.map((speed) => (
+                          <button
+                            key={speed}
+                            type="button"
+                            className={`tm-pe-icon-speed-btn${
+                              iconPathSpeed === speed ? " tm-pe-icon-speed-btn--active" : ""
+                            }`}
+                            onClick={() => setIconPathSpeed(speed)}
+                          >
+                            {speed}×
+                          </button>
+                        ))}
+                      </div>
+                    ) : null}
+                  </>
                 ) : null}
               </div>
             </div>
@@ -1383,6 +1422,8 @@ export function ParticleEditorToolPanel() {
                 zoom={zoom}
                 previewMode={previewMode}
                 animateIconMovement={animateIconMovement}
+                iconPathSpeed={iconPathSpeed}
+                previewIconTransparent={previewIconTransparent}
                 resetKey={resetKey}
                 usePlistSourcePosition={usePlistSourcePosition}
                 previewIconSrc={previewIcon?.dataUrl ?? null}
@@ -1408,7 +1449,8 @@ export function ParticleEditorToolPanel() {
                 ))}
               </div>
               <p className="tm-pe-stage-hint">
-                {previewMode === "static"
+                {previewMode === "static" ||
+                (showsIconMovementToggle && !animateIconMovement)
                   ? t("particleEditor.stage.dragHint")
                   : t("particleEditor.stage.modeHint", { mode: previewModeLabel(previewMode) })}
               </p>

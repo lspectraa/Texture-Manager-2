@@ -105,6 +105,8 @@ const tools = {
       clearCustomIcon: "Limpar ícone",
       clearCustomIconTooltip: "Voltar a um ícone aleatório do Geometry Dash",
       animateIconMovement: "Animar caminho do ícone",
+      transparentIcon: "Ícone transparente",
+      iconPathSpeed: "Velocidade",
       zoomIn: "Aproximar",
       zoomOut: "Afastar",
       resetZoom: "Redefinir o zoom para o padrão ({{percent}}% nesta altura da área)",

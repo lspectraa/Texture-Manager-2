@@ -10168,6 +10168,47 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   font-size: 0.75rem;
 }
 
+.tm-pe-icon-speed {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+  padding: 2px;
+  border-radius: 8px;
+  border: 1px solid rgba(140, 170, 210, 0.22);
+  background: rgba(18, 28, 48, 0.55);
+}
+
+.tm-pe-icon-speed-label {
+  padding: 0 6px;
+  color: var(--tm-text-muted);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.tm-pe-icon-speed-btn {
+  min-width: 32px;
+  height: 24px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--tm-text-muted);
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.tm-pe-icon-speed-btn:hover {
+  color: var(--tm-text);
+  background: rgba(140, 185, 255, 0.1);
+}
+
+.tm-pe-icon-speed-btn--active {
+  color: var(--tm-text);
+  background: rgba(140, 185, 255, 0.22);
+}
+
 .tm-pe-zoom {
   display: inline-flex;
   align-items: center;

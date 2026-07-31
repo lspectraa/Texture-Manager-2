@@ -118,6 +118,8 @@ const tools: AppLocaleResources["tools"] = {
       clearCustomIcon: "Сбросить значок",
       clearCustomIconTooltip: "Вернуться к случайному значку Geometry Dash",
       animateIconMovement: "Анимировать путь значка",
+      transparentIcon: "Прозрачный значок",
+      iconPathSpeed: "Скорость",
       zoomIn: "Приблизить",
       zoomOut: "Отдалить",
       resetZoom: "Сбросить масштаб до значения по умолчанию ({{percent}}% для этой высоты области)",

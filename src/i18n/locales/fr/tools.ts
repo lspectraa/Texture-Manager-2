@@ -105,6 +105,8 @@ const tools = {
       clearCustomIcon: "Effacer l'icône",
       clearCustomIconTooltip: "Revenir à une icône Geometry Dash aléatoire",
       animateIconMovement: "Animer le trajet de l'icône",
+      transparentIcon: "Icône transparente",
+      iconPathSpeed: "Vitesse",
       zoomIn: "Zoomer",
       zoomOut: "Dézoomer",
       resetZoom: "Réinitialiser le zoom à la valeur d'affichage ({{percent}}% pour cette hauteur)",

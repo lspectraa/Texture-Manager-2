@@ -115,6 +115,8 @@ const tools = {
       clearCustomIcon: "Clear icon",
       clearCustomIconTooltip: "Return to a random Geometry Dash preview icon",
       animateIconMovement: "Animate icon path",
+      transparentIcon: "Transparent icon",
+      iconPathSpeed: "Speed",
       zoomIn: "Zoom in",
       zoomOut: "Zoom out",
       resetZoom: "Reset zoom to display default ({{percent}}% at this viewport height)",

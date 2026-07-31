@@ -104,6 +104,8 @@ const tools = {
       clearCustomIcon: "아이콘 지우기",
       clearCustomIconTooltip: "무작위 Geometry Dash 미리보기 아이콘으로 되돌리기",
       animateIconMovement: "아이콘 경로 애니메이션",
+      transparentIcon: "투명 아이콘",
+      iconPathSpeed: "속도",
       zoomIn: "확대",
       zoomOut: "축소",
       resetZoom: "표시 기본 확대/축소로 초기화 (이 뷰포트 높이에서 {{percent}}%)",

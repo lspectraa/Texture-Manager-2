@@ -102,6 +102,8 @@ const tools = {
       clearCustomIcon: "清除图标",
       clearCustomIconTooltip: "恢复为随机 Geometry Dash 预览图标",
       animateIconMovement: "动画图标路径",
+      transparentIcon: "透明图标",
+      iconPathSpeed: "速度",
       zoomIn: "放大",
       zoomOut: "缩小",
       resetZoom: "重置为显示默认缩放（当前视口高度下为 {{percent}}%）",

@@ -118,6 +118,8 @@ const tools: AppLocaleResources["tools"] = {
       clearCustomIcon: "Quitar icono",
       clearCustomIconTooltip: "Volver a un icono aleatorio de Geometry Dash",
       animateIconMovement: "Animar ruta del icono",
+      transparentIcon: "Icono transparente",
+      iconPathSpeed: "Velocidad",
       zoomIn: "Acercar",
       zoomOut: "Alejar",
       resetZoom: "Restablecer el zoom al valor por defecto ({{percent}}% a esta altura de vista)",

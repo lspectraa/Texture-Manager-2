@@ -468,6 +468,22 @@ export class ParticleEmitter {
     this._worldY = y;
   }
 
+  /**
+   * Shift Free-mode particle world anchors by `(dx, dy)` in canvas pixels.
+   * Used by the preview treadmill so the icon can stay locked while Free trails
+   * drift as if the emitter were travelling. Relative / Grouped particles stay
+   * with the emitter and are left untouched.
+   */
+  scrollWorld(dx: number, dy: number): void {
+    if (dx === 0 && dy === 0) return;
+    const posType = this.cfg.positionType ?? 0;
+    if (posType !== 0) return;
+    for (const p of this.particles) {
+      p.startPosX += dx;
+      p.startPosY += dy;
+    }
+  }
+
   /** Legacy shim: sets world X. */
   set centerX(v: number) {
     this._worldX = v;

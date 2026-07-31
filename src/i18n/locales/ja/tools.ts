@@ -104,6 +104,8 @@ const tools = {
       clearCustomIcon: "アイコンを解除",
       clearCustomIconTooltip: "ランダムな Geometry Dash プレビューアイコンに戻す",
       animateIconMovement: "アイコンの移動をアニメーション",
+      transparentIcon: "アイコンを透明に",
+      iconPathSpeed: "速度",
       zoomIn: "拡大",
       zoomOut: "縮小",
       resetZoom: "表示のデフォルトズームに戻す（このビュー高さで {{percent}}%）",
