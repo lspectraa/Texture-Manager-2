@@ -411,8 +411,8 @@ export class ParticleEmitter {
 
   /**
    * Multiplies Cocos point-space linear quantities into scene pixels.
-   * Particle Editor preview uses contentScale 8 so sizes/speeds/gravity sit in
-   * proportion to full-size UHD icons on the stage.
+   * Particle Editor preview uses contentScale 4 so sizes/speeds/gravity match
+   * UHD icons drawn at native pixels (GD UHD = 4× points).
    */
   contentScale = 1;
 

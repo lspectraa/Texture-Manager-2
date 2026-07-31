@@ -42,10 +42,10 @@ const FLOOR_VISIBLE_FRACTION = 0.25;
 
 /**
  * Maps Cocos point-space particle units into preview scene pixels.
- * Preview uses 8× so particle quads read in proportion to full-size UHD icons
- * (GD UHD assets are 4× points; the extra 2× matches in-game icon/particle feel).
+ * Preview uses 4× so particle quads read in proportion to full-size UHD icons
+ * (GD UHD assets are 4× points).
  */
-const GD_PARTICLE_CONTENT_SCALE = 8;
+const GD_PARTICLE_CONTENT_SCALE = 4;
 
 /** Fallback cube edge when no preview icon is loaded (~typical UHD player cube). */
 const FALLBACK_CUBE_SIZE = 120;
