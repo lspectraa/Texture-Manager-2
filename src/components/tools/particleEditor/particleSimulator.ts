@@ -411,10 +411,8 @@ export class ParticleEmitter {
 
   /**
    * Multiplies Cocos point-space linear quantities into scene pixels.
-   * Particle Editor preview uses contentScale 2 so sizes/speeds match UHD icons
-   * and gamesheets drawn at native pixels under the shared stage zoom.
-   * (Geometry Dash's Cocos contentScaleFactor is often 4; preview intentionally
-   * uses 2 so the composition stays readable next to Icon Editor art.)
+   * Particle Editor preview uses contentScale 8 so sizes/speeds/gravity sit in
+   * proportion to full-size UHD icons on the stage.
    */
   contentScale = 1;
 

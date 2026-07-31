@@ -34,12 +34,11 @@ const GD_FLOOR_DIVIDER_HEIGHT = 3;
 const FLOOR_VISIBLE_FRACTION = 0.25;
 
 /**
- * Maps Cocos point-space particle units into preview scene pixels (UHD icons /
- * gamesheets / floor). Preview uses scale 2 (not GD's typical Cocos factor 4)
- * so the composition stays readable next to Icon Editor art. Zoom then
- * magnifies icons + particles together.
+ * Maps Cocos point-space particle units into preview scene pixels.
+ * Preview uses 8× so particle quads read in proportion to full-size UHD icons
+ * (GD UHD assets are 4× points; the extra 2× matches in-game icon/particle feel).
  */
-const GD_PARTICLE_CONTENT_SCALE = 2;
+const GD_PARTICLE_CONTENT_SCALE = 8;
 
 /** Fallback cube edge when no preview icon is loaded (~typical UHD player cube). */
 const FALLBACK_CUBE_SIZE = 120;
@@ -441,24 +440,18 @@ function lockedPathPos(
 }
 
 /**
- * Map a path/ground contact point to the emitter's Cocos node origin for the mode.
+ * Map a path / ground-contact point to the emitter world position for the mode.
+ *
+ * Scrape modes keep the emitter on the ground line (feet / scrape contact) so
+ * dust trails spawn under the icon, not at the sprite node origin (mid-body).
  */
 function emitterOriginFromPath(
   mode: PreviewMode,
   path: { x: number; y: number },
-  icon: HTMLImageElement | null,
-  iconAnchor: SpriteAnchor | null,
 ): { x: number; y: number } {
   switch (mode) {
     case "dragSlide":
-    case "shipScrape": {
-      if (icon?.complete) {
-        const ih = icon.naturalHeight || icon.height;
-        const ay = (iconAnchor ?? centerAnchor(icon)).y;
-        return { x: path.x, y: originYForGroundContact(ih, ay, path.y) };
-      }
-      return { x: path.x, y: path.y - FALLBACK_CUBE_SIZE / 2 };
-    }
+    case "shipScrape":
     case "trailFollow":
     case "oneShot":
     case "portalAura":
@@ -472,6 +465,23 @@ function emitterOriginFromPath(
       return path;
     }
   }
+}
+
+/**
+ * Icon node-origin Y so the sprite's visual bottom sits on `groundContactY`
+ * (emitter stays on the contact line for scrape modes).
+ */
+function iconOriginYForGroundContact(
+  groundContactY: number,
+  icon: HTMLImageElement | null,
+  iconAnchor: SpriteAnchor | null,
+): number {
+  if (icon?.complete) {
+    const ih = icon.naturalHeight || icon.height;
+    const ay = (iconAnchor ?? centerAnchor(icon)).y;
+    return originYForGroundContact(ih, ay, groundContactY);
+  }
+  return groundContactY - FALLBACK_CUBE_SIZE / 2;
 }
 
 function previewIconAlpha(transparent: boolean): number {
@@ -515,20 +525,23 @@ function drawModeSilhouette(
 
   switch (mode) {
     case "dragSlide": {
-      drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor, iconAlpha);
+      // Emitter is at scrape contact (feet); lift the icon so its bottom sits there.
+      const iconY = iconOriginYForGroundContact(emitterY, previewIcon, iconAnchor);
+      drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, iconY, iconAnchor, iconAlpha);
       break;
     }
     case "shipScrape": {
+      const iconY = iconOriginYForGroundContact(emitterY, previewIcon, iconAnchor);
       if (previewIcon?.complete) {
-        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, emitterY, iconAnchor, iconAlpha);
+        drawPreviewIconAtOrigin(ctx, previewIcon, emitterX, iconY, iconAnchor, iconAlpha);
       } else {
         ctx.globalAlpha = iconAlpha * 0.86;
         ctx.fillStyle = "#7eb8f7";
         ctx.beginPath();
-        ctx.moveTo(emitterX + 70, emitterY + 25);
-        ctx.lineTo(emitterX - 56, emitterY + 45);
-        ctx.lineTo(emitterX - 40, emitterY - 20);
-        ctx.lineTo(emitterX + 20, emitterY - 5);
+        ctx.moveTo(emitterX + 70, iconY + 25);
+        ctx.lineTo(emitterX - 56, iconY + 45);
+        ctx.lineTo(emitterX - 40, iconY - 20);
+        ctx.lineTo(emitterX + 20, iconY - 5);
         ctx.closePath();
         ctx.fill();
       }
@@ -695,12 +708,7 @@ export function ParticlePreviewCanvas({
     if (!emitter) return;
     const { w, h } = sceneSizeRef.current;
     const path = lockedPathPos(mode, w, h);
-    const origin = emitterOriginFromPath(
-      mode,
-      path,
-      previewIconRef.current,
-      previewIconAnchorRef.current,
-    );
+    const origin = emitterOriginFromPath(mode, path);
     emitter.centerX = origin.x;
     emitter.centerY = origin.y;
   }, []);

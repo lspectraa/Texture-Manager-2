@@ -139,7 +139,7 @@ describe("contentScale maps Cocos points into scene pixels", () => {
       gravityy: -300,
     };
     const emitter = new ParticleEmitter(cfg);
-    // Arbitrary multiplier (preview uses 2; this checks the math path).
+    // UHD scene space: Cocos points × 4 (matches GD contentScaleFactor).
     emitter.contentScale = 4;
     emitter.setEmitterWorldPos(0, 0);
     const p = emitter.spawnParticle();
