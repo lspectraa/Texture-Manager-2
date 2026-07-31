@@ -23,8 +23,15 @@ const GD_FLOOR_SRC = "/icon-editor-bg/ground-square-01.png";
 const GD_BACKGROUND_TINT = "#287dff";
 const GD_FLOOR_TINT = "#0066ff";
 
-/** Floor tile edge in scene pixels — same 245 px ground square the Icon Editor tiles. */
-const GD_FLOOR_TILE = 245;
+/**
+ * Display scale for GD stage art (sky + floor) relative to native asset pixels.
+ * 1× keeps floor tiles at the Icon Editor manifest size (245) and draws the sky
+ * at native resolution, bottom-aligned so the top clips out of the preview.
+ */
+const GD_STAGE_ART_SCALE = 1;
+
+/** Floor tile edge in scene pixels (manifest 245 × stage art scale). */
+const GD_FLOOR_TILE = 245 * GD_STAGE_ART_SCALE;
 /** Height of the gradient seam drawn on the floor/background boundary. */
 const GD_FLOOR_DIVIDER_HEIGHT = 3;
 /**
@@ -196,35 +203,38 @@ function tintedImage(img: HTMLImageElement, tint: string): HTMLCanvasElement | n
   return canvas;
 }
 
-function drawCoverImage(
+/**
+ * Draw the GD sky at `GD_STAGE_ART_SCALE`, bottom-aligned to `anchorBottomY`
+ * so the top of the texture clips out of the preview (floor stays visible).
+ */
+function drawGdSky(
   ctx: CanvasRenderingContext2D,
   source: CanvasImageSource,
   sourceWidth: number,
   sourceHeight: number,
   w: number,
-  h: number,
+  anchorBottomY: number,
   scrollX = 0,
 ): void {
   if (sourceWidth <= 0 || sourceHeight <= 0) {
     return;
   }
-  const scale = Math.max(w / sourceWidth, h / sourceHeight);
-  const dw = sourceWidth * scale;
-  const dh = sourceHeight * scale;
-  // Top-anchored cover (matches icon editor game bg object-position).
+  const dw = sourceWidth * GD_STAGE_ART_SCALE;
+  const dh = sourceHeight * GD_STAGE_ART_SCALE;
+  // Bottom of the sky sits on the ground line; top overflows and is clipped by the canvas.
+  const baseY = anchorBottomY - dh;
   const baseX = (w - dw) / 2;
   if (scrollX === 0 || dw <= 0) {
-    ctx.drawImage(source, baseX, 0, dw, dh);
+    ctx.drawImage(source, baseX, baseY, dw, dh);
     return;
   }
-  // Wrap so the sky scrolls right→left seamlessly under a locked icon.
-  const period = Math.max(dw, w);
+  const period = dw;
   const offset = ((scrollX % period) + period) % period;
   for (let x = baseX - offset; x < w; x += period) {
-    ctx.drawImage(source, x, 0, dw, dh);
+    ctx.drawImage(source, x, baseY, dw, dh);
   }
   for (let x = baseX - offset - period; x > -dw; x -= period) {
-    ctx.drawImage(source, x, 0, dw, dh);
+    ctx.drawImage(source, x, baseY, dw, dh);
   }
 }
 
@@ -288,15 +298,24 @@ function drawBackground(
       ctx.fillRect(0, 0, w, h);
       break;
     case "gd": {
+      // Fill any letterbox behind the scaled sky (top clip / short canvases).
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "#1a3a5c");
+      grad.addColorStop(1, "#0d1f36");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
       const tintedBg = gdImage?.complete ? tintedImage(gdImage, GD_BACKGROUND_TINT) : null;
       if (tintedBg) {
-        drawCoverImage(ctx, tintedBg, tintedBg.width, tintedBg.height, w, h, scrollX);
-      } else {
-        const grad = ctx.createLinearGradient(0, 0, 0, h);
-        grad.addColorStop(0, "#1a3a5c");
-        grad.addColorStop(1, "#0d1f36");
-        ctx.fillStyle = grad;
-        ctx.fillRect(0, 0, w, h);
+        drawGdSky(
+          ctx,
+          tintedBg,
+          tintedBg.width,
+          tintedBg.height,
+          w,
+          floorTopY,
+          scrollX,
+        );
       }
       if (gdFloor?.complete) {
         drawGdFloor(ctx, gdFloor, w, h, floorTopY, scrollX);
