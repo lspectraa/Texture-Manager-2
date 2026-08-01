@@ -16,7 +16,7 @@ use crate::core::game_files::{
     png_path_to_data_url, resolve_cached_split_sprite, GameFilesLayout,
 };
 use crate::core::icon_editor::icon_editor_extract_frames;
-use crate::core::merger::merge_plist_from_memory;
+use crate::core::merger::{apply_alpha_trim_to_frame_dict, merge_plist_from_memory};
 use crate::core::porter::save_merged_sheet;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
 use crate::core::safe_fs::{ensure_readable_image_file, ensure_user_absolute_path};
@@ -129,6 +129,13 @@ fn frames_dictionary<'a>(root: &'a Value) -> Result<&'a Dictionary, AppError> {
     root.as_dictionary()
         .and_then(|dict| dict.get("frames"))
         .and_then(Value::as_dictionary)
+        .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
+}
+
+fn frames_dictionary_mut(root: &mut Value) -> Result<&mut Dictionary, AppError> {
+    root.as_dictionary_mut()
+        .and_then(|dict| dict.get_mut("frames"))
+        .and_then(Value::as_dictionary_mut)
         .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
 }
 
@@ -558,27 +565,45 @@ fn apply_hsv_delta(img: &mut RgbaImage, hue_deg: f32, sat_delta: f32, val_delta:
     }
 }
 
-fn resize_preserve_aspect_fit(base: &RgbaImage, target_w: u32, target_h: u32) -> RgbaImage {
-    let tw = target_w.max(1);
-    let th = target_h.max(1);
-    if base.width() == tw && base.height() == th {
-        return base.clone();
+/// Pixels must be strictly above this opacity fraction to count toward BlankSheet size ratios.
+/// Soft shadows sit at/below this and are ignored so they do not skew family scale ratios.
+const OPAQUE_SIZE_OPACITY_PERCENT: u32 = 60;
+
+fn alpha_above_opacity_percent(alpha: u8, percent: u32) -> bool {
+    // Integer form of `alpha / 255 > percent / 100`.
+    (alpha as u32) * 100 > percent * 255
+}
+
+/// Bounding-box size of pixels with opacity greater than [`OPAQUE_SIZE_OPACITY_PERCENT`]%.
+/// Falls back to the full canvas when no qualifying pixels exist.
+fn opaque_content_dims(img: &RgbaImage) -> (u32, u32) {
+    let w = img.width();
+    let h = img.height();
+    if w == 0 || h == 0 {
+        return (1, 1);
     }
-    let bw = base.width().max(1) as f32;
-    let bh = base.height().max(1) as f32;
-    let scale = ((tw as f32) / bw).min((th as f32) / bh);
-    let nw = ((bw * scale).round() as u32).max(1).min(tw);
-    let nh = ((bh * scale).round() as u32).max(1).min(th);
-    let resized = resize(base, nw, nh, FilterType::CatmullRom);
-    let mut out = RgbaImage::from_pixel(tw, th, image::Rgba([0, 0, 0, 0]));
-    let ox = (tw - nw) / 2;
-    let oy = (th - nh) / 2;
-    for y in 0..nh {
-        for x in 0..nw {
-            out.put_pixel(ox + x, oy + y, *resized.get_pixel(x, y));
+    let mut min_x = w;
+    let mut min_y = h;
+    let mut max_x = 0_u32;
+    let mut max_y = 0_u32;
+    let mut found = false;
+    for y in 0..h {
+        for x in 0..w {
+            let alpha = img.get_pixel(x, y).0[3];
+            if !alpha_above_opacity_percent(alpha, OPAQUE_SIZE_OPACITY_PERCENT) {
+                continue;
+            }
+            found = true;
+            min_x = min_x.min(x);
+            min_y = min_y.min(y);
+            max_x = max_x.max(x);
+            max_y = max_y.max(y);
         }
     }
-    out
+    if !found {
+        return (w.max(1), h.max(1));
+    }
+    ((max_x - min_x + 1).max(1), (max_y - min_y + 1).max(1))
 }
 
 fn build_family_largest_dims(source_sprites: &BTreeMap<String, RgbaImage>) -> BTreeMap<String, (u32, u32)> {
@@ -587,15 +612,17 @@ fn build_family_largest_dims(source_sprites: &BTreeMap<String, RgbaImage>) -> BT
         let Some(family_id) = frame_family_id(name.as_str()) else {
             continue;
         };
-        let area = (img.width() as u64) * (img.height() as u64);
+        // Size from solid button body only (opacity threshold excludes drop shadows).
+        let (cw, ch) = opaque_content_dims(img);
+        let area = (cw as u64) * (ch as u64);
         match out.get(&family_id) {
             None => {
-                out.insert(family_id, (img.width(), img.height()));
+                out.insert(family_id, (cw, ch));
             }
             Some((w, h)) => {
                 let best_area = (*w as u64) * (*h as u64);
                 if area > best_area {
-                    out.insert(family_id, (img.width(), img.height()));
+                    out.insert(family_id, (cw, ch));
                 }
             }
         }
@@ -603,27 +630,87 @@ fn build_family_largest_dims(source_sprites: &BTreeMap<String, RgbaImage>) -> BT
     out
 }
 
-fn scale_by_family_factor(
-    normalized_base: &RgbaImage,
-    factor: f32,
-    target_w: u32,
-    target_h: u32,
-) -> RgbaImage {
-    let tw = target_w.max(1);
-    let th = target_h.max(1);
-    let f = factor.max(0.01).min(1.0);
-    let sw = ((normalized_base.width() as f32) * f).round().max(1.0) as u32;
-    let sh = ((normalized_base.height() as f32) * f).round().max(1.0) as u32;
-    let resized = resize(normalized_base, sw.min(tw), sh.min(th), FilterType::CatmullRom);
-    let mut out = RgbaImage::from_pixel(tw, th, image::Rgba([0, 0, 0, 0]));
-    let ox = (tw.saturating_sub(resized.width())) / 2;
-    let oy = (th.saturating_sub(resized.height())) / 2;
-    for y in 0..resized.height() {
-        for x in 0..resized.width() {
-            out.put_pixel(ox + x, oy + y, *resized.get_pixel(x, y));
+/// Exact fraction of a frame's opaque size relative to the family's largest button,
+/// plus a stored high-precision `scale` used for inspection/logging.
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct ScaleRatio {
+    /// Opaque target size on the tighter axis.
+    numer: u32,
+    /// Opaque largest size on that same axis (family baseline).
+    denom: u32,
+    /// `numer / denom` as f64, stored before apply so every sibling shares one baseline.
+    scale: f64,
+}
+
+impl ScaleRatio {
+    fn from_opaque_sizes(target_w: u32, target_h: u32, largest_w: u32, largest_h: u32) -> Self {
+        let lw = largest_w.max(1);
+        let lh = largest_h.max(1);
+        let tw = target_w.min(lw);
+        let th = target_h.min(lh);
+        // Tighter axis without floats: tw/lw <= th/lh ⇔ tw*lh <= th*lw.
+        let (numer, denom) = if (tw as u64) * (lh as u64) <= (th as u64) * (lw as u64) {
+            (tw, lw)
+        } else {
+            (th, lh)
+        };
+        let denom = denom.max(1);
+        let numer = numer.min(denom);
+        let scale = numer as f64 / denom as f64;
+        Self {
+            numer,
+            denom,
+            scale,
         }
     }
+
+    fn apply_dim(self, value: u32) -> u32 {
+        // Apply the stored high-precision scale (already relative to the family largest).
+        // Prefer the exact numer/denom form so float drift cannot cascade across siblings.
+        let d = self.denom.max(1) as u64;
+        let n = self.numer.min(self.denom.max(1)) as u64;
+        if n >= d || self.scale >= 1.0 - f64::EPSILON {
+            return value.max(1);
+        }
+        let v = value.max(1) as u64;
+        (((v * n) + (d / 2)) / d).max(1) as u32
+    }
+
+    fn apply_size(self, input_w: u32, input_h: u32) -> (u32, u32) {
+        (self.apply_dim(input_w), self.apply_dim(input_h))
+    }
+}
+
+/// Precompute each frame's scale ratio from opaque (no-shadow) BlankSheet sizes,
+/// always relative to that family's largest button.
+fn build_family_frame_ratios(
+    source_sprites: &BTreeMap<String, RgbaImage>,
+    family_largest_dims: &BTreeMap<String, (u32, u32)>,
+) -> BTreeMap<String, ScaleRatio> {
+    let mut out: BTreeMap<String, ScaleRatio> = BTreeMap::new();
+    for (name, img) in source_sprites {
+        let Some(family_id) = frame_family_id(name.as_str()) else {
+            continue;
+        };
+        let Some(&(largest_w, largest_h)) = family_largest_dims.get(&family_id) else {
+            continue;
+        };
+        let (target_w, target_h) = opaque_content_dims(img);
+        out.insert(
+            name.clone(),
+            ScaleRatio::from_opaque_sizes(target_w, target_h, largest_w, largest_h),
+        );
+    }
     out
+}
+
+/// Treat `input` as the family's largest button and downscale by a precomputed ratio.
+fn downscale_by_stored_ratio(input: &RgbaImage, ratio: ScaleRatio) -> RgbaImage {
+    let (sw, sh) = ratio.apply_size(input.width(), input.height());
+    if sw == input.width() && sh == input.height() {
+        return input.clone();
+    }
+    resize(input, sw, sh, FilterType::CatmullRom)
 }
 
 fn frame_family_id(frame_name: &str) -> Option<String> {
@@ -823,7 +910,10 @@ where
     let mut plist_root = split.plist_root;
     let mut sprites = split.sprites;
     let source_sprites = sprites.clone();
+    // Ratios use opaque-content sizes only (>60% opacity) so constant drop shadows
+    // do not skew the family baseline; every ratio is relative to the family largest.
     let family_largest_dims = build_family_largest_dims(&source_sprites);
+    let frame_ratios = build_family_frame_ratios(&source_sprites, &family_largest_dims);
 
     // Cache templates by path.
     let mut template_cache: BTreeMap<String, RgbaImage> = BTreeMap::new();
@@ -833,6 +923,7 @@ where
     // Replace frames.
     let mut replaced = 0usize;
     let mut targeted = 0usize;
+    let mut replaced_names: Vec<String> = Vec::new();
     for (frame_name, frame_value) in sprites.iter_mut() {
         check_cancel(cancel.as_ref())?;
 
@@ -855,6 +946,15 @@ where
         }
 
         targeted += 1;
+        let Some(ratio) = frame_ratios.get(frame_name.as_str()).copied() else {
+            issues.push(ReportIssue {
+                level: ReportLevel::Warning,
+                message: format!("missing precomputed scale ratio for `{frame_name}`"),
+                file: Some(frame_name.clone()),
+            });
+            continue;
+        };
+
         let base_raw = if let Some(template_path) = template_path_for_frame(options, frame_name.as_str()) {
             if let Some(img) = template_cache.get(&template_path) {
                 img.clone()
@@ -880,27 +980,35 @@ where
             }
         };
 
-        let target_size = frame_value.dimensions();
-        let Some((largest_w, largest_h)) = family_largest_dims.get(&family_id).copied() else {
-            issues.push(ReportIssue {
-                level: ReportLevel::Warning,
-                message: format!("missing largest-dimension mapping for family `{family_id}`"),
-                file: Some(frame_name.clone()),
-            });
-            continue;
-        };
-        let normalized_base = resize_preserve_aspect_fit(&base_raw, largest_w, largest_h);
-        let factor_w = target_size.0 as f32 / largest_w.max(1) as f32;
-        let factor_h = target_size.1 as f32 / largest_h.max(1) as f32;
-        let factor = factor_w.min(factor_h);
-        let mut out = scale_by_family_factor(&normalized_base, factor, target_size.0, target_size.1);
+        // Apply the stored largest-relative ratio (input is assumed to be the family largest).
+        let mut out = downscale_by_stored_ratio(&base_raw, ratio);
 
         let effective_variant = variant.unwrap_or(crate::core::contracts::GeodeButtonsVariant::Primary);
         let (h, s, val) = resolve_hsv_delta(options, family_id.as_str(), effective_variant);
         apply_hsv_delta(&mut out, h, s, val);
 
         *frame_value = out;
+        replaced_names.push(frame_name.clone());
         replaced += 1;
+    }
+
+    // Convert pure-alpha rows/columns into plist spriteOffset adjustments (same as merger).
+    if !replaced_names.is_empty() {
+        let frames = frames_dictionary_mut(&mut plist_root)?;
+        for frame_name in &replaced_names {
+            check_cancel(cancel.as_ref())?;
+            let Some(frame_value) = frames.get_mut(frame_name) else {
+                continue;
+            };
+            let Some(frame_dict) = frame_value.as_dictionary_mut() else {
+                continue;
+            };
+            let Some(rgba) = sprites.remove(frame_name) else {
+                continue;
+            };
+            let trimmed = apply_alpha_trim_to_frame_dict(frame_dict, rgba);
+            sprites.insert(frame_name.clone(), trimmed);
+        }
     }
 
     if targeted == 0 {
@@ -949,8 +1057,130 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use image::Rgba;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn stored_ratios_are_relative_to_largest_with_f64_precision() {
+        let half = ScaleRatio::from_opaque_sizes(50, 50, 100, 100);
+        assert_eq!((half.numer, half.denom), (50, 100));
+        assert!((half.scale - 0.5).abs() < 1e-12);
+        assert_eq!(half.apply_size(200, 160), (100, 80));
+
+        let identity = ScaleRatio::from_opaque_sizes(100, 100, 100, 100);
+        assert!((identity.scale - 1.0).abs() < 1e-12);
+        assert_eq!(identity.apply_size(180, 120), (180, 120));
+
+        // Never upscale past the assumed-largest input.
+        let clamped = ScaleRatio::from_opaque_sizes(200, 200, 100, 100);
+        assert!((clamped.scale - 1.0).abs() < 1e-12);
+        assert_eq!(clamped.apply_size(180, 120), (180, 120));
+
+        // Tighter axis wins (40/100 < 50/100).
+        let tight = ScaleRatio::from_opaque_sizes(40, 50, 100, 100);
+        assert_eq!((tight.numer, tight.denom), (40, 100));
+        assert!((tight.scale - 0.4).abs() < 1e-12);
+        assert_eq!(tight.apply_size(100, 100), (40, 40));
+    }
+
+    #[test]
+    fn stored_ratios_round_once_from_largest_not_cascaded() {
+        let mid = ScaleRatio::from_opaque_sizes(67, 67, 100, 100);
+        let small = ScaleRatio::from_opaque_sizes(33, 33, 100, 100);
+        assert!((mid.scale - 0.67).abs() < 1e-12);
+        assert!((small.scale - 0.33).abs() < 1e-12);
+        // Both apply against the same largest baseline (300), not mid→small.
+        assert_eq!(mid.apply_dim(300), 201);
+        assert_eq!(small.apply_dim(300), 99);
+        assert_eq!(ScaleRatio { numer: 1, denom: 3, scale: 1.0 / 3.0 }.apply_dim(100), 33);
+    }
+
+    #[test]
+    fn build_family_frame_ratios_uses_opaque_dims_vs_largest() {
+        // Two circle-family frames: large solid 20x20, small solid 10x10 inside padded canvases
+        // with soft shadow (40% alpha) that must not affect ratios.
+        let mut large = RgbaImage::from_pixel(30, 30, Rgba([0, 0, 0, 102]));
+        for y in 5..25 {
+            for x in 5..25 {
+                large.put_pixel(x, y, Rgba([255, 255, 255, 255]));
+            }
+        }
+        let mut small = RgbaImage::from_pixel(20, 20, Rgba([0, 0, 0, 102]));
+        for y in 5..15 {
+            for x in 5..15 {
+                small.put_pixel(x, y, Rgba([255, 255, 255, 255]));
+            }
+        }
+        let mut sprites = BTreeMap::new();
+        sprites.insert(
+            "geode.loader/baseCircle_Large_Green.png".to_string(),
+            large,
+        );
+        sprites.insert(
+            "geode.loader/baseCircle_Small_Green.png".to_string(),
+            small,
+        );
+        let largest = build_family_largest_dims(&sprites);
+        assert_eq!(largest.get("circle:primary").copied(), Some((20, 20)));
+        let ratios = build_family_frame_ratios(&sprites, &largest);
+        let small_ratio = ratios
+            .get("geode.loader/baseCircle_Small_Green.png")
+            .copied()
+            .expect("small ratio");
+        assert_eq!((small_ratio.numer, small_ratio.denom), (10, 20));
+        assert!((small_ratio.scale - 0.5).abs() < 1e-12);
+        let large_ratio = ratios
+            .get("geode.loader/baseCircle_Large_Green.png")
+            .copied()
+            .expect("large ratio");
+        assert!((large_ratio.scale - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn downscale_applies_ratio_to_input_not_blank_sheet_dims() {
+        let input = RgbaImage::from_pixel(200, 160, Rgba([255, 0, 0, 255]));
+        let ratio = ScaleRatio::from_opaque_sizes(50, 50, 100, 100);
+        let out = downscale_by_stored_ratio(&input, ratio);
+        assert_eq!(out.dimensions(), (100, 80));
+    }
+
+    #[test]
+    fn largest_ratio_keeps_input_dimensions() {
+        let input = RgbaImage::from_pixel(180, 120, Rgba([0, 255, 0, 255]));
+        let ratio = ScaleRatio::from_opaque_sizes(100, 100, 100, 100);
+        let out = downscale_by_stored_ratio(&input, ratio);
+        assert_eq!(out.dimensions(), (180, 120));
+    }
+
+    #[test]
+    fn opaque_content_dims_ignores_soft_shadow() {
+        // 10x10 canvas: solid 6x6 core, soft shadow (40% alpha) filling the rest.
+        let mut img = RgbaImage::from_pixel(10, 10, Rgba([0, 0, 0, 102]));
+        for y in 2..8 {
+            for x in 2..8 {
+                img.put_pixel(x, y, Rgba([255, 255, 255, 255]));
+            }
+        }
+        assert_eq!(opaque_content_dims(&img), (6, 6));
+    }
+
+    #[test]
+    fn opaque_content_dims_excludes_exactly_60_percent() {
+        let mut img = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 0]));
+        // 60% exactly must be excluded; only the >60% block counts.
+        for y in 0..8 {
+            for x in 0..8 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 153])); // 153/255 == 0.6
+            }
+        }
+        for y in 1..5 {
+            for x in 1..4 {
+                img.put_pixel(x, y, Rgba([255, 0, 0, 154])); // just over 60%
+            }
+        }
+        assert_eq!(opaque_content_dims(&img), (3, 4));
+    }
 
     fn unique_temp_dir(label: &str) -> PathBuf {
         let nanos = SystemTime::now()

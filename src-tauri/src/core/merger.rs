@@ -115,20 +115,7 @@ where
 
         const LOCKED_ALPHA_TRIM: bool = true;
         if LOCKED_ALPHA_TRIM {
-            let trimmed = trim_transparent_edges(&rgba);
-            rgba = trimmed.image;
-            let original_offset = get_pair_signed(frame_dict, "spriteOffset").unwrap_or((0.0, 0.0));
-            let adjusted_offset = (
-                original_offset.0 + (trimmed.left as f32 / 2.0) - (trimmed.right as f32 / 2.0),
-                original_offset.1 - (trimmed.top as f32 / 2.0) + (trimmed.bottom as f32 / 2.0),
-            );
-            frame_dict.insert(
-                "spriteOffset".to_string(),
-                Value::String(format!(
-                    "{{{:.3},{:.3}}}",
-                    adjusted_offset.0, adjusted_offset.1
-                )),
-            );
+            rgba = apply_alpha_trim_to_frame_dict(frame_dict, rgba);
         }
 
         let width = rgba.width().max(1);
@@ -281,20 +268,7 @@ where
 
         const LOCKED_ALPHA_TRIM: bool = true;
         if LOCKED_ALPHA_TRIM {
-            let trimmed = trim_transparent_edges(&rgba);
-            rgba = trimmed.image;
-            let original_offset = get_pair_signed(frame_dict, "spriteOffset").unwrap_or((0.0, 0.0));
-            let adjusted_offset = (
-                original_offset.0 + (trimmed.left as f32 / 2.0) - (trimmed.right as f32 / 2.0),
-                original_offset.1 - (trimmed.top as f32 / 2.0) + (trimmed.bottom as f32 / 2.0),
-            );
-            frame_dict.insert(
-                "spriteOffset".to_string(),
-                Value::String(format!(
-                    "{{{:.3},{:.3}}}",
-                    adjusted_offset.0, adjusted_offset.1
-                )),
-            );
+            rgba = apply_alpha_trim_to_frame_dict(frame_dict, rgba);
         }
 
         let width = rgba.width().max(1);
@@ -639,6 +613,28 @@ struct TrimResult {
     top: u32,
     right: u32,
     bottom: u32,
+}
+
+/// Trim fully transparent rows/columns and fold the insets into `spriteOffset`
+/// (same adjustment the merger applies when packing).
+pub(crate) fn apply_alpha_trim_to_frame_dict(
+    frame_dict: &mut Dictionary,
+    rgba: RgbaImage,
+) -> RgbaImage {
+    let trimmed = trim_transparent_edges(&rgba);
+    let original_offset = get_pair_signed(frame_dict, "spriteOffset").unwrap_or((0.0, 0.0));
+    let adjusted_offset = (
+        original_offset.0 + (trimmed.left as f32 / 2.0) - (trimmed.right as f32 / 2.0),
+        original_offset.1 - (trimmed.top as f32 / 2.0) + (trimmed.bottom as f32 / 2.0),
+    );
+    frame_dict.insert(
+        "spriteOffset".to_string(),
+        Value::String(format!(
+            "{{{:.3},{:.3}}}",
+            adjusted_offset.0, adjusted_offset.1
+        )),
+    );
+    trimmed.image
 }
 
 fn trim_transparent_edges(image: &RgbaImage) -> TrimResult {
