@@ -33,6 +33,19 @@ const errors = {
     readTargetFramesFailed: "대상 프레임을 읽지 못했습니다.",
     imageLoadFailed: "이미지를 불러오지 못했습니다",
   },
+  packInstaller: {
+    geometryDashRequired:
+      "Geometry Dash 경로를 찾을 수 없습니다. 팩을 설치하기 전에 설정에서 지정하세요(또는 Steam으로 GD + Geode 설치).",
+    runtimeUnavailable: "Pack Installer is available only in the desktop app.",
+    discoverFailed: "Failed to discover install units from the selected source.",
+    installFailed: "Failed to install the selected pack units.",
+    createFailed: "Failed to create the texture pack folder.",
+    openFolderFailed: "Failed to open the pack folder.",
+    noUnitsSelected: "Select at least one install unit.",
+    convertVersionRequired: "Choose the pack's previous game version when Convert to Latest Version is enabled.",
+    folderNameRequired: "Enter a folder name for the new pack.",
+    invalidDropPng: "Drop a .png file for pack.png, or switch to Install mode for folders/zips.",
+  },
   iconEditor: {
     decodeFrameFailed: "추출한 프레임 이미지를 디코딩하지 못했습니다.",
     allocateCanvasFailed: "추출한 프레임을 위한 캔버스를 할당하지 못했습니다.",

@@ -33,7 +33,8 @@ pub fn path_is_under_reserved_output_subtree(input_root: &Path, path: &Path) -> 
         .any(|name| name.to_string_lossy().eq_ignore_ascii_case("GeneratedGlow"))
 }
 
-fn reserved_output_dir_name(name: &OsStr) -> bool {
+/// True when `name` is a TM2 reserved tool-output folder (`Split`, `Merged`, …).
+pub fn is_reserved_output_dir_name(name: &OsStr) -> bool {
     let s = name.to_string_lossy();
     s.eq_ignore_ascii_case("Split")
         || s.eq_ignore_ascii_case("Merged")
@@ -41,6 +42,10 @@ fn reserved_output_dir_name(name: &OsStr) -> bool {
         || s.eq_ignore_ascii_case("GeneratedGlow")
         || s.eq_ignore_ascii_case("ConvertedToLatestVersion")
         || s.eq_ignore_ascii_case("Randomized")
+}
+
+fn reserved_output_dir_name(name: &OsStr) -> bool {
+    is_reserved_output_dir_name(name)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

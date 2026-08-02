@@ -32,6 +32,19 @@ const errors = {
     readTargetFramesFailed: "无法读取目标帧。",
     imageLoadFailed: "图片加载失败",
   },
+  packInstaller: {
+    geometryDashRequired:
+      "未找到 Geometry Dash 路径。请先在设置中指定（或通过 Steam 安装 GD + Geode）再安装材质包。",
+    runtimeUnavailable: "Pack Installer is available only in the desktop app.",
+    discoverFailed: "Failed to discover install units from the selected source.",
+    installFailed: "Failed to install the selected pack units.",
+    createFailed: "Failed to create the texture pack folder.",
+    openFolderFailed: "Failed to open the pack folder.",
+    noUnitsSelected: "Select at least one install unit.",
+    convertVersionRequired: "Choose the pack's previous game version when Convert to Latest Version is enabled.",
+    folderNameRequired: "Enter a folder name for the new pack.",
+    invalidDropPng: "Drop a .png file for pack.png, or switch to Install mode for folders/zips.",
+  },
   iconEditor: {
     decodeFrameFailed: "无法解码提取出的帧图像。",
     allocateCanvasFailed: "无法为提取出的帧分配画布。",

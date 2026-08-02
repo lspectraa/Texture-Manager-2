@@ -57,6 +57,23 @@ impl GameFilesLayout {
         looks_like_geometry_dash_dir(&self.geometry_dash_dir)
     }
 
+    /// `{GD}/geode/config`
+    pub fn geode_config(&self) -> PathBuf {
+        self.geometry_dash_dir.join("geode").join("config")
+    }
+
+    /// `{GD}/geode/mods`
+    pub fn geode_mods(&self) -> PathBuf {
+        self.geometry_dash_dir.join("geode").join("mods")
+    }
+
+    /// `{GD}/geode/config/geode.texture-loader/packs`
+    pub fn texture_loader_packs(&self) -> PathBuf {
+        self.geode_config()
+            .join("geode.texture-loader")
+            .join("packs")
+    }
+
     pub fn to_dto(&self) -> GameFilesLayoutDto {
         let found = self.geometry_dash_found();
         GameFilesLayoutDto {
@@ -85,6 +102,21 @@ impl GameFilesLayout {
             },
             geode_unzipped_dir: if found {
                 self.geode_unzipped.to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            geode_config_dir: if found {
+                self.geode_config().to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            geode_mods_dir: if found {
+                self.geode_mods().to_string_lossy().to_string()
+            } else {
+                String::new()
+            },
+            texture_loader_packs_dir: if found {
+                self.texture_loader_packs().to_string_lossy().to_string()
             } else {
                 String::new()
             },
@@ -140,6 +172,9 @@ pub struct GameFilesLayoutDto {
     pub resources_dir: String,
     pub geode_resources_dir: String,
     pub geode_unzipped_dir: String,
+    pub geode_config_dir: String,
+    pub geode_mods_dir: String,
+    pub texture_loader_packs_dir: String,
     pub geometry_dash_found: bool,
 }
 

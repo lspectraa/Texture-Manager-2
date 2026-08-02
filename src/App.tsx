@@ -13,6 +13,7 @@ import {
   Download,
   Files,
   FolderOutput,
+  Package,
 } from "lucide-react";
 import "./App.css";
 import {
@@ -21,6 +22,10 @@ import {
   OperationRequest,
 } from "./domain/operations";
 import type { GeodeButtonsOptions } from "./domain/operations";
+import {
+  DEFAULT_PACK_INSTALLER_BRIDGE,
+  type PackInstallerBridge,
+} from "./domain/packInstaller";
 import {
   getPhaseDefaults,
   isTauriRuntime,
@@ -37,6 +42,11 @@ import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
 import { ParticleEditorToolPanel } from "./components/tools/ParticleEditorToolPanel";
 import { SettingsToolPanel } from "./components/tools/SettingsToolPanel";
+import {
+  TexturePackInstallerToolPanel,
+  type PackInstallerSidebarActions,
+} from "./components/tools/TexturePackInstallerToolPanel";
+import { PackInstallerMetadataSidebar } from "./components/tools/PackInstallerMetadataSidebar";
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
@@ -277,6 +287,12 @@ function App() {
     familyVariantRules: null,
     sheetConcurrency: 1,
   }));
+
+  const [packInstallerBridge, setPackInstallerBridge] = useState<PackInstallerBridge>(
+    DEFAULT_PACK_INSTALLER_BRIDGE,
+  );
+  const [packInstallerSidebarActions, setPackInstallerSidebarActions] =
+    useState<PackInstallerSidebarActions | null>(null);
 
   useEffect(() => {
     const loadDefaults = async (): Promise<void> => {
@@ -853,9 +869,18 @@ function App() {
   const isHome = selectedTool === "home";
   const isSettings = selectedTool === "settings";
   const isGeodeButtons = selectedTool === "geodeButtons";
+  const isPackInstaller = selectedTool === "texturePackInstaller";
   const isToolPanel = !isIconEditor && !isParticleEditor && !isHome && !isSettings;
-  const showRunAction = isToolPanel;
-  const showOperationAndReport = !isIconEditor && !isParticleEditor && !isHome && !isGeodeButtons && !isSettings;
+  const showRunAction = isToolPanel && !isPackInstaller;
+  const showOperationAndReport =
+    !isIconEditor &&
+    !isParticleEditor &&
+    !isHome &&
+    !isGeodeButtons &&
+    !isSettings &&
+    !isPackInstaller;
+  const showPackMetadataRail = isPackInstaller;
+  const showRightRail = showOperationAndReport || showPackMetadataRail;
 
   const shellBackgroundOptions = useMemo(
     () =>
@@ -1143,7 +1168,14 @@ function App() {
       case "particleEditor":
         return <ParticleEditorToolPanel />;
       case "texturePackInstaller":
-        return null;
+        return (
+          <TexturePackInstallerToolPanel
+            geometryDashFound={appSettings.geometryDashFound}
+            bridge={packInstallerBridge}
+            onBridgeChange={setPackInstallerBridge}
+            onSidebarActionsChange={setPackInstallerSidebarActions}
+          />
+        );
       default: {
         const neverTool: never = selectedTool;
         throw new Error(`Unhandled tool selection: ${neverTool}`);
@@ -1323,7 +1355,7 @@ function App() {
         className={`tm-layout ${
           isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings ? "tm-layout-icon-editor" : ""
         }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
-          showOperationAndReport && isReportCollapsed ? " tm-layout-report-collapsed" : ""
+          showRightRail && isReportCollapsed ? " tm-layout-report-collapsed" : ""
         }${
           navPanelTransition.animating || reportPanelTransition.animating
             ? " tm-layout--animating"
@@ -1358,7 +1390,7 @@ function App() {
               isIconEditor ? " tm-panel-icon-editor" : ""
             }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
               isGeodeButtons ? " tm-panel-geode" : ""
-            }`}
+            }${isPackInstaller ? " tm-panel-pack-installer" : ""}`}
           >
             <GlassFrost />
             <div className="tm-panel-body">{toolPanel}</div>
@@ -1379,11 +1411,15 @@ function App() {
           </section>
         </div>
 
-        {showOperationAndReport ? (
+        {showRightRail ? (
           <section
-            className={`tm-report tm-glass-card tm-report-state-${reportState}${
-              isReportCollapsed ? " tm-report--collapsed" : ""
-            }${reportPanelTransition.animating ? " tm-report--animating" : ""}`}
+            className={`tm-report tm-glass-card ${
+              showPackMetadataRail
+                ? "tm-report-state-ready tm-report-pack-meta"
+                : `tm-report-state-${reportState}`
+            }${isReportCollapsed ? " tm-report--collapsed" : ""}${
+              reportPanelTransition.animating ? " tm-report--animating" : ""
+            }`}
           >
             <GlassFrost />
             <button
@@ -1403,22 +1439,36 @@ function App() {
               aria-expanded={!isReportCollapsed}
               aria-label={
                 isReportCollapsed
-                  ? t("reports:expandPanelAria")
-                  : t("reports:collapsePanelAria")
+                  ? showPackMetadataRail
+                    ? t("tools:packInstaller.expandPanelAria")
+                    : t("reports:expandPanelAria")
+                  : showPackMetadataRail
+                    ? t("tools:packInstaller.collapsePanelAria")
+                    : t("reports:collapsePanelAria")
               }
               title={
                 isReportCollapsed
-                  ? t("reports:showPanel")
-                  : t("reports:hidePanel")
+                  ? showPackMetadataRail
+                    ? t("tools:packInstaller.showPanel")
+                    : t("reports:showPanel")
+                  : showPackMetadataRail
+                    ? t("tools:packInstaller.hidePanel")
+                    : t("reports:hidePanel")
               }
               disabled={reportPanelTransition.animating}
             >
               <span className="tm-nav-btn-icon" aria-hidden>
-                <Activity size={16} strokeWidth={1.85} />
+                {showPackMetadataRail ? (
+                  <Package size={16} strokeWidth={1.85} />
+                ) : (
+                  <Activity size={16} strokeWidth={1.85} />
+                )}
               </span>
               <span className="tm-nav-btn-copy">
                 <span className="tm-nav-btn-label">
-                  {t("reports:panelTitle")}
+                  {showPackMetadataRail
+                    ? t("tools:packInstaller.metadataPanelTitle")
+                    : t("reports:panelTitle")}
                 </span>
               </span>
               <span className="tm-shell-panel-title-chevron" aria-hidden>
@@ -1427,7 +1477,18 @@ function App() {
             </button>
             <div className="tm-report-body" aria-hidden={isReportCollapsed}>
             <div className="tm-report-body-inner">
-            {loadError ? (
+            {showPackMetadataRail ? (
+              <PackInstallerMetadataSidebar
+                bridge={packInstallerBridge}
+                onBridgeChange={setPackInstallerBridge}
+                onBrowsePackPng={packInstallerSidebarActions?.browsePackPng}
+                onClearPackPng={packInstallerSidebarActions?.clearPackPng}
+                onUpdateSelectedPackMetadata={
+                  packInstallerSidebarActions?.updateSelectedPackMetadata
+                }
+              />
+            ) : null}
+            {!showPackMetadataRail && loadError ? (
               <div className="tm-report-alert tm-report-alert-error" role="alert">
                 <AlertCircle size={15} strokeWidth={2} />
                 <div className="tm-report-alert-copy">
@@ -1438,7 +1499,7 @@ function App() {
                 </div>
               </div>
             ) : null}
-            {runError ? (
+            {!showPackMetadataRail && runError ? (
               <div className="tm-report-alert tm-report-alert-error" role="alert">
                 <AlertCircle size={15} strokeWidth={2} />
                 <div className="tm-report-alert-copy">
@@ -1449,7 +1510,7 @@ function App() {
                 </div>
               </div>
             ) : null}
-            {!report ? (
+            {!showPackMetadataRail && !report ? (
               <div className="tm-report-empty">
                 <span className="tm-report-empty-icon" aria-hidden>
                   <Activity size={22} strokeWidth={1.75} />
@@ -1462,7 +1523,7 @@ function App() {
                 </p>
               </div>
             ) : null}
-            {report ? (
+            {!showPackMetadataRail && report ? (
               <>
                 <div className={`tm-report-summary tm-report-summary-${reportState}`}>
                   <div className="tm-report-summary-head">

@@ -136,7 +136,6 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         shortLabel: "tools.texturePackInstaller.shortLabel",
         description: "tools.texturePackInstaller.description",
         icon: PackageOpen,
-        upcoming: true,
       },
     ],
   },

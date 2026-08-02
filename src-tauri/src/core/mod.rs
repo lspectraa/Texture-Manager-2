@@ -15,6 +15,7 @@ pub mod particle_sprites;
 pub mod image_io;
 pub mod merger;
 pub mod operations;
+pub mod pack_installer;
 pub mod pipeline;
 pub mod plist;
 pub mod porter;

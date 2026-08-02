@@ -43,6 +43,14 @@ use crate::core::icon_editor::{
     IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
 };
 use crate::core::operations::build_operation_plan;
+use crate::core::pack_installer::{
+    cleanup_pack_install_temp as cleanup_pack_install_temp_core,
+    create_texture_pack as create_texture_pack_core,
+    discover_pack_install as discover_pack_install_core,
+    install_pack_plan as install_pack_plan_core,
+    read_pack_metadata as read_pack_metadata_core, CreateTexturePackRequest, CreateTexturePackResult,
+    InstallPackOptions, InstallPackResult, InstallPlan, PackMetadata, ReadPackMetadataResult,
+};
 use crate::core::report::OperationReport;
 use crate::core::settings::{
     add_custom_app_background as add_custom_app_background_core,
@@ -238,25 +246,59 @@ async fn redetect_geometry_dash_dir(
 }
 
 #[tauri::command]
-fn open_path_in_os(app: AppHandle, path: String) -> Result<(), String> {
+fn open_path_in_os(
+    app: AppHandle,
+    game_files: tauri::State<'_, GameFilesState>,
+    path: String,
+) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
 
     let target =
         crate::core::safe_fs::parse_user_absolute_path(&path).map_err(|err| err.to_string())?;
+    let layout = game_files.snapshot();
     let root = crate::core::game_files::resolve_game_files_root();
     std::fs::create_dir_all(&root).map_err(|err| {
-        format!(
-            "failed to ensure game-files root exists: {err}"
-        )
+        format!("failed to ensure game-files root exists: {err}")
     })?;
-    // Only allow opening directories under the app game-files root (no arbitrary
-    // path open/launch from the webview). Opener path permissions are not
-    // granted to the frontend; this Rust path uses OpenerExt directly.
-    let target_canon = crate::core::safe_fs::ensure_canonical_under_root(&target, &root)
-        .map_err(|err| err.to_string())?;
+
+    // Allow game-files root, or Geode config/mods under a resolved GD install
+    // (Create Pack "open folder" targets texture-loader packs).
+    let allowed_roots: Vec<std::path::PathBuf> = {
+        let mut roots = vec![root];
+        if layout.geometry_dash_found() {
+            let config = layout.geode_config();
+            let mods = layout.geode_mods();
+            let _ = std::fs::create_dir_all(&config);
+            let _ = std::fs::create_dir_all(&mods);
+            roots.push(config);
+            roots.push(mods);
+        }
+        roots
+    };
+
+    let mut target_canon = None;
+    let mut last_err = None;
+    for allowed in &allowed_roots {
+        match crate::core::safe_fs::ensure_canonical_under_root(&target, allowed) {
+            Ok(canon) => {
+                target_canon = Some(canon);
+                break;
+            }
+            Err(err) => last_err = Some(err),
+        }
+    }
+    let target_canon = target_canon.ok_or_else(|| {
+        last_err
+            .map(|err| err.to_string())
+            .unwrap_or_else(|| {
+                "Only directories under the Texture Manager game-files folder or Geode config/mods can be opened."
+                    .to_string()
+            })
+    })?;
     if !target_canon.is_dir() {
         return Err(
-            "Only directories under the Texture Manager game-files folder can be opened.".to_string(),
+            "Only directories under the Texture Manager game-files folder or Geode config/mods can be opened."
+                .to_string(),
         );
     }
 
@@ -513,6 +555,77 @@ fn get_game_files_layout(game_files: tauri::State<'_, GameFilesState>) -> GameFi
 }
 
 #[tauri::command]
+async fn discover_pack_install(
+    game_files: tauri::State<'_, GameFilesState>,
+    path: String,
+) -> Result<InstallPlan, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        discover_pack_install_core(&path, &layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn install_pack_plan(
+    app: AppHandle,
+    game_files: tauri::State<'_, GameFilesState>,
+    plan: InstallPlan,
+    unit_ids: Vec<String>,
+    options: Option<InstallPackOptions>,
+) -> Result<InstallPackResult, String> {
+    let layout = game_files.snapshot();
+    let app_handle = app.clone();
+    let options = options.unwrap_or_default();
+    run_blocking(move || {
+        install_pack_plan_core(&plan, &unit_ids, &layout, &options, |progress| {
+            let _ = app_handle.emit("pack-install-progress", &progress);
+        })
+        .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn create_texture_pack(
+    game_files: tauri::State<'_, GameFilesState>,
+    folder_name: String,
+    metadata: PackMetadata,
+    pack_png_path: Option<String>,
+) -> Result<CreateTexturePackResult, String> {
+    let layout = game_files.snapshot();
+    let request = CreateTexturePackRequest {
+        folder_name,
+        metadata,
+        pack_png_path,
+    };
+    run_blocking(move || {
+        create_texture_pack_core(&request, &layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_pack_metadata(pack_dir: String) -> Result<ReadPackMetadataResult, String> {
+    run_blocking(move || {
+        read_pack_metadata_core(&pack_dir).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn cleanup_pack_install_temp(
+    game_files: tauri::State<'_, GameFilesState>,
+    temp_dir: String,
+) -> Result<(), String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        cleanup_pack_install_temp_core(&temp_dir, &layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn geode_buttons_target_index_cmd(
     game_files: tauri::State<'_, GameFilesState>,
     plist_path: String,
@@ -666,6 +779,11 @@ pub fn run() {
             redetect_geometry_dash_dir,
             open_path_in_os,
             get_game_files_layout,
+            discover_pack_install,
+            install_pack_plan,
+            create_texture_pack,
+            read_pack_metadata,
+            cleanup_pack_install_temp,
             validate_operation_request,
             run_operation,
             cancel_operation,

@@ -34,6 +34,19 @@ const errors = {
     readTargetFramesFailed: "Falha ao ler os frames de destino.",
     imageLoadFailed: "falha ao carregar a imagem",
   },
+  packInstaller: {
+    geometryDashRequired:
+      "Caminho do Geometry Dash não encontrado. Defina-o em Configurações (ou instale GD + Geode via Steam) antes de instalar packs.",
+    runtimeUnavailable: "Pack Installer is available only in the desktop app.",
+    discoverFailed: "Failed to discover install units from the selected source.",
+    installFailed: "Failed to install the selected pack units.",
+    createFailed: "Failed to create the texture pack folder.",
+    openFolderFailed: "Failed to open the pack folder.",
+    noUnitsSelected: "Select at least one install unit.",
+    convertVersionRequired: "Choose the pack's previous game version when Convert to Latest Version is enabled.",
+    folderNameRequired: "Enter a folder name for the new pack.",
+    invalidDropPng: "Drop a .png file for pack.png, or switch to Install mode for folders/zips.",
+  },
   iconEditor: {
     decodeFrameFailed: "Falha ao decodificar a imagem do frame extraído.",
     allocateCanvasFailed: "Falha ao alocar o canvas para o frame extraído.",

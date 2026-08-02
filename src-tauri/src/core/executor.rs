@@ -809,7 +809,7 @@ where
     Ok((1, issues))
 }
 
-fn execute_porter_splitter<F>(
+pub fn execute_porter_splitter<F>(
     plan: &OperationPlan,
     input_dir: &Path,
     output_dir: &Path,
