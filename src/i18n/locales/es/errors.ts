@@ -61,6 +61,13 @@ const errors: AppLocaleResources["errors"] = {
     convertVersionRequired: "Choose the pack's previous game version when Convert to Latest Version is enabled.",
     folderNameRequired: "Enter a folder name for the new pack.",
     invalidDropPng: "Drop a .png file for pack.png, or switch to Install mode for folders/zips.",
+    listFailed: "Failed to list installed packs.",
+    saveMetadataFailed: "Failed to save pack metadata.",
+    operationFailed: "Failed to run the pack operation.",
+    noLibraryPackSelected: "Select a pack from the library first.",
+    openPacksFolderFailed: "Failed to open the packs folder.",
+    deleteFailed: "Failed to delete the pack.",
+    splitOutputRequired: "Choose an output folder before splitting the pack.",
   },
   iconEditor: {
     decodeFrameFailed:

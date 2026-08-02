@@ -90,15 +90,56 @@ export type PackInstallProgress = {
   total: number;
 };
 
-export type PackInstallerMode = "install" | "create";
+export type InstalledPack = {
+  id: string;
+  folderName: string;
+  path: string;
+  metadata?: PackMetadata;
+  packPngPath?: string;
+  fileCount?: number;
+};
+
+export type PackOperationKind =
+  | "convertToNewVersion"
+  | "porterSplitter"
+  | "splitter";
+
+export type RunPackOperationOptions = {
+  gameVersion?: string;
+  lowPort?: boolean;
+  /** Splitter output folder (`Split/` is written underneath). */
+  outputDir?: string;
+  sheetConcurrency?: number;
+};
+
+export type RunPackOperationResult = {
+  message: string;
+  issues: PackInstallIssue[];
+};
+
+export type UpdateInstalledPackMetadataRequest = {
+  packDir: string;
+  metadata: PackMetadata;
+  /** When true, apply `packPngPath` (string = copy, null/undefined = clear). */
+  updatePackPng: boolean;
+  packPngPath?: string | null;
+};
+
+export type PackInstallerMode = "install" | "create" | "library";
 
 /** Shared UI bridge between the tool panel and the metadata rail. */
 export type PackInstallerBridge = {
   mode: PackInstallerMode;
   selectedUnit: InstallUnit | null;
+  /** Library-mode selection (kept separate from install plan units). */
+  libraryPack: InstalledPack | null;
   packPngDataUrl: string | null;
   createMetadata: PackMetadata;
   createPackPngPath: string | null;
+  /** Pending library PNG path override before Save (null = clear, undefined = unchanged). */
+  libraryPackPngPath: string | null | undefined;
+  libraryPackPngDirty: boolean;
+  librarySaving: boolean;
 };
 
 export const DEFAULT_PACK_METADATA: PackMetadata = {
@@ -112,9 +153,13 @@ export const DEFAULT_PACK_METADATA: PackMetadata = {
 export const DEFAULT_PACK_INSTALLER_BRIDGE: PackInstallerBridge = {
   mode: "install",
   selectedUnit: null,
+  libraryPack: null,
   packPngDataUrl: null,
   createMetadata: DEFAULT_PACK_METADATA,
   createPackPngPath: null,
+  libraryPackPngPath: undefined,
+  libraryPackPngDirty: false,
+  librarySaving: false,
 };
 
 export function slugifyPackIdSegment(value: string): string {

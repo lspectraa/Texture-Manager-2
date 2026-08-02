@@ -46,10 +46,16 @@ use crate::core::operations::build_operation_plan;
 use crate::core::pack_installer::{
     cleanup_pack_install_temp as cleanup_pack_install_temp_core,
     create_texture_pack as create_texture_pack_core,
+    delete_installed_pack as delete_installed_pack_core,
     discover_pack_install as discover_pack_install_core,
     install_pack_plan as install_pack_plan_core,
-    read_pack_metadata as read_pack_metadata_core, CreateTexturePackRequest, CreateTexturePackResult,
-    InstallPackOptions, InstallPackResult, InstallPlan, PackMetadata, ReadPackMetadataResult,
+    list_installed_packs as list_installed_packs_core,
+    read_pack_metadata as read_pack_metadata_core,
+    run_pack_operation as run_pack_operation_core,
+    update_installed_pack_metadata as update_installed_pack_metadata_core, CreateTexturePackRequest,
+    CreateTexturePackResult, InstallPackOptions, InstallPackResult, InstallPlan,
+    InstalledPackSummary, PackMetadata, PackOperationKind, ReadPackMetadataResult,
+    RunPackOperationOptions, RunPackOperationResult,
 };
 use crate::core::report::OperationReport;
 use crate::core::settings::{
@@ -578,7 +584,7 @@ async fn install_pack_plan(
     let app_handle = app.clone();
     let options = options.unwrap_or_default();
     run_blocking(move || {
-        install_pack_plan_core(&plan, &unit_ids, &layout, &options, |progress| {
+        install_pack_plan_core(&plan, &unit_ids, &layout, &options, move |progress| {
             let _ = app_handle.emit("pack-install-progress", &progress);
         })
         .map_err(|err| err.to_string())
@@ -621,6 +627,71 @@ async fn cleanup_pack_install_temp(
     let layout = game_files.snapshot();
     run_blocking(move || {
         cleanup_pack_install_temp_core(&temp_dir, &layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn list_installed_packs(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<Vec<InstalledPackSummary>, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        list_installed_packs_core(&layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn update_installed_pack_metadata(
+    game_files: tauri::State<'_, GameFilesState>,
+    pack_dir: String,
+    metadata: PackMetadata,
+    update_pack_png: bool,
+    pack_png_path: Option<String>,
+) -> Result<ReadPackMetadataResult, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        update_installed_pack_metadata_core(
+            &pack_dir,
+            &metadata,
+            update_pack_png,
+            pack_png_path.as_deref(),
+            &layout,
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn delete_installed_pack(
+    game_files: tauri::State<'_, GameFilesState>,
+    pack_dir: String,
+) -> Result<(), String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        delete_installed_pack_core(&pack_dir, &layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn run_pack_operation(
+    app: AppHandle,
+    game_files: tauri::State<'_, GameFilesState>,
+    pack_dir: String,
+    kind: PackOperationKind,
+    options: Option<RunPackOperationOptions>,
+) -> Result<RunPackOperationResult, String> {
+    let layout = game_files.snapshot();
+    let app_handle = app.clone();
+    let options = options.unwrap_or_default();
+    run_blocking(move || {
+        run_pack_operation_core(&pack_dir, kind, &options, &layout, move |progress| {
+            let _ = app_handle.emit("pack-install-progress", &progress);
+        })
+        .map_err(|err| err.to_string())
     })
     .await
 }
@@ -784,6 +855,10 @@ pub fn run() {
             create_texture_pack,
             read_pack_metadata,
             cleanup_pack_install_temp,
+            list_installed_packs,
+            update_installed_pack_metadata,
+            delete_installed_pack,
+            run_pack_operation,
             validate_operation_request,
             run_operation,
             cancel_operation,

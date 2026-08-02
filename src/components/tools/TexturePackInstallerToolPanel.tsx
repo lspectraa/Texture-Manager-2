@@ -15,9 +15,14 @@ import {
   FileArchive,
   FolderOpen,
   FolderPlus,
+  Library,
   LoaderCircle,
   PackageOpen,
+  RefreshCw,
+  Scissors,
+  Shuffle,
   Trash2,
+  WandSparkles,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import convertVersionMap from "../../config/convertVersionMap.json";
@@ -26,8 +31,10 @@ import type {
   InstallTreeNode,
   InstallUnit,
   InstallUnitKind,
+  InstalledPack,
   PackInstallerBridge,
   PackMetadata,
+  PackOperationKind,
 } from "../../domain/packInstaller";
 import {
   DEFAULT_PACK_METADATA,
@@ -36,15 +43,26 @@ import {
 import {
   cleanupPackInstallTemp,
   createTexturePack,
+  deleteInstalledPack,
   discoverPackInstall,
   getPackPngDataUrl,
   installPackPlan,
+  listInstalledPacks,
+  runPackOperation,
+  updateInstalledPackMetadata,
 } from "../../services/tauriPackInstaller";
+import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { openPathInOs } from "../../services/tauriSettings";
 import { redactAbsolutePathsInText, shortenPathForDisplay } from "../../utils/pathDisplay";
 import {
+  PackLibraryContextMenu,
+  type PackLibraryContextAction,
+} from "./PackLibraryContextMenu";
+import {
+  FolderPathField,
   ToolCheckboxField,
+  ToolNumberField,
   ToolPage,
   ToolPageHeader,
   ToolSection,
@@ -53,11 +71,14 @@ import {
 } from "./layout";
 
 const CONVERT_VERSION_OPTIONS = Object.keys(convertVersionMap);
+const DEFAULT_LIBRARY_SHEET_CONCURRENCY = 5;
 
 export type PackInstallerSidebarActions = {
   browsePackPng: () => void;
   clearPackPng: () => void;
   updateSelectedPackMetadata: (metadata: PackMetadata) => void;
+  updateLibraryPackMetadata: (metadata: PackMetadata) => void;
+  saveLibraryMetadata: () => void;
 };
 
 type TexturePackInstallerToolPanelProps = {
@@ -67,14 +88,28 @@ type TexturePackInstallerToolPanelProps = {
   onSidebarActionsChange?: (actions: PackInstallerSidebarActions) => void;
 };
 
-type BusyKind = "discover" | "install" | "create" | null;
+type BusyKind = "discover" | "install" | "create" | "library" | "librarySave" | null;
 type OverlayState = "working" | "success" | "warning" | "error";
+type LibraryActionPanel = "convert" | "port" | "split" | null;
 
 type PackOverlay = {
   state: OverlayState;
   title: string;
   detail?: string | null;
+  completed?: number;
+  total?: number;
 };
+
+type LibraryContextMenuState = {
+  pack: InstalledPack;
+  x: number;
+  y: number;
+};
+
+function libraryPackTitle(pack: InstalledPack): string {
+  const name = pack.metadata?.name?.trim();
+  return name || pack.folderName;
+}
 
 function unitKindLabel(kind: InstallUnitKind, t: (key: string) => string): string {
   switch (kind) {
@@ -258,7 +293,7 @@ export function TexturePackInstallerToolPanel({
   onBridgeChange,
   onSidebarActionsChange,
 }: TexturePackInstallerToolPanelProps) {
-  const { t } = useTranslation(["tools", "errors"]);
+  const { t } = useTranslation(["tools", "errors", "common"]);
   const [plan, setPlan] = useState<InstallPlan | null>(null);
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<BusyKind>(null);
@@ -278,11 +313,33 @@ export function TexturePackInstallerToolPanel({
   );
   const [portPacks, setPortPacks] = useState(false);
   const [portLowGraphics, setPortLowGraphics] = useState(false);
+  const [libraryPacks, setLibraryPacks] = useState<InstalledPack[]>([]);
+  const [libraryPacksPath, setLibraryPacksPath] = useState<string | null>(null);
+  const [libraryPreviews, setLibraryPreviews] = useState<Record<string, string | null>>(
+    {},
+  );
+  const [libraryActionPanel, setLibraryActionPanel] = useState<LibraryActionPanel>(null);
+  const [libraryConvertVersion, setLibraryConvertVersion] = useState(() =>
+    CONVERT_VERSION_OPTIONS.includes("2.2")
+      ? "2.2"
+      : (CONVERT_VERSION_OPTIONS[0] ?? ""),
+  );
+  const [libraryPortLowGraphics, setLibraryPortLowGraphics] = useState(false);
+  const [librarySplitOutputDir, setLibrarySplitOutputDir] = useState("");
+  const [librarySplitConcurrency, setLibrarySplitConcurrency] = useState(
+    DEFAULT_LIBRARY_SHEET_CONCURRENCY,
+  );
+  const [libraryContextMenu, setLibraryContextMenu] =
+    useState<LibraryContextMenuState | null>(null);
+  const [libraryDeleteConfirm, setLibraryDeleteConfirm] =
+    useState<InstalledPack | null>(null);
   const extrasPanelId = useId();
+  const libraryActionPanelId = useId();
   const tempDirRef = useRef<string | null>(null);
   const bridgeRef = useRef(bridge);
   bridgeRef.current = bridge;
   const overlayTimerRef = useRef<number | null>(null);
+  const libraryRailFocusRef = useRef<HTMLDivElement | null>(null);
 
   const setBridge = useCallback(
     (patch: Partial<PackInstallerBridge>) => {
@@ -305,7 +362,13 @@ export function TexturePackInstallerToolPanel({
   const showCompletionOverlay = useCallback(
     (state: Exclude<OverlayState, "working">, title: string, detail?: string | null) => {
       clearOverlayTimer();
-      setOverlay({ state, title, detail: detail ?? null });
+      setOverlay({
+        state,
+        title,
+        detail: detail ?? null,
+        completed: undefined,
+        total: undefined,
+      });
       overlayTimerRef.current = window.setTimeout(() => {
         setOverlay(null);
         overlayTimerRef.current = null;
@@ -501,6 +564,102 @@ export function TexturePackInstallerToolPanel({
     }
   };
 
+  const selectLibraryPack = useCallback(
+    async (pack: InstalledPack | null, options?: { focusRail?: boolean }) => {
+      if (!pack) {
+        setBridge({
+          libraryPack: null,
+          packPngDataUrl: null,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
+        });
+        return;
+      }
+      setBridge({
+        libraryPack: pack,
+        packPngDataUrl: null,
+        libraryPackPngPath: undefined,
+        libraryPackPngDirty: false,
+      });
+      const previewPath = pack.packPngPath;
+      if (previewPath) {
+        const dataUrl = await getPackPngDataUrl(previewPath);
+        if (bridgeRef.current.libraryPack?.id === pack.id) {
+          setBridge({ libraryPack: pack, packPngDataUrl: dataUrl });
+        }
+      }
+      if (options?.focusRail) {
+        window.requestAnimationFrame(() => {
+          libraryRailFocusRef.current?.scrollIntoView({
+            block: "nearest",
+            behavior: "smooth",
+          });
+        });
+      }
+    },
+    [setBridge],
+  );
+
+  const refreshLibrary = useCallback(async (): Promise<void> => {
+    if (!geometryDashFound) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+      return;
+    }
+    if (!isTauriRuntime()) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.runtimeUnavailable"));
+      return;
+    }
+
+    setBusy("library");
+    setStatusMessage(null);
+    try {
+      const [packs, layout] = await Promise.all([
+        listInstalledPacks(),
+        getGameFilesLayout().catch(() => null),
+      ]);
+      setLibraryPacks(packs);
+      if (layout?.textureLoaderPacksDir) {
+        setLibraryPacksPath(layout.textureLoaderPacksDir);
+      }
+
+      const selectedId = bridgeRef.current.libraryPack?.id ?? null;
+      const selected =
+        (selectedId ? packs.find((pack) => pack.id === selectedId) : null) ?? null;
+      await selectLibraryPack(selected);
+
+      const previewEntries = await Promise.all(
+        packs.map(async (pack) => {
+          if (!pack.packPngPath) {
+            return [pack.id, null] as const;
+          }
+          const dataUrl = await getPackPngDataUrl(pack.packPngPath);
+          return [pack.id, dataUrl] as const;
+        }),
+      );
+      setLibraryPreviews(Object.fromEntries(previewEntries));
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error ? err.message : t("errors:packInstaller.listFailed"),
+        ),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }, [geometryDashFound, selectLibraryPack, t]);
+
+  // Reload whenever Library is shown — including remount after leaving the tool
+  // with Library still selected (local grid state is empty on mount).
+  useEffect(() => {
+    if (bridge.mode !== "library") {
+      return;
+    }
+    void refreshLibrary();
+  }, [bridge.mode, refreshLibrary]);
+
   const browsePackPng = useCallback(async (): Promise<void> => {
     if (!isTauriRuntime()) {
       return;
@@ -519,6 +678,17 @@ export function TexturePackInstallerToolPanel({
       if (bridgeRef.current.mode === "create") {
         setBridge({
           createPackPngPath: selected,
+          packPngDataUrl: dataUrl,
+        });
+        return;
+      }
+      if (bridgeRef.current.mode === "library") {
+        if (!bridgeRef.current.libraryPack) {
+          return;
+        }
+        setBridge({
+          libraryPackPngPath: selected,
+          libraryPackPngDirty: true,
           packPngDataUrl: dataUrl,
         });
         return;
@@ -549,6 +719,17 @@ export function TexturePackInstallerToolPanel({
     if (bridgeRef.current.mode === "create") {
       setBridge({
         createPackPngPath: null,
+        packPngDataUrl: null,
+      });
+      return;
+    }
+    if (bridgeRef.current.mode === "library") {
+      if (!bridgeRef.current.libraryPack) {
+        return;
+      }
+      setBridge({
+        libraryPackPngPath: null,
+        libraryPackPngDirty: true,
         packPngDataUrl: null,
       });
       return;
@@ -599,6 +780,352 @@ export function TexturePackInstallerToolPanel({
     [setBridge],
   );
 
+  const updateLibraryPackMetadata = useCallback(
+    (metadata: PackMetadata): void => {
+      const pack = bridgeRef.current.libraryPack;
+      if (!pack) {
+        return;
+      }
+      const nextPack: InstalledPack = { ...pack, metadata };
+      setLibraryPacks((prev) =>
+        prev.map((entry) => (entry.id === nextPack.id ? nextPack : entry)),
+      );
+      setBridge({ libraryPack: nextPack });
+    },
+    [setBridge],
+  );
+
+  const saveLibraryMetadata = useCallback(async (): Promise<void> => {
+    const pack = bridgeRef.current.libraryPack;
+    if (!pack?.metadata) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.noLibraryPackSelected"));
+      return;
+    }
+    if (!isTauriRuntime()) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.runtimeUnavailable"));
+      return;
+    }
+
+    setBusy("librarySave");
+    setBridge({ librarySaving: true });
+    setStatusMessage(null);
+    try {
+      const result = await updateInstalledPackMetadata({
+        packDir: pack.path,
+        metadata: pack.metadata,
+        updatePackPng: bridgeRef.current.libraryPackPngDirty,
+        packPngPath: bridgeRef.current.libraryPackPngDirty
+          ? (bridgeRef.current.libraryPackPngPath ?? null)
+          : undefined,
+      });
+      const nextPack: InstalledPack = {
+        ...pack,
+        metadata: result.metadata ?? pack.metadata,
+        packPngPath: result.packPngPath ?? undefined,
+      };
+      setLibraryPacks((prev) =>
+        prev.map((entry) => (entry.id === nextPack.id ? nextPack : entry)),
+      );
+      if (result.packPngPath) {
+        const dataUrl = await getPackPngDataUrl(result.packPngPath);
+        setLibraryPreviews((prev) => ({ ...prev, [nextPack.id]: dataUrl }));
+        setBridge({
+          libraryPack: nextPack,
+          packPngDataUrl: dataUrl,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
+          librarySaving: false,
+        });
+      } else {
+        setLibraryPreviews((prev) => ({ ...prev, [nextPack.id]: null }));
+        setBridge({
+          libraryPack: nextPack,
+          packPngDataUrl: null,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
+          librarySaving: false,
+        });
+      }
+      setStatusTone("success");
+      setStatusMessage(t("packInstaller.librarySaveSuccess"));
+    } catch (err: unknown) {
+      setBridge({ librarySaving: false });
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.saveMetadataFailed"),
+        ),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }, [setBridge, t]);
+
+  const runLibraryOperation = useCallback(
+    async (kind: PackOperationKind): Promise<void> => {
+      const pack = bridgeRef.current.libraryPack;
+      if (!pack) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.noLibraryPackSelected"));
+        return;
+      }
+      if (!geometryDashFound) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+        return;
+      }
+      if (!isTauriRuntime()) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.runtimeUnavailable"));
+        return;
+      }
+      if (kind === "convertToNewVersion" && !libraryConvertVersion.trim()) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.convertVersionRequired"));
+        return;
+      }
+      if (kind === "splitter" && !librarySplitOutputDir.trim()) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.splitOutputRequired"));
+        return;
+      }
+
+      setBusy("library");
+      setStatusMessage(null);
+      setLibraryActionPanel(null);
+      clearOverlayTimer();
+      setOverlay({
+        state: "working",
+        title: t("packInstaller.libraryWorking"),
+        detail: libraryPackTitle(pack),
+        completed: 0,
+        total: 0,
+      });
+
+      try {
+        const result = await runPackOperation(
+          pack.path,
+          kind,
+          {
+            gameVersion: libraryConvertVersion,
+            lowPort: libraryPortLowGraphics,
+            outputDir: librarySplitOutputDir,
+            sheetConcurrency:
+              kind === "splitter"
+                ? librarySplitConcurrency
+                : DEFAULT_LIBRARY_SHEET_CONCURRENCY,
+          },
+          (progress) => {
+            setOverlay({
+              state: "working",
+              title: progress.label,
+              detail: t("packInstaller.progressUnit", {
+                label: progress.label,
+                completed: progress.completed,
+                total: progress.total,
+              }),
+              completed: progress.completed,
+              total: progress.total,
+            });
+          },
+        );
+        showCompletionOverlay(
+          "success",
+          t("packInstaller.libraryOperationComplete"),
+          result.message,
+        );
+        setStatusTone("success");
+        setStatusMessage(result.message);
+        await refreshLibrary();
+      } catch (err: unknown) {
+        const message = redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.operationFailed"),
+        );
+        showCompletionOverlay("error", t("packInstaller.libraryOperationFailed"), message);
+        setStatusTone("error");
+        setStatusMessage(message);
+      } finally {
+        setBusy(null);
+      }
+    },
+    [
+      clearOverlayTimer,
+      geometryDashFound,
+      libraryConvertVersion,
+      libraryPortLowGraphics,
+      librarySplitConcurrency,
+      librarySplitOutputDir,
+      refreshLibrary,
+      showCompletionOverlay,
+      t,
+    ],
+  );
+
+  const openLibrarySplitPanel = useCallback(
+    (pack: InstalledPack): void => {
+      void selectLibraryPack(pack);
+      setLibrarySplitOutputDir((prev) => prev.trim() || pack.path);
+      setLibraryActionPanel("split");
+    },
+    [selectLibraryPack],
+  );
+
+  const pickLibrarySplitOutputFolder = useCallback(
+    async (onPicked: (path: string) => void): Promise<void> => {
+      if (!isTauriRuntime()) {
+        return;
+      }
+      const selected = await open({
+        directory: true,
+        multiple: false,
+        title: t("packInstaller.librarySplitOutputBrowse"),
+      });
+      if (typeof selected === "string" && selected.trim()) {
+        onPicked(selected);
+      }
+    },
+    [t],
+  );
+
+  const openLibraryPackFolder = useCallback(async (pack: InstalledPack): Promise<void> => {
+    try {
+      await openPathInOs(pack.path);
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.openFolderFailed"),
+        ),
+      );
+    }
+  }, [t]);
+
+  const openPacksFolder = useCallback(async (): Promise<void> => {
+    const path = libraryPacksPath;
+    if (!path) {
+      try {
+        const layout = await getGameFilesLayout();
+        if (!layout.textureLoaderPacksDir) {
+          throw new Error(t("errors:packInstaller.openPacksFolderFailed"));
+        }
+        setLibraryPacksPath(layout.textureLoaderPacksDir);
+        await openPathInOs(layout.textureLoaderPacksDir);
+      } catch (err: unknown) {
+        setStatusTone("error");
+        setStatusMessage(
+          redactAbsolutePathsInText(
+            err instanceof Error
+              ? err.message
+              : t("errors:packInstaller.openPacksFolderFailed"),
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      await openPathInOs(path);
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.openPacksFolderFailed"),
+        ),
+      );
+    }
+  }, [libraryPacksPath, t]);
+
+  const handleLibraryContextAction = useCallback(
+    (action: PackLibraryContextAction): void => {
+      const pack = libraryContextMenu?.pack ?? bridgeRef.current.libraryPack;
+      if (!pack) {
+        return;
+      }
+      switch (action) {
+        case "openFolder":
+          void openLibraryPackFolder(pack);
+          break;
+        case "convert":
+          void selectLibraryPack(pack);
+          setLibraryActionPanel("convert");
+          break;
+        case "port":
+          void selectLibraryPack(pack);
+          setLibraryActionPanel("port");
+          break;
+        case "split":
+          openLibrarySplitPanel(pack);
+          break;
+        case "delete":
+          void selectLibraryPack(pack);
+          setLibraryDeleteConfirm(pack);
+          break;
+        default: {
+          const _exhaustive: never = action;
+          void _exhaustive;
+          break;
+        }
+      }
+    },
+    [
+      libraryContextMenu?.pack,
+      openLibraryPackFolder,
+      openLibrarySplitPanel,
+      selectLibraryPack,
+    ],
+  );
+
+  const confirmDeleteLibraryPack = useCallback(async (): Promise<void> => {
+    const pack = libraryDeleteConfirm;
+    if (!pack) {
+      return;
+    }
+    if (!isTauriRuntime()) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.runtimeUnavailable"));
+      return;
+    }
+    setBusy("library");
+    setStatusMessage(null);
+    try {
+      await deleteInstalledPack(pack.path);
+      setLibraryDeleteConfirm(null);
+      if (bridgeRef.current.libraryPack?.id === pack.id) {
+        setBridge({
+          libraryPack: null,
+          packPngDataUrl: null,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
+        });
+      }
+      setStatusTone("success");
+      setStatusMessage(
+        t("packInstaller.libraryDeleteSuccess", { name: libraryPackTitle(pack) }),
+      );
+      await refreshLibrary();
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.deleteFailed"),
+        ),
+      );
+    } finally {
+      setBusy(null);
+    }
+  }, [libraryDeleteConfirm, refreshLibrary, setBridge, t]);
+
   useEffect(() => {
     onSidebarActionsChange?.({
       browsePackPng: () => {
@@ -606,11 +1133,17 @@ export function TexturePackInstallerToolPanel({
       },
       clearPackPng,
       updateSelectedPackMetadata,
+      updateLibraryPackMetadata,
+      saveLibraryMetadata: () => {
+        void saveLibraryMetadata();
+      },
     });
   }, [
     browsePackPng,
     clearPackPng,
     onSidebarActionsChange,
+    saveLibraryMetadata,
+    updateLibraryPackMetadata,
     updateSelectedPackMetadata,
   ]);
 
@@ -628,6 +1161,22 @@ export function TexturePackInstallerToolPanel({
         }
         const dataUrl = await getPackPngDataUrl(png);
         setBridge({ createPackPngPath: png, packPngDataUrl: dataUrl });
+        setStatusTone("info");
+        setStatusMessage(t("packInstaller.packPngSelected"));
+        return;
+      }
+
+      if (bridgeRef.current.mode === "library") {
+        const png = paths.find(isPngPath);
+        if (!png || !bridgeRef.current.libraryPack || paths.length !== 1) {
+          return;
+        }
+        const dataUrl = await getPackPngDataUrl(png);
+        setBridge({
+          libraryPackPngPath: png,
+          libraryPackPngDirty: true,
+          packPngDataUrl: dataUrl,
+        });
         setStatusTone("info");
         setStatusMessage(t("packInstaller.packPngSelected"));
         return;
@@ -746,42 +1295,71 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     setStatusMessage(null);
-    if (mode === "install") {
-      if (!plan) {
+    setLibraryActionPanel(null);
+    setLibraryContextMenu(null);
+    switch (mode) {
+      case "install": {
+        if (!plan) {
+          setBridge({
+            mode,
+            selectedUnit: null,
+            libraryPack: null,
+            packPngDataUrl: null,
+            libraryPackPngPath: undefined,
+            libraryPackPngDirty: false,
+          });
+          return;
+        }
+        const selected =
+          plan.units.find((u) => u.id === bridgeRef.current.selectedUnit?.id) ??
+          plan.units.find((u) => u.kind === "pack") ??
+          plan.units[0] ??
+          null;
+        setBridge({
+          mode,
+          selectedUnit: selected,
+          libraryPack: null,
+          packPngDataUrl: null,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
+        });
+        void loadUnitPreview(selected);
+        break;
+      }
+      case "create": {
+        const createPngPath = bridgeRef.current.createPackPngPath;
+        setBridge({
+          mode,
+          selectedUnit: null,
+          libraryPack: null,
+          packPngDataUrl: null,
+          createPackPngPath: createPngPath,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
+        });
+        if (createPngPath) {
+          void getPackPngDataUrl(createPngPath).then((dataUrl) => {
+            if (bridgeRef.current.mode === "create") {
+              setBridge({ packPngDataUrl: dataUrl });
+            }
+          });
+        }
+        break;
+      }
+      case "library": {
         setBridge({
           mode,
           selectedUnit: null,
           packPngDataUrl: null,
+          libraryPackPngPath: undefined,
+          libraryPackPngDirty: false,
         });
-        return;
+        break;
       }
-      const selected =
-        plan.units.find((u) => u.id === bridgeRef.current.selectedUnit?.id) ??
-        plan.units.find((u) => u.kind === "pack") ??
-        plan.units[0] ??
-        null;
-      setBridge({
-        mode,
-        selectedUnit: selected,
-        packPngDataUrl: null,
-      });
-      void loadUnitPreview(selected);
-    } else {
-      const createPngPath = bridgeRef.current.createPackPngPath;
-      setBridge({
-        mode,
-        selectedUnit: null,
-        packPngDataUrl: null,
-        createPackPngPath: createPngPath,
-      });
-      if (createPngPath) {
-        void getPackPngDataUrl(createPngPath).then((dataUrl) => {
-          if (bridgeRef.current.mode === "create") {
-            setBridge({ packPngDataUrl: dataUrl });
-          }
-        });
-      } else {
-        setBridge({ packPngDataUrl: null });
+      default: {
+        const _exhaustive: never = mode;
+        void _exhaustive;
+        break;
       }
     }
   };
@@ -869,6 +1447,8 @@ export function TexturePackInstallerToolPanel({
       state: "working",
       title: t("packInstaller.installing"),
       detail: null,
+      completed: 0,
+      total: 0,
     });
 
     try {
@@ -885,12 +1465,14 @@ export function TexturePackInstallerToolPanel({
         (progress) => {
           setOverlay({
             state: "working",
-            title: t("packInstaller.installing"),
+            title: progress.label || t("packInstaller.installing"),
             detail: t("packInstaller.progressUnit", {
               label: progress.label,
               completed: progress.completed,
               total: progress.total,
             }),
+            completed: progress.completed,
+            total: progress.total,
           });
         },
       );
@@ -1014,6 +1596,12 @@ export function TexturePackInstallerToolPanel({
       : overlay?.state === "error"
         ? "tm-progress-check-error"
         : "tm-progress-check-success";
+  const overlayProgressTotal = overlay?.total ?? 0;
+  const overlayProgressCompleted = overlay?.completed ?? 0;
+  const overlayProgressRatio =
+    overlay?.state === "working" && overlayProgressTotal > 0
+      ? Math.min(1, Math.max(0, overlayProgressCompleted / overlayProgressTotal))
+      : 0;
 
   return (
     <ToolPage accent="amber" wide>
@@ -1047,6 +1635,20 @@ export function TexturePackInstallerToolPanel({
               <p className="tm-progress-count">{overlay.detail}</p>
             ) : overlay.state === "working" ? (
               <p className="tm-progress-muted">{t("packInstaller.overlayPreparing")}</p>
+            ) : null}
+            {overlay.state === "working" && overlayProgressTotal > 0 ? (
+              <div
+                className="tm-pack-progress-track"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={overlayProgressTotal}
+                aria-valuenow={overlayProgressCompleted}
+              >
+                <div
+                  className="tm-pack-progress-fill"
+                  style={{ width: `${overlayProgressRatio * 100}%` }}
+                />
+              </div>
             ) : null}
           </div>
         </div>
@@ -1083,7 +1685,20 @@ export function TexturePackInstallerToolPanel({
           <FolderPlus size={15} />
           {t("packInstaller.modeCreate")}
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={bridge.mode === "library"}
+          className={`tm-pack-mode-btn${bridge.mode === "library" ? " tm-pack-mode-btn-active" : ""}`}
+          onClick={() => setMode("library")}
+          disabled={busy !== null}
+        >
+          <Library size={15} />
+          {t("packInstaller.modeLibrary")}
+        </button>
       </div>
+
+      <div ref={libraryRailFocusRef} className="tm-pack-library-rail-anchor" aria-hidden />
 
       {bridge.mode === "install" ? (
         <>
@@ -1283,7 +1898,7 @@ export function TexturePackInstallerToolPanel({
             </button>
           </div>
         </>
-      ) : (
+      ) : bridge.mode === "create" ? (
         <>
           <ToolSection
             title={t("packInstaller.createSection")}
@@ -1350,9 +1965,334 @@ export function TexturePackInstallerToolPanel({
             ) : null}
           </div>
         </>
+      ) : (
+        <>
+          <ToolSection
+            title={t("packInstaller.librarySection")}
+            subtitle={t("packInstaller.libraryDescription")}
+            icon={Library}
+          >
+            <div className="tm-pack-library-toolbar">
+              <p className="tm-pack-library-path" title={libraryPacksPath ?? undefined}>
+                <span className="tm-pack-library-path-label">
+                  {t("packInstaller.libraryPacksPath")}
+                </span>
+                <span>
+                  {libraryPacksPath
+                    ? shortenPathForDisplay(libraryPacksPath)
+                    : "—"}
+                </span>
+              </p>
+              <div className="tm-pack-library-toolbar-actions">
+                <button
+                  type="button"
+                  className="tm-tool-path-browse"
+                  onClick={() => void refreshLibrary()}
+                  disabled={busy !== null || !geometryDashFound}
+                >
+                  <RefreshCw size={15} />
+                  {t("packInstaller.libraryRefresh")}
+                </button>
+                <button
+                  type="button"
+                  className="tm-tool-path-browse"
+                  onClick={() => void openPacksFolder()}
+                  disabled={busy !== null || !geometryDashFound}
+                >
+                  <FolderOpen size={15} />
+                  {t("packInstaller.libraryOpenPacksFolder")}
+                </button>
+              </div>
+            </div>
+
+            {libraryPacks.length === 0 ? (
+              <div className="tm-pack-library-empty">
+                <p>{t("packInstaller.libraryEmpty")}</p>
+                <p className="tm-tool-section-note">{t("packInstaller.libraryEmptyHint")}</p>
+              </div>
+            ) : (
+              <div className="tm-pack-library-grid">
+                {libraryPacks.map((pack) => {
+                  const selected = bridge.libraryPack?.id === pack.id;
+                  const preview = libraryPreviews[pack.id];
+                  const author = pack.metadata?.author?.trim() || t("packInstaller.libraryNoAuthor");
+                  const version = pack.metadata?.version?.trim() || "1.0.0";
+                  return (
+                    <button
+                      key={pack.id}
+                      type="button"
+                      className={`tm-pack-library-card${selected ? " selected" : ""}`}
+                      onClick={() => void selectLibraryPack(pack)}
+                      onContextMenu={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        void selectLibraryPack(pack);
+                        setLibraryContextMenu({
+                          pack,
+                          x: event.clientX,
+                          y: event.clientY,
+                        });
+                      }}
+                      disabled={busy !== null}
+                    >
+                      <div className="tm-pack-library-preview">
+                        {preview ? (
+                          <img
+                            className="tm-pack-library-thumb"
+                            src={preview}
+                            alt=""
+                          />
+                        ) : (
+                          <div className="tm-pack-library-thumb-missing" aria-hidden>
+                            <PackageOpen size={28} strokeWidth={1.5} />
+                          </div>
+                        )}
+                      </div>
+                      <div className="tm-pack-library-title">{libraryPackTitle(pack)}</div>
+                      <div className="tm-pack-library-meta">
+                        {t("packInstaller.libraryVersionAuthor", {
+                          author,
+                          version,
+                        })}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {bridge.libraryPack ? (
+              <div className="tm-pack-library-selection-actions">
+                <button
+                  type="button"
+                  className="tm-pack-secondary-btn"
+                  onClick={() => void openLibraryPackFolder(bridge.libraryPack!)}
+                  disabled={busy !== null}
+                >
+                  <FolderOpen size={15} />
+                  {t("packInstaller.libraryActionOpenFolder")}
+                </button>
+                <button
+                  type="button"
+                  className="tm-pack-secondary-btn"
+                  onClick={() => setLibraryActionPanel("convert")}
+                  disabled={busy !== null}
+                >
+                  <WandSparkles size={15} />
+                  {t("packInstaller.libraryActionConvert")}
+                </button>
+                <button
+                  type="button"
+                  className="tm-pack-secondary-btn"
+                  onClick={() => setLibraryActionPanel("port")}
+                  disabled={busy !== null}
+                >
+                  <Shuffle size={15} />
+                  {t("packInstaller.libraryActionPort")}
+                </button>
+                <button
+                  type="button"
+                  className="tm-pack-secondary-btn"
+                  onClick={() => openLibrarySplitPanel(bridge.libraryPack!)}
+                  disabled={busy !== null}
+                >
+                  <Scissors size={15} />
+                  {t("packInstaller.libraryActionSplit")}
+                </button>
+              </div>
+            ) : null}
+
+            {libraryActionPanel ? (
+              <div
+                className="tm-pack-library-action-panel"
+                id={libraryActionPanelId}
+                role="region"
+                aria-label={
+                  libraryActionPanel === "convert"
+                    ? t("packInstaller.libraryConvertOptions")
+                    : libraryActionPanel === "port"
+                      ? t("packInstaller.libraryPortOptions")
+                      : t("packInstaller.librarySplitOptions")
+                }
+              >
+                {libraryActionPanel === "convert" ? (
+                  <>
+                    <p className="tm-pack-library-action-title">
+                      {t("packInstaller.libraryConvertOptions")}
+                    </p>
+                    <ToolSelectField
+                      label={t("packInstaller.convertPreviousVersion")}
+                      value={libraryConvertVersion}
+                      options={CONVERT_VERSION_OPTIONS}
+                      onChange={setLibraryConvertVersion}
+                    />
+                    <div className="tm-pack-library-action-buttons">
+                      <button
+                        type="button"
+                        className="tm-tool-run-btn"
+                        onClick={() => void runLibraryOperation("convertToNewVersion")}
+                        disabled={busy !== null}
+                      >
+                        <WandSparkles size={15} />
+                        {t("packInstaller.libraryRunConvert")}
+                      </button>
+                      <button
+                        type="button"
+                        className="tm-pack-secondary-btn"
+                        onClick={() => setLibraryActionPanel(null)}
+                        disabled={busy !== null}
+                      >
+                        {t("packInstaller.libraryCancelOptions")}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+                {libraryActionPanel === "port" ? (
+                  <>
+                    <p className="tm-pack-library-action-title">
+                      {t("packInstaller.libraryPortOptions")}
+                    </p>
+                    <ToolCheckboxField
+                      label={t("packInstaller.portLowGraphics")}
+                      checked={libraryPortLowGraphics}
+                      onChange={setLibraryPortLowGraphics}
+                    />
+                    <div className="tm-pack-library-action-buttons">
+                      <button
+                        type="button"
+                        className="tm-tool-run-btn"
+                        onClick={() => void runLibraryOperation("porterSplitter")}
+                        disabled={busy !== null}
+                      >
+                        <Shuffle size={15} />
+                        {t("packInstaller.libraryRunPort")}
+                      </button>
+                      <button
+                        type="button"
+                        className="tm-pack-secondary-btn"
+                        onClick={() => setLibraryActionPanel(null)}
+                        disabled={busy !== null}
+                      >
+                        {t("packInstaller.libraryCancelOptions")}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+                {libraryActionPanel === "split" ? (
+                  <>
+                    <p className="tm-pack-library-action-title">
+                      {t("packInstaller.librarySplitOptions")}
+                    </p>
+                    <FolderPathField
+                      label={t("packInstaller.librarySplitOutput")}
+                      value={librarySplitOutputDir}
+                      onChange={setLibrarySplitOutputDir}
+                      pickFolder={pickLibrarySplitOutputFolder}
+                      placeholder={t("packInstaller.librarySplitOutputPlaceholder")}
+                    />
+                    <p className="tm-tool-section-note">
+                      {t("packInstaller.librarySplitOutputHint")}
+                    </p>
+                    <ToolNumberField
+                      label={t("packInstaller.librarySplitConcurrency")}
+                      hint={t("common.range1To64")}
+                      value={librarySplitConcurrency}
+                      min={1}
+                      max={64}
+                      onChange={setLibrarySplitConcurrency}
+                    />
+                    <div className="tm-pack-library-action-buttons">
+                      <button
+                        type="button"
+                        className="tm-tool-run-btn"
+                        onClick={() => void runLibraryOperation("splitter")}
+                        disabled={busy !== null || !librarySplitOutputDir.trim()}
+                      >
+                        <Scissors size={15} />
+                        {t("packInstaller.libraryRunSplit")}
+                      </button>
+                      <button
+                        type="button"
+                        className="tm-pack-secondary-btn"
+                        onClick={() => setLibraryActionPanel(null)}
+                        disabled={busy !== null}
+                      >
+                        {t("packInstaller.libraryCancelOptions")}
+                      </button>
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
+          </ToolSection>
+        </>
       )}
 
-      {statusMessage && busy !== "install" && busy !== "create" ? (
+      {libraryContextMenu ? (
+        <PackLibraryContextMenu
+          pack={libraryContextMenu.pack}
+          x={libraryContextMenu.x}
+          y={libraryContextMenu.y}
+          disabled={busy !== null}
+          onAction={handleLibraryContextAction}
+          onClose={() => setLibraryContextMenu(null)}
+        />
+      ) : null}
+
+      {libraryDeleteConfirm ? (
+        <div
+          className="tm-icon-editor-confirm-dialog-backdrop"
+          onClick={() => {
+            if (busy === null) {
+              setLibraryDeleteConfirm(null);
+            }
+          }}
+          role="presentation"
+        >
+          <div
+            className="tm-icon-editor-confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t("packInstaller.libraryDeleteConfirmAria")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h3>{t("packInstaller.libraryDeleteConfirmTitle")}</h3>
+            <p>
+              {t("packInstaller.libraryDeleteConfirmDescription", {
+                name: libraryPackTitle(libraryDeleteConfirm),
+              })}
+            </p>
+            <div className="tm-icon-editor-confirm-dialog-actions">
+              <button
+                type="button"
+                onClick={() => setLibraryDeleteConfirm(null)}
+                disabled={busy !== null}
+              >
+                {t("common:cancel")}
+              </button>
+              <button
+                type="button"
+                className="tm-icon-editor-confirm-dialog-primary tm-pack-library-delete-confirm"
+                onClick={() => void confirmDeleteLibraryPack()}
+                disabled={busy !== null}
+              >
+                {busy === "library" ? (
+                  <LoaderCircle size={14} className="tm-pack-spin" />
+                ) : (
+                  <Trash2 size={14} />
+                )}
+                {t("packInstaller.libraryActionDelete")}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {statusMessage &&
+      busy !== "install" &&
+      busy !== "create" &&
+      busy !== "library" &&
+      busy !== "librarySave" ? (
         <div className={`tm-pack-status tm-pack-status-${statusTone}`} role="status">
           {busy ? <LoaderCircle size={15} className="tm-pack-spin" /> : null}
           <div>

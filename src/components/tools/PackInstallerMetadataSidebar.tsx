@@ -1,9 +1,10 @@
-import { ImageOff, Package } from "lucide-react";
+import { ImageOff, LoaderCircle, Package, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useRef } from "react";
 import type {
   InstallUnit,
   InstallUnitKind,
+  InstalledPack,
   PackInstallerBridge,
   PackMetadata,
 } from "../../domain/packInstaller";
@@ -21,6 +22,10 @@ type PackInstallerMetadataSidebarProps = {
   onClearPackPng?: () => void;
   /** Install-mode: persist metadata edits into the selected plan unit. */
   onUpdateSelectedPackMetadata?: (metadata: PackMetadata) => void;
+  /** Library-mode: persist metadata edits into the selected library pack (in memory). */
+  onUpdateLibraryPackMetadata?: (metadata: PackMetadata) => void;
+  /** Library-mode: write metadata + optional PNG to disk. */
+  onSaveLibraryMetadata?: () => void;
 };
 
 function unitKindLabel(
@@ -100,6 +105,51 @@ function PackPngActions({
   );
 }
 
+function MetadataFields({
+  meta,
+  onPatch,
+  t,
+}: {
+  meta: PackMetadata;
+  onPatch: (patch: Partial<PackMetadata>, options?: { idManual?: boolean }) => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <div className="tm-pack-meta-fields">
+      <ToolTextField
+        label={t("packInstaller.fieldTextureldr")}
+        value={meta.textureldr}
+        onChange={(textureldr) => onPatch({ textureldr })}
+        placeholder="1.5.0"
+      />
+      <ToolTextField
+        label={t("packInstaller.fieldName")}
+        value={meta.name}
+        onChange={(name) => onPatch({ name })}
+        placeholder={t("packInstaller.namePlaceholder")}
+      />
+      <ToolTextField
+        label={t("packInstaller.fieldId")}
+        value={meta.id}
+        onChange={(id) => onPatch({ id }, { idManual: true })}
+        placeholder="author.pack-id"
+      />
+      <ToolTextField
+        label={t("packInstaller.fieldVersion")}
+        value={meta.version}
+        onChange={(version) => onPatch({ version })}
+        placeholder="1.0.0"
+      />
+      <ToolTextField
+        label={t("packInstaller.fieldAuthor")}
+        value={meta.author}
+        onChange={(author) => onPatch({ author })}
+        placeholder={t("packInstaller.authorPlaceholder")}
+      />
+    </div>
+  );
+}
+
 function NonPackUnitSummary({ unit }: { unit: InstallUnit }) {
   const { t } = useTranslation("tools");
   const kind = unitKindLabel(unit.kind, t);
@@ -143,16 +193,24 @@ function NonPackUnitSummary({ unit }: { unit: InstallUnit }) {
   }
 }
 
+function libraryDisplayName(pack: InstalledPack): string {
+  const name = pack.metadata?.name?.trim();
+  return name || pack.folderName;
+}
+
 export function PackInstallerMetadataSidebar({
   bridge,
   onBridgeChange,
   onBrowsePackPng,
   onClearPackPng,
   onUpdateSelectedPackMetadata,
+  onUpdateLibraryPackMetadata,
+  onSaveLibraryMetadata,
 }: PackInstallerMetadataSidebarProps) {
   const { t } = useTranslation("tools");
   const createIdTouchedRef = useRef(false);
   const installIdTouchedRef = useRef<string | null>(null);
+  const libraryIdTouchedRef = useRef<string | null>(null);
 
   const suggestedId = (meta: PackMetadata): string => {
     const author = slugifyPackIdSegment(meta.author) || "author";
@@ -204,6 +262,29 @@ export function PackInstallerMetadataSidebar({
     onUpdateSelectedPackMetadata?.(next);
   };
 
+  const updateLibraryMetadata = (
+    pack: InstalledPack,
+    patch: Partial<PackMetadata>,
+    options?: { idManual?: boolean },
+  ): void => {
+    if (options?.idManual) {
+      libraryIdTouchedRef.current = pack.id;
+    }
+    const base = pack.metadata ?? {
+      ...DEFAULT_PACK_METADATA,
+      name: pack.folderName,
+    };
+    const next = { ...base, ...patch };
+    const idAuto =
+      libraryIdTouchedRef.current !== pack.id &&
+      !options?.idManual &&
+      ("name" in patch || "author" in patch);
+    if (idAuto) {
+      next.id = suggestedId(next);
+    }
+    onUpdateLibraryPackMetadata?.(next);
+  };
+
   if (bridge.mode === "create") {
     return (
       <div className="tm-pack-meta">
@@ -232,38 +313,89 @@ export function PackInstallerMetadataSidebar({
           path={bridge.createPackPngPath}
         />
 
-        <div className="tm-pack-meta-fields">
-          <ToolTextField
-            label={t("packInstaller.fieldTextureldr")}
-            value={bridge.createMetadata.textureldr}
-            onChange={(textureldr) => updateCreateMetadata({ textureldr })}
-            placeholder="1.5.0"
-          />
-          <ToolTextField
-            label={t("packInstaller.fieldName")}
-            value={bridge.createMetadata.name}
-            onChange={(name) => updateCreateMetadata({ name })}
-            placeholder={t("packInstaller.namePlaceholder")}
-          />
-          <ToolTextField
-            label={t("packInstaller.fieldId")}
-            value={bridge.createMetadata.id}
-            onChange={(id) => updateCreateMetadata({ id }, { idManual: true })}
-            placeholder="author.pack-id"
-          />
-          <ToolTextField
-            label={t("packInstaller.fieldVersion")}
-            value={bridge.createMetadata.version}
-            onChange={(version) => updateCreateMetadata({ version })}
-            placeholder="1.0.0"
-          />
-          <ToolTextField
-            label={t("packInstaller.fieldAuthor")}
-            value={bridge.createMetadata.author}
-            onChange={(author) => updateCreateMetadata({ author })}
-            placeholder={t("packInstaller.authorPlaceholder")}
-          />
+        <MetadataFields meta={bridge.createMetadata} onPatch={updateCreateMetadata} t={t} />
+      </div>
+    );
+  }
+
+  if (bridge.mode === "library") {
+    const pack = bridge.libraryPack;
+    if (!pack) {
+      return (
+        <div className="tm-pack-meta tm-pack-meta-empty">
+          <span className="tm-pack-meta-empty-icon" aria-hidden>
+            <Package size={22} strokeWidth={1.75} />
+          </span>
+          <p className="tm-pack-meta-empty-title">{t("packInstaller.metadataEmptyTitle")}</p>
+          <p className="tm-pack-meta-empty-hint">
+            {t("packInstaller.metadataLibraryEmptyHint")}
+          </p>
         </div>
+      );
+    }
+
+    const meta = pack.metadata ?? {
+      ...DEFAULT_PACK_METADATA,
+      name: pack.folderName,
+    };
+    const pngPath =
+      bridge.libraryPackPngDirty
+        ? (bridge.libraryPackPngPath ?? null)
+        : (pack.packPngPath ?? null);
+
+    return (
+      <div className="tm-pack-meta">
+        <header className="tm-pack-meta-head">
+          <span className="tm-pack-meta-head-icon" aria-hidden>
+            <Package size={16} strokeWidth={1.85} />
+          </span>
+          <div>
+            <h3 className="tm-pack-meta-title">{libraryDisplayName(pack)}</h3>
+            <p className="tm-pack-meta-subtitle">{t("packInstaller.metadataLibraryHint")}</p>
+          </div>
+        </header>
+
+        <PackPngPreview
+          dataUrl={bridge.packPngDataUrl}
+          alt={t("packInstaller.packPngAlt")}
+          missingLabel={t("packInstaller.packPngMissing")}
+        />
+
+        <PackPngActions
+          onBrowse={onBrowsePackPng}
+          onClear={onClearPackPng}
+          canClear={Boolean(pngPath) || Boolean(bridge.packPngDataUrl)}
+          browseLabel={t("packInstaller.browsePackPng")}
+          clearLabel={t("packInstaller.clearPackPng")}
+          path={pngPath}
+        />
+
+        <MetadataFields
+          meta={meta}
+          onPatch={(patch, options) => updateLibraryMetadata(pack, patch, options)}
+          t={t}
+        />
+
+        <p className="tm-pack-meta-path">
+          <span className="tm-pack-meta-path-label">{t("packInstaller.destination")}</span>
+          <span title={pack.path}>{shortenPathForDisplay(pack.path)}</span>
+        </p>
+
+        <button
+          type="button"
+          className="tm-tool-run-btn tm-pack-meta-save-btn"
+          onClick={() => onSaveLibraryMetadata?.()}
+          disabled={bridge.librarySaving || !onSaveLibraryMetadata}
+        >
+          {bridge.librarySaving ? (
+            <LoaderCircle size={15} className="tm-pack-spin" />
+          ) : (
+            <Save size={15} />
+          )}
+          {bridge.librarySaving
+            ? t("packInstaller.librarySavingMetadata")
+            : t("packInstaller.librarySaveMetadata")}
+        </button>
       </div>
     );
   }
@@ -330,44 +462,18 @@ export function PackInstallerMetadataSidebar({
         path={unit.packPngPath ?? null}
       />
 
-      <div className="tm-pack-meta-fields">
-        <ToolTextField
-          label={t("packInstaller.fieldTextureldr")}
-          value={meta.textureldr}
-          onChange={(textureldr) => updateInstallMetadata(unit, { textureldr })}
-          placeholder="1.5.0"
-        />
-        <ToolTextField
-          label={t("packInstaller.fieldName")}
-          value={meta.name}
-          onChange={(name) => updateInstallMetadata(unit, { name })}
-          placeholder={t("packInstaller.namePlaceholder")}
-        />
-        <ToolTextField
-          label={t("packInstaller.fieldId")}
-          value={meta.id}
-          onChange={(id) => updateInstallMetadata(unit, { id }, { idManual: true })}
-          placeholder="author.pack-id"
-        />
-        <ToolTextField
-          label={t("packInstaller.fieldVersion")}
-          value={meta.version}
-          onChange={(version) => updateInstallMetadata(unit, { version })}
-          placeholder="1.0.0"
-        />
-        <ToolTextField
-          label={t("packInstaller.fieldAuthor")}
-          value={meta.author}
-          onChange={(author) => updateInstallMetadata(unit, { author })}
-          placeholder={t("packInstaller.authorPlaceholder")}
-        />
-        <p className="tm-pack-meta-path">
-          <span className="tm-pack-meta-path-label">{t("packInstaller.destination")}</span>
-          <span title={unit.destinationPath}>
-            {shortenPathForDisplay(unit.destinationPath)}
-          </span>
-        </p>
-      </div>
+      <MetadataFields
+        meta={meta}
+        onPatch={(patch, options) => updateInstallMetadata(unit, patch, options)}
+        t={t}
+      />
+
+      <p className="tm-pack-meta-path">
+        <span className="tm-pack-meta-path-label">{t("packInstaller.destination")}</span>
+        <span title={unit.destinationPath}>
+          {shortenPathForDisplay(unit.destinationPath)}
+        </span>
+      </p>
     </div>
   );
 }

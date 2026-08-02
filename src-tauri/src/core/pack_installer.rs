@@ -16,13 +16,13 @@ use crate::core::contracts::{
 use crate::core::convert_to_new_version::execute_convert_to_new_version;
 use crate::core::discovery::is_reserved_output_dir_name;
 use crate::core::errors::AppError;
-use crate::core::executor::execute_porter_splitter;
+use crate::core::executor::{execute_operation_plan, execute_porter_splitter};
 use crate::core::game_files::{geometry_dash_required_error, GameFilesLayout};
-use crate::core::report::ReportLevel;
+use crate::core::report::{OperationProgress, ReportLevel};
 use crate::core::safe_fs::{
     ensure_existing_user_file, ensure_no_parent_dir_components, ensure_user_absolute_path,
-    is_safe_path_segment, parse_user_absolute_path, remove_dir_all_under_root,
-    shorten_path_for_display,
+    ensure_user_directory_path, is_safe_path_segment, parse_user_absolute_path,
+    remove_dir_all_under_root, shorten_path_for_display,
 };
 
 const PACK_INSTALL_TEMP_DIR: &str = "pack-install-temp";
@@ -171,6 +171,60 @@ impl Default for InstallPackOptions {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct InstalledPackSummary {
+    pub id: String,
+    pub folder_name: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<PackMetadata>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_png_path: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_count: Option<usize>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PackOperationKind {
+    ConvertToNewVersion,
+    PorterSplitter,
+    Splitter,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunPackOperationOptions {
+    #[serde(default)]
+    pub game_version: String,
+    #[serde(default)]
+    pub low_port: bool,
+    /// Output directory for Splitter (writes `Split/` under this path).
+    #[serde(default)]
+    pub output_dir: String,
+    #[serde(default = "default_pack_install_sheet_concurrency")]
+    pub sheet_concurrency: u32,
+}
+
+impl Default for RunPackOperationOptions {
+    fn default() -> Self {
+        Self {
+            game_version: String::new(),
+            low_port: false,
+            output_dir: String::new(),
+            sheet_concurrency: default_pack_install_sheet_concurrency(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RunPackOperationResult {
+    pub message: String,
+    pub issues: Vec<PackInstallIssue>,
+}
+
 /// Discover install units from a folder or `.zip` path.
 pub fn discover_pack_install(
     path: &str,
@@ -223,10 +277,10 @@ pub fn install_pack_plan<F>(
     unit_ids: &[String],
     layout: &GameFilesLayout,
     options: &InstallPackOptions,
-    mut on_progress: F,
+    on_progress: F,
 ) -> Result<InstallPackResult, AppError>
 where
-    F: FnMut(PackInstallProgress),
+    F: FnMut(PackInstallProgress) + Send + 'static,
 {
     if !layout.geometry_dash_found() {
         return Err(geometry_dash_required_error());
@@ -248,6 +302,7 @@ where
     let mut installed = 0usize;
     let mut skipped = 0usize;
     let mut issues = Vec::new();
+    let on_progress = Arc::new(Mutex::new(on_progress));
 
     if total == 0 {
         issues.push(PackInstallIssue {
@@ -267,7 +322,7 @@ where
     fs::create_dir_all(&mods_root)?;
 
     for (index, unit) in selected.iter().enumerate() {
-        on_progress(PackInstallProgress {
+        on_progress.lock().unwrap()(PackInstallProgress {
             unit_id: unit.id.clone(),
             label: unit.label.clone(),
             completed: index as u32,
@@ -304,13 +359,30 @@ where
                 let mut unit_ok = true;
 
                 if options.convert_to_latest_version && unit.kind == InstallUnitKind::Pack {
-                    on_progress(PackInstallProgress {
-                        unit_id: unit.id.clone(),
-                        label: format!("Converting {}", unit.label),
-                        completed: index as u32,
+                    let phase = format!("Converting {}", unit.label);
+                    emit_pack_progress(
+                        &on_progress,
+                        &unit.id,
+                        &phase,
+                        index as u32,
                         total,
-                    });
-                    match convert_installed_pack_to_latest(&destination, layout, options) {
+                    );
+                    let progress = Arc::clone(&on_progress);
+                    let unit_id = unit.id.clone();
+                    let phase_label = phase.clone();
+                    match convert_installed_pack_to_latest(
+                        &destination,
+                        layout,
+                        options,
+                        move |op| {
+                            emit_mapped_operation_progress(
+                                &progress,
+                                &unit_id,
+                                &phase_label,
+                                &op,
+                            );
+                        },
+                    ) {
                         Ok(info) => {
                             if !info.trim().is_empty() {
                                 issues.push(PackInstallIssue {
@@ -336,13 +408,30 @@ where
                 }
 
                 if unit_ok && options.port_packs && unit.kind == InstallUnitKind::Pack {
-                    on_progress(PackInstallProgress {
-                        unit_id: unit.id.clone(),
-                        label: format!("Porting {}", unit.label),
-                        completed: index as u32,
+                    let phase = format!("Porting {}", unit.label);
+                    emit_pack_progress(
+                        &on_progress,
+                        &unit.id,
+                        &phase,
+                        index as u32,
                         total,
-                    });
-                    match port_installed_pack(&destination, layout, options) {
+                    );
+                    let progress = Arc::clone(&on_progress);
+                    let unit_id = unit.id.clone();
+                    let phase_label = phase.clone();
+                    match port_installed_pack(
+                        &destination,
+                        layout,
+                        options,
+                        move |op| {
+                            emit_mapped_operation_progress(
+                                &progress,
+                                &unit_id,
+                                &phase_label,
+                                &op,
+                            );
+                        },
+                    ) {
                         Ok(info) => {
                             if !info.trim().is_empty() {
                                 issues.push(PackInstallIssue {
@@ -386,12 +475,7 @@ where
         }
     }
 
-    on_progress(PackInstallProgress {
-        unit_id: String::new(),
-        label: "Complete".to_string(),
-        completed: total,
-        total,
-    });
+    emit_pack_progress(&on_progress, "", "Complete", total, total);
 
     Ok(InstallPackResult {
         installed,
@@ -400,12 +484,56 @@ where
     })
 }
 
+fn emit_pack_progress<F>(
+    on_progress: &Arc<Mutex<F>>,
+    unit_id: &str,
+    label: &str,
+    completed: u32,
+    total: u32,
+) where
+    F: FnMut(PackInstallProgress) + Send + 'static,
+{
+    on_progress.lock().unwrap()(PackInstallProgress {
+        unit_id: unit_id.to_string(),
+        label: label.to_string(),
+        completed,
+        total,
+    });
+}
+
+fn emit_mapped_operation_progress<F>(
+    on_progress: &Arc<Mutex<F>>,
+    unit_id: &str,
+    phase_label: &str,
+    op: &OperationProgress,
+) where
+    F: FnMut(PackInstallProgress) + Send + 'static,
+{
+    let sheet = op.gamesheet_name.trim();
+    let label = if sheet.is_empty() {
+        phase_label.to_string()
+    } else {
+        format!("{phase_label} · {sheet}")
+    };
+    let total = op.sprites_total.max(1);
+    on_progress.lock().unwrap()(PackInstallProgress {
+        unit_id: unit_id.to_string(),
+        label,
+        completed: op.sprites_completed.min(total),
+        total,
+    });
+}
+
 /// Copy pack is already at `pack_dest`; convert sheets against live GD and overlay updates.
-fn convert_installed_pack_to_latest(
+fn convert_installed_pack_to_latest<F>(
     pack_dest: &Path,
     layout: &GameFilesLayout,
     options: &InstallPackOptions,
-) -> Result<String, AppError> {
+    on_op_progress: F,
+) -> Result<String, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
     let temp = create_pack_install_temp_dir(layout)?;
     let convert_options = ConvertToNewVersionOptions {
         game_version: options.game_version.trim().to_string(),
@@ -418,7 +546,7 @@ fn convert_installed_pack_to_latest(
         options: OperationOptions::ConvertToNewVersion(convert_options.clone()),
     };
 
-    let progress = Arc::new(Mutex::new(|_p| {}));
+    let progress = Arc::new(Mutex::new(on_op_progress));
     let cancel = Arc::new(AtomicBool::new(false));
     let report = execute_convert_to_new_version(
         &op_plan,
@@ -456,11 +584,15 @@ fn convert_installed_pack_to_latest(
 }
 
 /// Port an already-installed pack and overlay `{temp}/Ported` into the pack folder.
-fn port_installed_pack(
+fn port_installed_pack<F>(
     pack_dest: &Path,
     layout: &GameFilesLayout,
     options: &InstallPackOptions,
-) -> Result<String, AppError> {
+    on_op_progress: F,
+) -> Result<String, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
     let temp = create_pack_install_temp_dir(layout)?;
     let porter_options = PorterOptions {
         low_port: options.low_port,
@@ -474,7 +606,7 @@ fn port_installed_pack(
         options: OperationOptions::PorterSplitter(porter_options.clone()),
     };
 
-    let progress = Arc::new(Mutex::new(|_p| {}));
+    let progress = Arc::new(Mutex::new(on_op_progress));
     let cancel = Arc::new(AtomicBool::new(false));
     let report = execute_porter_splitter(
         &op_plan,
@@ -617,6 +749,298 @@ pub fn read_pack_metadata(pack_dir: &str) -> Result<ReadPackMetadataResult, AppE
         metadata,
         pack_png_path,
     })
+}
+
+/// List immediate child packs under texture-loader's packs folder.
+pub fn list_installed_packs(
+    layout: &GameFilesLayout,
+) -> Result<Vec<InstalledPackSummary>, AppError> {
+    if !layout.geometry_dash_found() {
+        return Err(geometry_dash_required_error());
+    }
+
+    let packs_dir = layout.texture_loader_packs();
+    if !packs_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+
+    let mut packs = Vec::new();
+    for child in list_child_dirs(&packs_dir) {
+        let Some(folder_name) = child
+            .file_name()
+            .and_then(|n| n.to_str())
+            .filter(|n| is_safe_path_segment(n))
+        else {
+            continue;
+        };
+        if is_reserved_output_dir_name(child.file_name().unwrap_or_default()) {
+            continue;
+        }
+
+        let meta_result = read_pack_metadata(&child.to_string_lossy())?;
+        let metadata = meta_result.metadata.or_else(|| Some(default_pack_metadata(folder_name)));
+        let (_, file_count) = build_tree_and_count(&child);
+        packs.push(InstalledPackSummary {
+            id: format!("library:{folder_name}"),
+            folder_name: folder_name.to_string(),
+            path: child.to_string_lossy().into_owned(),
+            metadata,
+            pack_png_path: meta_result.pack_png_path,
+            file_count: Some(file_count),
+        });
+    }
+
+    packs.sort_by(|a, b| {
+        let a_name = a
+            .metadata
+            .as_ref()
+            .map(|m| m.name.as_str())
+            .unwrap_or(a.folder_name.as_str());
+        let b_name = b
+            .metadata
+            .as_ref()
+            .map(|m| m.name.as_str())
+            .unwrap_or(b.folder_name.as_str());
+        a_name.to_lowercase().cmp(&b_name.to_lowercase())
+    });
+    Ok(packs)
+}
+
+/// Write `pack.json` and optionally update/clear `pack.png` for an installed pack.
+pub fn update_installed_pack_metadata(
+    pack_dir: &str,
+    metadata: &PackMetadata,
+    update_pack_png: bool,
+    pack_png_path: Option<&str>,
+    layout: &GameFilesLayout,
+) -> Result<ReadPackMetadataResult, AppError> {
+    if !layout.geometry_dash_found() {
+        return Err(geometry_dash_required_error());
+    }
+
+    let dir = resolve_installed_pack_dir(pack_dir, layout)?;
+
+    let pack_json_path = dir.join("pack.json");
+    let json = serde_json::to_string_pretty(metadata).map_err(|err| {
+        AppError::ParseError(format!("failed to serialize pack.json: {err}"))
+    })?;
+    fs::write(&pack_json_path, format!("{json}\n"))?;
+
+    if update_pack_png {
+        let dest_png = dir.join("pack.png");
+        match pack_png_path.map(str::trim).filter(|p| !p.is_empty()) {
+            Some(png_path) => {
+                let src = parse_user_absolute_path(png_path)?;
+                ensure_existing_user_file(&src)?;
+                // Remove any case-variant pack.png first so we always land on pack.png.
+                if let Some(existing) = find_pack_png_in_dir(&dir) {
+                    if existing != dest_png {
+                        let _ = fs::remove_file(&existing);
+                    }
+                }
+                fs::copy(&src, &dest_png)?;
+            }
+            None => {
+                if let Some(existing) = find_pack_png_in_dir(&dir) {
+                    fs::remove_file(&existing)?;
+                }
+            }
+        }
+    }
+
+    read_pack_metadata(&dir.to_string_lossy())
+}
+
+/// Permanently delete an installed pack folder under texture-loader packs.
+pub fn delete_installed_pack(
+    pack_dir: &str,
+    layout: &GameFilesLayout,
+) -> Result<(), AppError> {
+    if !layout.geometry_dash_found() {
+        return Err(geometry_dash_required_error());
+    }
+
+    let dir = resolve_installed_pack_dir(pack_dir, layout)?;
+    let packs_root = layout.texture_loader_packs();
+    fs::create_dir_all(&packs_root)?;
+    remove_dir_all_under_root(&dir, &packs_root)
+}
+
+/// Run Convert / Port / Split / Merge against an installed pack directory.
+pub fn run_pack_operation<F>(
+    pack_dir: &str,
+    kind: PackOperationKind,
+    options: &RunPackOperationOptions,
+    layout: &GameFilesLayout,
+    on_progress: F,
+) -> Result<RunPackOperationResult, AppError>
+where
+    F: FnMut(PackInstallProgress) + Send + 'static,
+{
+    if !layout.geometry_dash_found() {
+        return Err(geometry_dash_required_error());
+    }
+
+    let dir = resolve_installed_pack_dir(pack_dir, layout)?;
+    let folder_name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("pack")
+        .to_string();
+    let unit_id = format!("library:{folder_name}");
+    let sheet_concurrency = options.sheet_concurrency.clamp(1, 64);
+    let phase_label = operation_progress_label(kind, &folder_name);
+    let on_progress = Arc::new(Mutex::new(on_progress));
+
+    emit_pack_progress(&on_progress, &unit_id, &phase_label, 0, 1);
+
+    let progress = Arc::clone(&on_progress);
+    let progress_unit_id = unit_id.clone();
+    let progress_phase = phase_label.clone();
+    let map_progress = move |op: OperationProgress| {
+        emit_mapped_operation_progress(&progress, &progress_unit_id, &progress_phase, &op);
+    };
+
+    let message = match kind {
+        PackOperationKind::ConvertToNewVersion => {
+            let game_version = options.game_version.trim();
+            if game_version.is_empty() {
+                return Err(AppError::InvalidOperation(
+                    "convert requires a previous game version",
+                ));
+            }
+            let install_options = InstallPackOptions {
+                convert_to_latest_version: true,
+                game_version: game_version.to_string(),
+                port_packs: false,
+                low_port: false,
+                sheet_concurrency,
+            };
+            convert_installed_pack_to_latest(&dir, layout, &install_options, map_progress)?
+        }
+        PackOperationKind::PorterSplitter => {
+            let install_options = InstallPackOptions {
+                convert_to_latest_version: false,
+                game_version: String::new(),
+                port_packs: true,
+                low_port: options.low_port,
+                sheet_concurrency,
+            };
+            port_installed_pack(&dir, layout, &install_options, map_progress)?
+        }
+        PackOperationKind::Splitter => {
+            let output = options.output_dir.trim();
+            if output.is_empty() {
+                return Err(AppError::InvalidOperation(
+                    "split requires an output folder",
+                ));
+            }
+            let output_dir = parse_user_absolute_path(output)?;
+            if !output_dir.exists() {
+                fs::create_dir_all(&output_dir)?;
+            }
+            ensure_user_directory_path(&output_dir)?;
+            run_pack_split_operation(
+                &dir,
+                &output_dir,
+                sheet_concurrency,
+                layout,
+                map_progress,
+            )?
+        }
+    };
+
+    emit_pack_progress(&on_progress, &unit_id, &phase_label, 1, 1);
+
+    Ok(RunPackOperationResult {
+        message,
+        issues: Vec::new(),
+    })
+}
+
+fn operation_progress_label(kind: PackOperationKind, folder_name: &str) -> String {
+    match kind {
+        PackOperationKind::ConvertToNewVersion => format!("Converting {folder_name}"),
+        PackOperationKind::PorterSplitter => format!("Porting {folder_name}"),
+        PackOperationKind::Splitter => format!("Splitting {folder_name}"),
+    }
+}
+
+/// Split pack sheets into `{output_dir}/Split/...`.
+fn run_pack_split_operation<F>(
+    pack_dir: &Path,
+    output_dir: &Path,
+    sheet_concurrency: u32,
+    layout: &GameFilesLayout,
+    on_op_progress: F,
+) -> Result<String, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
+    let plan = OperationPlan {
+        kind: OperationKind::Splitter,
+        input_dir: pack_dir.to_string_lossy().into_owned(),
+        output_dir: output_dir.to_string_lossy().into_owned(),
+        options: OperationOptions::Splitter(crate::core::contracts::SplitterOptions {
+            sheet_concurrency: sheet_concurrency.clamp(1, 64),
+        }),
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    let report = execute_operation_plan(&plan, layout, on_op_progress, cancel)?;
+    let errors = report
+        .issues
+        .iter()
+        .filter(|issue| issue.level == ReportLevel::Error)
+        .count();
+    if errors > 0 {
+        return Err(AppError::IoError(format!(
+            "operation reported {errors} error(s)"
+        )));
+    }
+    Ok(format!(
+        "{} file(s) split → {}",
+        report.files_processed,
+        shorten_path_for_display(output_dir)
+    ))
+}
+
+fn resolve_installed_pack_dir(
+    pack_dir: &str,
+    layout: &GameFilesLayout,
+) -> Result<PathBuf, AppError> {
+    let dir = parse_user_absolute_path(pack_dir)?;
+    if !dir.is_dir() {
+        return Err(AppError::InvalidPath("pack directory does not exist"));
+    }
+
+    let packs_root = layout.texture_loader_packs();
+    if !path_is_under_prefix(&dir, &packs_root) {
+        return Err(AppError::InvalidPath(
+            "pack must stay under geode.texture-loader/packs",
+        ));
+    }
+
+    let folder_name = dir
+        .file_name()
+        .and_then(|n| n.to_str())
+        .filter(|n| is_safe_path_segment(n))
+        .ok_or(AppError::InvalidPath("pack folder has invalid name"))?;
+
+    if is_reserved_output_dir_name(dir.file_name().unwrap_or_default()) {
+        return Err(AppError::InvalidPath(
+            "reserved output folder names cannot be treated as packs",
+        ));
+    }
+
+    // Require an immediate child of the packs root (no nested escape).
+    let expected = packs_root.join(folder_name);
+    if !path_is_under_prefix(&dir, &expected) || !path_is_under_prefix(&expected, &dir) {
+        return Err(AppError::InvalidPath(
+            "pack must be an immediate child of texture-loader packs",
+        ));
+    }
+
+    Ok(dir)
 }
 
 /// Remove a temp extract directory created by discovery (under game-files root).
@@ -1823,20 +2247,21 @@ mod tests {
         fs::create_dir_all(&dest).expect("preexist");
         fs::write(dest.join("old.txt"), b"old").expect("old");
 
-        let mut progresses = 0u32;
+        let progresses = Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let progresses_cb = Arc::clone(&progresses);
         let result = install_pack_plan(
             &plan,
             &unit_ids,
             &layout,
             &InstallPackOptions::default(),
-            |_| {
-                progresses += 1;
+            move |_| {
+                progresses_cb.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             },
         )
         .expect("install");
         assert_eq!(result.installed, 1);
         assert_eq!(result.skipped, 0);
-        assert!(progresses >= 1);
+        assert!(progresses.load(std::sync::atomic::Ordering::Relaxed) >= 1);
         assert!(dest.join("pack.json").is_file());
         assert!(dest.join("sheet.png").is_file());
         assert!(!dest.join("old.txt").exists(), "overwrite should replace dir");
@@ -1969,5 +2394,150 @@ mod tests {
         )
         .expect_err("escape");
         assert!(err.to_string().contains("geode/config") || err.to_string().contains("destination"));
+    }
+
+    #[test]
+    fn list_installed_packs_returns_fixture_packs_and_skips_reserved() {
+        let root = unique_temp("root-list");
+        let gd = unique_temp("gd-list");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let packs = layout.texture_loader_packs();
+        write_pack_json(&packs.join("Alpha"), "Alpha Pack", "tester.alpha");
+        fs::write(packs.join("Alpha").join("pack.png"), b"png").expect("png");
+        write_pack_json(&packs.join("Beta"), "Beta Pack", "tester.beta");
+        fs::create_dir_all(packs.join("Split")).expect("reserved");
+        fs::write(packs.join("Split").join("pack.json"), "{}").expect("reserved json");
+
+        let listed = list_installed_packs(&layout).expect("list");
+        let names: Vec<_> = listed
+            .iter()
+            .map(|p| p.folder_name.as_str())
+            .collect();
+        assert_eq!(names, vec!["Alpha", "Beta"]);
+        assert!(listed.iter().any(|p| p.pack_png_path.is_some()));
+        assert!(listed.iter().all(|p| p.id.starts_with("library:")));
+    }
+
+    #[test]
+    fn update_installed_pack_metadata_round_trip_and_rejects_escape() {
+        let root = unique_temp("root-update-meta");
+        let gd = unique_temp("gd-update-meta");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let pack = layout.texture_loader_packs().join("Demo");
+        write_pack_json(&pack, "Demo", "tester.demo");
+        fs::write(pack.join("pack.png"), b"old").expect("old png");
+
+        let new_png = unique_temp("new-png").join("icon.png");
+        fs::write(&new_png, b"new").expect("new png");
+
+        let updated = update_installed_pack_metadata(
+            &pack.to_string_lossy(),
+            &PackMetadata {
+                textureldr: "1.5.0".to_string(),
+                name: "Updated Demo".to_string(),
+                id: "tester.updated".to_string(),
+                version: "2.0.0".to_string(),
+                author: "Editor".to_string(),
+            },
+            true,
+            Some(new_png.to_string_lossy().as_ref()),
+            &layout,
+        )
+        .expect("update");
+        assert_eq!(updated.metadata.as_ref().unwrap().name, "Updated Demo");
+        assert_eq!(fs::read(pack.join("pack.png")).expect("png"), b"new");
+
+        let cleared = update_installed_pack_metadata(
+            &pack.to_string_lossy(),
+            &PackMetadata {
+                textureldr: "1.5.0".to_string(),
+                name: "Updated Demo".to_string(),
+                id: "tester.updated".to_string(),
+                version: "2.0.0".to_string(),
+                author: "Editor".to_string(),
+            },
+            true,
+            None,
+            &layout,
+        )
+        .expect("clear png");
+        assert!(cleared.pack_png_path.is_none());
+        assert!(!pack.join("pack.png").exists());
+
+        let outside = unique_temp("outside-pack");
+        fs::create_dir_all(&outside).expect("outside");
+        let err = update_installed_pack_metadata(
+            &outside.to_string_lossy(),
+            &PackMetadata {
+                textureldr: "1.5.0".to_string(),
+                name: "Evil".to_string(),
+                id: "evil".to_string(),
+                version: "1.0.0".to_string(),
+                author: "x".to_string(),
+            },
+            false,
+            None,
+            &layout,
+        )
+        .expect_err("escape");
+        assert!(
+            err.to_string().contains("texture-loader")
+                || err.to_string().contains("packs")
+                || err.to_string().contains("pack must")
+        );
+    }
+
+    #[test]
+    fn run_pack_operation_rejects_path_escape() {
+        let root = unique_temp("root-op-escape");
+        let gd = unique_temp("gd-op-escape");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+        let outside = unique_temp("outside-op");
+        fs::create_dir_all(&outside).expect("outside");
+
+        let err = run_pack_operation(
+            &outside.to_string_lossy(),
+            PackOperationKind::Splitter,
+            &RunPackOperationOptions::default(),
+            &layout,
+            |_| {},
+        )
+        .expect_err("escape");
+        assert!(
+            err.to_string().contains("texture-loader")
+                || err.to_string().contains("packs")
+                || err.to_string().contains("pack must")
+        );
+    }
+
+    #[test]
+    fn delete_installed_pack_removes_folder_and_rejects_escape() {
+        let root = unique_temp("root-delete");
+        let gd = unique_temp("gd-delete");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let packs = layout.texture_loader_packs();
+        let pack = packs.join("Delete Me");
+        fs::create_dir_all(pack.join("icons")).expect("pack");
+        fs::write(pack.join("pack.json"), r#"{"name":"Delete Me"}"#).expect("json");
+        fs::write(pack.join("icons").join("a.png"), b"x").expect("png");
+
+        delete_installed_pack(&pack.to_string_lossy(), &layout).expect("delete");
+        assert!(!pack.exists());
+
+        let outside = unique_temp("outside-delete");
+        fs::create_dir_all(&outside).expect("outside");
+        let err = delete_installed_pack(&outside.to_string_lossy(), &layout).expect_err("escape");
+        assert!(
+            err.to_string().contains("texture-loader")
+                || err.to_string().contains("packs")
+                || err.to_string().contains("pack must")
+        );
     }
 }

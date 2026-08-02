@@ -1486,6 +1486,10 @@ function App() {
                 onUpdateSelectedPackMetadata={
                   packInstallerSidebarActions?.updateSelectedPackMetadata
                 }
+                onUpdateLibraryPackMetadata={
+                  packInstallerSidebarActions?.updateLibraryPackMetadata
+                }
+                onSaveLibraryMetadata={packInstallerSidebarActions?.saveLibraryMetadata}
               />
             ) : null}
             {!showPackMetadataRail && loadError ? (

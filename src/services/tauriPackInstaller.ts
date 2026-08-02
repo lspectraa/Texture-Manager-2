@@ -6,8 +6,13 @@ import type {
   InstallPackOptions,
   InstallPackResult,
   InstallPlan,
+  InstalledPack,
   PackInstallProgress,
+  PackOperationKind,
   ReadPackMetadataResult,
+  RunPackOperationOptions,
+  RunPackOperationResult,
+  UpdateInstalledPackMetadataRequest,
 } from "../domain/packInstaller";
 import { DEFAULT_INSTALL_PACK_OPTIONS } from "../domain/packInstaller";
 import { isTauriRuntime } from "./tauriOperations";
@@ -91,5 +96,65 @@ export const getPackPngDataUrl = async (path: string): Promise<string | null> =>
     });
   } catch {
     return null;
+  }
+};
+
+export const listInstalledPacks = async (): Promise<InstalledPack[]> => {
+  if (!isTauriRuntime()) {
+    throw new Error("List installed packs requires the Tauri runtime.");
+  }
+  return invoke<InstalledPack[]>("list_installed_packs");
+};
+
+export const updateInstalledPackMetadata = async (
+  request: UpdateInstalledPackMetadataRequest,
+): Promise<ReadPackMetadataResult> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Update pack metadata requires the Tauri runtime.");
+  }
+  return invoke<ReadPackMetadataResult>("update_installed_pack_metadata", {
+    packDir: request.packDir,
+    metadata: request.metadata,
+    updatePackPng: request.updatePackPng,
+    packPngPath: request.updatePackPng ? (request.packPngPath ?? null) : null,
+  });
+};
+
+export const deleteInstalledPack = async (packDir: string): Promise<void> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Delete pack requires the Tauri runtime.");
+  }
+  await invoke<void>("delete_installed_pack", { packDir });
+};
+
+export const runPackOperation = async (
+  packDir: string,
+  kind: PackOperationKind,
+  options: RunPackOperationOptions = {},
+  onProgress?: (progress: PackInstallProgress) => void,
+): Promise<RunPackOperationResult> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Pack operation requires the Tauri runtime.");
+  }
+
+  const unlisten = onProgress
+    ? await listen<PackInstallProgress>(PACK_INSTALL_PROGRESS_EVENT, (event) => {
+        onProgress(event.payload);
+      })
+    : null;
+
+  try {
+    return await invoke<RunPackOperationResult>("run_pack_operation", {
+      packDir,
+      kind,
+      options: {
+        gameVersion: options.gameVersion ?? "",
+        lowPort: options.lowPort ?? false,
+        outputDir: options.outputDir ?? "",
+        sheetConcurrency: options.sheetConcurrency ?? 5,
+      },
+    });
+  } finally {
+    unlisten?.();
   }
 };
