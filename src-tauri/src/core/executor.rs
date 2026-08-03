@@ -14,10 +14,11 @@ use crate::core::contracts::{
     OperationPlan, PorterOptions, SplitterOptions,
 };
 use crate::core::convert_to_new_version::execute_convert_to_new_version as run_convert_to_new_version;
-use crate::core::game_files::GameFilesLayout;
+use crate::core::game_files::{
+    discover_sheet_pairs_with_game_plist_fallback, sheet_uses_external_plist, GameFilesLayout,
+};
 use crate::core::discovery::{
-    discover_merge_source_dirs, discover_sheet_pairs, discover_standalone_fnts,
-    discover_standalone_pngs, SheetCandidate,
+    discover_merge_source_dirs, discover_standalone_fnts, discover_standalone_pngs, SheetCandidate,
 };
 use crate::core::errors::AppError;
 use crate::core::glow_maker::execute_glow_maker as run_glow_maker;
@@ -72,6 +73,22 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), AppError> {
         return Err(AppError::Cancelled);
     }
     Ok(())
+}
+
+fn append_vanilla_plist_fallback_issues(
+    input_dir: &Path,
+    pairs: &[SheetCandidate],
+    issues: &mut Vec<ReportIssue>,
+) {
+    for pair in pairs {
+        if sheet_uses_external_plist(input_dir, pair) {
+            issues.push(ReportIssue {
+                level: ReportLevel::Info,
+                message: format!("Using vanilla plist for {}", pair.stem),
+                file: Some(pair.png_path.to_string_lossy().to_string()),
+            });
+        }
+    }
 }
 
 /// Heuristic input size for a gamesheet (plist + png on disk). Used to order parallel merge-related work.
@@ -202,6 +219,7 @@ where
             output_dir,
             started_at,
             options,
+            game_files,
             &on_progress,
             cancel,
         )?,
@@ -212,6 +230,7 @@ where
                 output_dir,
                 started_at,
                 opts,
+                game_files,
                 &on_progress,
                 cancel,
             )?
@@ -243,6 +262,7 @@ where
             output_dir,
             started_at,
             options,
+            game_files,
             &on_progress,
             cancel,
         )?,
@@ -252,6 +272,7 @@ where
             output_dir,
             started_at,
             options,
+            game_files,
             &on_progress,
             cancel,
         )?,
@@ -262,6 +283,7 @@ where
                 output_dir,
                 started_at,
                 options,
+                game_files,
                 &on_progress,
                 cancel,
             )?
@@ -282,6 +304,7 @@ fn execute_geode_buttons<F>(
     output_dir: &Path,
     started_at: Instant,
     options: &GeodeButtonsOptions,
+    game_files: &GameFilesLayout,
     on_progress: &Arc<Mutex<F>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -290,7 +313,7 @@ where
 {
     check_cancel(cancel.as_ref())?;
 
-    let mut candidates = discover_sheet_pairs(input_dir)?;
+    let mut candidates = discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?;
     let stem_filter = options.sheet_stem.trim().to_ascii_lowercase();
     if !stem_filter.is_empty() {
         candidates.retain(|c| c.stem.to_ascii_lowercase() == stem_filter);
@@ -312,6 +335,7 @@ where
     }
 
     let mut combined_issues: Vec<ReportIssue> = Vec::new();
+    append_vanilla_plist_fallback_issues(input_dir, &candidates, &mut combined_issues);
     let mut processed_total = 0usize;
     let mut out_label = output_dir.to_string_lossy().to_string();
 
@@ -348,6 +372,7 @@ fn execute_splitter<F>(
     output_dir: &Path,
     started_at: Instant,
     options: &SplitterOptions,
+    game_files: &GameFilesLayout,
     on_progress: &Arc<Mutex<F>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -358,7 +383,7 @@ where
     fs::create_dir_all(&split_dir)?;
 
     check_cancel(cancel.as_ref())?;
-    let sheet_pairs = discover_sheet_pairs(input_dir)?;
+    let sheet_pairs = discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?;
     let mut total_sprites = 0usize;
     for pair in &sheet_pairs {
         total_sprites = total_sprites.saturating_add(count_frames_in_plist(&pair.plist_path)?);
@@ -397,6 +422,7 @@ where
     });
 
     let mut issues: Vec<ReportIssue> = Vec::new();
+    append_vanilla_plist_fallback_issues(input_dir, &sheet_pairs, &mut issues);
     let mut processed = 0_usize;
     for entry in sheet_results {
         let (count, mut local_issues) = match entry {
@@ -815,6 +841,7 @@ pub fn execute_porter_splitter<F>(
     output_dir: &Path,
     started_at: Instant,
     porter_opts: &PorterOptions,
+    game_files: &GameFilesLayout,
     on_progress: &Arc<Mutex<F>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -828,10 +855,11 @@ where
     let merger_opts = porter_options_to_merger_options(porter_opts);
 
     check_cancel(cancel.as_ref())?;
-    let sheet_pairs: Vec<SheetCandidate> = discover_sheet_pairs(input_dir)?
-        .into_iter()
-        .filter(|p| porter_stem_eligible(&p.stem))
-        .collect();
+    let sheet_pairs: Vec<SheetCandidate> =
+        discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?
+            .into_iter()
+            .filter(|p| porter_stem_eligible(&p.stem))
+            .collect();
     let paired_pngs: HashSet<PathBuf> = sheet_pairs.iter().map(|p| p.png_path.clone()).collect();
     let standalone_pngs = discover_standalone_pngs(input_dir, &paired_pngs)?;
     let standalone_fnts = discover_standalone_fnts(input_dir)?;
@@ -867,6 +895,7 @@ where
     ));
 
     let mut issues: Vec<ReportIssue> = Vec::new();
+    append_vanilla_plist_fallback_issues(input_dir, &sheet_pairs, &mut issues);
     let mut sheets_written = 0_usize;
     let mut standalone_written = 0_usize;
     let mut fnts_written = 0_usize;

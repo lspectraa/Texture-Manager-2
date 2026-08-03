@@ -9,8 +9,11 @@ use std::time::Instant;
 use crate::core::contracts::{
     phase_defaults, GlowMakerOptions, MergerOptions, OperationPlan, SplitterOptions,
 };
-use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
+use crate::core::discovery::SheetCandidate;
 use crate::core::errors::AppError;
+use crate::core::game_files::{
+    discover_sheet_pairs_with_game_plist_fallback_in, sheet_uses_external_plist, GameFilesLayout,
+};
 use crate::core::glow::{glow_primary_name_for, render_icon_glow_from_primary};
 use crate::core::glow_composite::composite_icon_layers_for_glow;
 use crate::core::merger::merge_plist_from_memory;
@@ -308,6 +311,7 @@ pub fn execute_glow_maker<F>(
     output_dir: &Path,
     started_at: Instant,
     options: &GlowMakerOptions,
+    game_files: &GameFilesLayout,
     on_progress: &Arc<Mutex<F>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -342,7 +346,11 @@ where
     fs::create_dir_all(&generated_glow_dir)?;
 
     check_cancel(cancel.as_ref())?;
-    let sheet_pairs = discover_sheet_pairs(&icons_dir)?;
+    let sheet_pairs = discover_sheet_pairs_with_game_plist_fallback_in(
+        &icons_dir,
+        game_files,
+        Path::new("icons"),
+    )?;
     let plists_total = sheet_pairs.len() as u32;
     let mut total_units = 0usize;
     for pair in &sheet_pairs {
@@ -374,6 +382,15 @@ where
     let sheet_concurrency = phase_defaults().merger.sheet_concurrency;
 
     let mut issues: Vec<ReportIssue> = Vec::new();
+    for pair in &sheet_pairs {
+        if sheet_uses_external_plist(&icons_dir, pair) {
+            issues.push(ReportIssue {
+                level: ReportLevel::Info,
+                message: format!("Using vanilla plist for {}", pair.stem),
+                file: Some(pair.png_path.to_string_lossy().to_string()),
+            });
+        }
+    }
     let mut sheets_written = 0usize;
     let plists_done_atomic = Arc::new(AtomicU32::new(0));
 

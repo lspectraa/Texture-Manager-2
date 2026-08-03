@@ -13,8 +13,11 @@ use rand::{RngExt, SeedableRng};
 use regex::Regex;
 
 use crate::core::contracts::{OperationPlan, RandomizerOptions};
-use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
+use crate::core::discovery::SheetCandidate;
 use crate::core::errors::AppError;
+use crate::core::game_files::{
+    discover_sheet_pairs_with_game_plist_fallback, sheet_uses_external_plist, GameFilesLayout,
+};
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
 
 fn progress_total_as_u32(total: usize) -> u32 {
@@ -147,6 +150,7 @@ pub fn execute_randomizer<F>(
     output_dir: &Path,
     started_at: Instant,
     options: &RandomizerOptions,
+    game_files: &GameFilesLayout,
     on_progress: &Arc<Mutex<F>>,
     cancel: Arc<AtomicBool>,
 ) -> Result<OperationReport, AppError>
@@ -184,16 +188,26 @@ where
         .iter()
         .filter_map(|entry| entry.file_name().to_str().map(str::to_string))
         .collect();
-    let sheet_pairs: Vec<SheetCandidate> = discover_sheet_pairs(input_dir)?
-        .into_iter()
-        .filter(is_randomizer_sheet)
-        .collect();
+    let sheet_pairs: Vec<SheetCandidate> =
+        discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?
+            .into_iter()
+            .filter(is_randomizer_sheet)
+            .collect();
 
     let mut issues: Vec<ReportIssue> = vec![ReportIssue {
         level: ReportLevel::Info,
         message: format!("Randomizer seed: {seed_display}"),
         file: None,
     }];
+    for pair in &sheet_pairs {
+        if sheet_uses_external_plist(input_dir, pair) {
+            issues.push(ReportIssue {
+                level: ReportLevel::Info,
+                message: format!("Using vanilla plist for {}", pair.stem),
+                file: Some(pair.png_path.to_string_lossy().to_string()),
+            });
+        }
+    }
     let mut completed_units = 0usize;
     let estimated_units = sheet_pairs.len() + sprite_patterns.len();
     on_progress.lock().unwrap()(operation_progress(

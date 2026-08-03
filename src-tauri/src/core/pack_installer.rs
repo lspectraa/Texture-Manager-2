@@ -614,6 +614,7 @@ where
         &temp,
         Instant::now(),
         &porter_options,
+        layout,
         &progress,
         cancel,
     )?;

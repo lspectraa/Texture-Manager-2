@@ -12,11 +12,12 @@ use plist::{Dictionary, Value};
 use crate::core::contracts::{
     phase_defaults, ConvertToNewVersionOptions, MergerOptions, OperationPlan, SplitterOptions,
 };
-use crate::core::discovery::{discover_sheet_pairs, discover_unpaired_pngs, SheetCandidate};
+use crate::core::discovery::{discover_unpaired_pngs, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    ensure_input_sheet_latest_split_cached, find_current_sheet_for_input,
-    normalize_legacy_version, resolve_cached_split_sprite, GameFilesLayout,
+    discover_sheet_pairs_with_game_plist_fallback, ensure_input_sheet_latest_split_cached,
+    find_current_sheet_for_input, normalize_legacy_version, resolve_cached_split_sprite,
+    sheet_uses_external_plist, GameFilesLayout,
 };
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::plist::count_frames_in_plist;
@@ -1286,7 +1287,8 @@ where
 
     check_cancel(cancel.as_ref())?;
     let legacy_icon_split = is_legacy_icon_split_version(&options.game_version);
-    let all_sheet_pairs: Vec<SheetCandidate> = discover_sheet_pairs(input_dir)?;
+    let all_sheet_pairs: Vec<SheetCandidate> =
+        discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?;
     let paired_pngs: HashSet<PathBuf> = all_sheet_pairs
         .iter()
         .map(|pair| pair.png_path.clone())
@@ -1323,6 +1325,15 @@ where
     ));
 
     let mut issues: Vec<ReportIssue> = Vec::new();
+    for pair in &all_sheet_pairs {
+        if sheet_uses_external_plist(input_dir, pair) {
+            issues.push(ReportIssue {
+                level: ReportLevel::Info,
+                message: format!("Using vanilla plist for {}", pair.stem),
+                file: Some(pair.png_path.to_string_lossy().to_string()),
+            });
+        }
+    }
     issues.push(ReportIssue {
         level: ReportLevel::Info,
         message: if legacy_icon_split {

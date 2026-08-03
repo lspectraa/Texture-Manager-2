@@ -1,6 +1,6 @@
 pub mod sync;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -8,7 +8,9 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use serde::{Deserialize, Serialize};
 
 use crate::core::contracts::SplitterOptions;
-use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
+use crate::core::discovery::{
+    discover_sheet_pairs, discover_unpaired_png_keys, SheetCandidate,
+};
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{
     ensure_no_parent_dir_components, ensure_user_absolute_path, is_safe_path_segment,
@@ -835,6 +837,75 @@ pub fn discover_current_sheet_pairs(layout: &GameFilesLayout) -> Result<Vec<Shee
     discover_sheet_pairs(&layout.resources)
 }
 
+/// Discover local plist/png sheet pairs, then promote unpaired pack PNGs that have a matching
+/// plist under the live Geometry Dash / Geode tree (same relative dir + stem).
+///
+/// The resulting `SheetCandidate` keeps the **pack** PNG and references the **vanilla** plist
+/// path (no copy into the pack). When GD is not configured, behavior matches plain
+/// [`discover_sheet_pairs`].
+pub fn discover_sheet_pairs_with_game_plist_fallback(
+    input_dir: &Path,
+    layout: &GameFilesLayout,
+) -> Result<Vec<SheetCandidate>, AppError> {
+    discover_sheet_pairs_with_game_plist_fallback_in(input_dir, layout, Path::new(""))
+}
+
+/// Like [`discover_sheet_pairs_with_game_plist_fallback`], but prepends `vanilla_relative_prefix`
+/// when looking up vanilla plists (e.g. `icons` when `input_dir` is already the pack's icons folder).
+pub fn discover_sheet_pairs_with_game_plist_fallback_in(
+    input_dir: &Path,
+    layout: &GameFilesLayout,
+    vanilla_relative_prefix: &Path,
+) -> Result<Vec<SheetCandidate>, AppError> {
+    let mut pairs = discover_sheet_pairs(input_dir)?;
+    if !layout.geometry_dash_found() {
+        return Ok(pairs);
+    }
+
+    let paired_pngs: HashSet<PathBuf> = pairs.iter().map(|p| p.png_path.clone()).collect();
+    let unpaired = discover_unpaired_png_keys(input_dir, &paired_pngs)?;
+    for entry in unpaired {
+        let lookup_dir = if vanilla_relative_prefix.as_os_str().is_empty() {
+            entry.relative_dir.clone()
+        } else if entry.relative_dir.as_os_str().is_empty() {
+            vanilla_relative_prefix.to_path_buf()
+        } else {
+            vanilla_relative_prefix.join(&entry.relative_dir)
+        };
+        let Some(vanilla) = find_current_sheet_for_input(layout, &lookup_dir, &entry.stem)? else {
+            continue;
+        };
+        if !vanilla.plist_path.is_file() {
+            continue;
+        }
+        pairs.push(SheetCandidate {
+            stem: entry.stem,
+            relative_dir: entry.relative_dir,
+            plist_path: vanilla.plist_path,
+            png_path: entry.png_path,
+        });
+    }
+
+    pairs.sort_by(|left, right| {
+        left.relative_dir
+            .cmp(&right.relative_dir)
+            .then_with(|| left.stem.cmp(&right.stem))
+    });
+    Ok(pairs)
+}
+
+/// True when `plist_path` is not under `input_dir` (e.g. resolved from vanilla Resources).
+pub fn sheet_uses_external_plist(input_dir: &Path, pair: &SheetCandidate) -> bool {
+    let Ok(input_canon) = input_dir.canonicalize() else {
+        return !pair.plist_path.starts_with(input_dir);
+    };
+    let plist_canon = pair
+        .plist_path
+        .canonicalize()
+        .unwrap_or_else(|_| pair.plist_path.clone());
+    !plist_canon.starts_with(&input_canon)
+}
+
 pub fn find_current_sheet_for_plist(
     layout: &GameFilesLayout,
     plist_path: &Path,
@@ -1498,6 +1569,127 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/")
             .contains("geode/resources/geode.loader"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discover_sheet_pairs_with_game_plist_fallback_promotes_unpaired_png() {
+        let root = temp_game_files_root("plist_fallback");
+        let gd = root.join("Geometry Dash");
+        let resources = gd.join("Resources");
+        let pack = root.join("pack");
+        fs::create_dir_all(resources.join("icons")).expect("resources/icons");
+        fs::create_dir_all(&pack).expect("pack");
+        fs::write(gd.join("GeometryDash.exe"), b"mz").expect("exe");
+        fs::write(resources.join("GJ_GameSheet-uhd.plist"), b"plist").expect("vanilla plist");
+        fs::write(resources.join("GJ_GameSheet-uhd.png"), b"vanilla-png").expect("vanilla png");
+        fs::write(pack.join("GJ_GameSheet-uhd.png"), b"pack-png").expect("pack png");
+
+        let layout = test_layout(&root, &gd);
+        assert!(layout.geometry_dash_found());
+
+        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].stem, "GJ_GameSheet-uhd");
+        assert_eq!(pairs[0].png_path, pack.join("GJ_GameSheet-uhd.png"));
+        assert_eq!(
+            pairs[0].plist_path,
+            resources.join("GJ_GameSheet-uhd.plist")
+        );
+        assert!(sheet_uses_external_plist(&pack, &pairs[0]));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discover_sheet_pairs_with_game_plist_fallback_keeps_local_plist() {
+        let root = temp_game_files_root("plist_fallback_local");
+        let gd = root.join("Geometry Dash");
+        let resources = gd.join("Resources");
+        let pack = root.join("pack");
+        fs::create_dir_all(resources.join("icons")).expect("resources/icons");
+        fs::create_dir_all(&pack).expect("pack");
+        fs::write(gd.join("GeometryDash.exe"), b"mz").expect("exe");
+        fs::write(resources.join("GJ_GameSheet-uhd.plist"), b"vanilla").expect("vanilla plist");
+        fs::write(pack.join("GJ_GameSheet-uhd.plist"), b"pack-plist").expect("pack plist");
+        fs::write(pack.join("GJ_GameSheet-uhd.png"), b"pack-png").expect("pack png");
+
+        let layout = test_layout(&root, &gd);
+        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].plist_path, pack.join("GJ_GameSheet-uhd.plist"));
+        assert_eq!(pairs[0].png_path, pack.join("GJ_GameSheet-uhd.png"));
+        assert!(!sheet_uses_external_plist(&pack, &pairs[0]));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discover_sheet_pairs_with_game_plist_fallback_skips_when_no_vanilla_plist() {
+        let root = temp_game_files_root("plist_fallback_miss");
+        let gd = root.join("Geometry Dash");
+        let resources = gd.join("Resources");
+        let pack = root.join("pack");
+        fs::create_dir_all(resources.join("icons")).expect("resources/icons");
+        fs::create_dir_all(&pack).expect("pack");
+        fs::write(gd.join("GeometryDash.exe"), b"mz").expect("exe");
+        fs::write(pack.join("edit_eAlphaBtn_001.png"), b"btn").expect("pack png");
+
+        let layout = test_layout(&root, &gd);
+        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        assert!(pairs.is_empty());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discover_sheet_pairs_with_game_plist_fallback_skips_when_gd_missing() {
+        let root = temp_game_files_root("plist_fallback_no_gd");
+        let unresolved = root.join(UNRESOLVED_GD_DIR_NAME);
+        let resources = unresolved.join("Resources");
+        let pack = root.join("pack");
+        fs::create_dir_all(resources.join("icons")).expect("resources/icons");
+        fs::create_dir_all(&pack).expect("pack");
+        fs::write(resources.join("GJ_GameSheet-uhd.plist"), b"plist").expect("vanilla plist");
+        fs::write(pack.join("GJ_GameSheet-uhd.png"), b"pack-png").expect("pack png");
+
+        let layout = test_layout(&root, &unresolved);
+        assert!(!layout.geometry_dash_found());
+        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        assert!(pairs.is_empty());
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn discover_sheet_pairs_with_game_plist_fallback_in_uses_icons_prefix() {
+        let root = temp_game_files_root("plist_fallback_icons");
+        let gd = root.join("Geometry Dash");
+        let resources = gd.join("Resources");
+        let icons_res = resources.join("icons");
+        let pack_icons = root.join("pack").join("icons");
+        fs::create_dir_all(&icons_res).expect("resources/icons");
+        fs::create_dir_all(&pack_icons).expect("pack/icons");
+        fs::write(gd.join("GeometryDash.exe"), b"mz").expect("exe");
+        fs::write(icons_res.join("player_01-uhd.plist"), b"plist").expect("vanilla plist");
+        fs::write(icons_res.join("player_01-uhd.png"), b"vanilla").expect("vanilla png");
+        fs::write(pack_icons.join("player_01-uhd.png"), b"pack").expect("pack png");
+
+        let layout = test_layout(&root, &gd);
+        let pairs = discover_sheet_pairs_with_game_plist_fallback_in(
+            &pack_icons,
+            &layout,
+            Path::new("icons"),
+        )
+        .expect("discover");
+        assert_eq!(pairs.len(), 1);
+        assert_eq!(pairs[0].stem, "player_01-uhd");
+        assert_eq!(pairs[0].png_path, pack_icons.join("player_01-uhd.png"));
+        assert_eq!(
+            pairs[0].plist_path,
+            icons_res.join("player_01-uhd.plist")
+        );
 
         let _ = fs::remove_dir_all(&root);
     }

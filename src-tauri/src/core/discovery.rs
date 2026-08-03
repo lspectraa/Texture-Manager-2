@@ -150,8 +150,26 @@ pub fn discover_unpaired_pngs(
     input_dir: &Path,
     paired_png_paths: &HashSet<PathBuf>,
 ) -> Result<Vec<PathBuf>, AppError> {
+    let keys = discover_unpaired_png_keys(input_dir, paired_png_paths)?;
+    Ok(keys.into_iter().map(|entry| entry.png_path).collect())
+}
+
+/// An unpaired pack PNG with its discovery key (`relative_dir` + `stem`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnpairedPngKey {
+    pub stem: String,
+    pub relative_dir: PathBuf,
+    pub png_path: PathBuf,
+}
+
+/// Unpaired `.png` files under `input_dir` with relative folder + stem keys.
+/// Used when resolving a vanilla game-files plist for PNG-only spritesheets.
+pub fn discover_unpaired_png_keys(
+    input_dir: &Path,
+    paired_png_paths: &HashSet<PathBuf>,
+) -> Result<Vec<UnpairedPngKey>, AppError> {
     let files = collect_files_recursive(input_dir)?;
-    let mut out: Vec<PathBuf> = Vec::new();
+    let mut out: Vec<UnpairedPngKey> = Vec::new();
     for file in files {
         if !file.is_file() {
             continue;
@@ -164,9 +182,27 @@ pub fn discover_unpaired_pngs(
         if !is_png || paired_png_paths.contains(&file) {
             continue;
         }
-        out.push(file);
+        let Some(stem) = file.file_stem().and_then(|s| s.to_str()) else {
+            continue;
+        };
+        let relative_file = file
+            .strip_prefix(input_dir)
+            .map_err(|_| AppError::InvalidOperation("failed to compute relative file path"))?;
+        let relative_dir = relative_file
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        out.push(UnpairedPngKey {
+            stem: stem.to_string(),
+            relative_dir,
+            png_path: file,
+        });
     }
-    out.sort();
+    out.sort_by(|left, right| {
+        left.relative_dir
+            .cmp(&right.relative_dir)
+            .then_with(|| left.stem.cmp(&right.stem))
+    });
     Ok(out)
 }
 
