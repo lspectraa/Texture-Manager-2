@@ -59,6 +59,8 @@ const errors: AppLocaleResources["errors"] = {
     convertVersionRequired: "Choose the pack's previous game version when Convert to Latest Version is enabled.",
     folderNameRequired: "Enter a folder name for the new pack.",
     invalidDropPng: "Drop a .png file for pack.png, or switch to Install mode for folders/zips.",
+    invalidDropCreate:
+      "Drop a pack folder or a .png for pack.png (use Install mode for zip archives).",
     listFailed: "Failed to list installed packs.",
     saveMetadataFailed: "Failed to save pack metadata.",
     operationFailed: "Failed to run the pack operation.",

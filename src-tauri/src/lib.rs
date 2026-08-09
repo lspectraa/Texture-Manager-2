@@ -598,12 +598,14 @@ async fn create_texture_pack(
     folder_name: String,
     metadata: PackMetadata,
     pack_png_path: Option<String>,
+    source_dir: Option<String>,
 ) -> Result<CreateTexturePackResult, String> {
     let layout = game_files.snapshot();
     let request = CreateTexturePackRequest {
         folder_name,
         metadata,
         pack_png_path,
+        source_dir,
     };
     run_blocking(move || {
         create_texture_pack_core(&request, &layout).map_err(|err| err.to_string())

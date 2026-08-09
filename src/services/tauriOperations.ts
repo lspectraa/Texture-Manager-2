@@ -16,6 +16,7 @@ export const getPhaseDefaults = async (): Promise<PhaseDefaults> => {
     return {
       splitter: {
         sheetConcurrency: 5,
+        skipIcons: false,
       },
       porter: {
         lowPort: false,

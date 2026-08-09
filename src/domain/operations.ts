@@ -56,6 +56,8 @@ export interface DimensionOverride {
 export interface SplitterOptions {
   /** Max concurrent plist/png gamesheets (1–64). */
   sheetConcurrency: number;
+  /** Skip discovering and splitting sheets under an `icons` folder. */
+  skipIcons: boolean;
 }
 
 export interface PorterOptions {
@@ -86,7 +88,7 @@ export interface PhaseDefaults {
 }
 
 export type OperationOptions =
-  | { type: "splitter"; sheetConcurrency: number }
+  | { type: "splitter"; sheetConcurrency: number; skipIcons: boolean }
   | ({ type: "porterSplitter" } & PorterOptions)
   | ({ type: "merger" } & MergerOptions)
   | ({ type: "convertToNewVersion" } & ConvertToNewVersionOptions)

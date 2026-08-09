@@ -894,7 +894,10 @@ where
     F: FnMut(OperationProgress) + Send,
 {
     let started_at = Instant::now();
-    let splitter_opts = crate::core::contracts::SplitterOptions { sheet_concurrency: 1 };
+    let splitter_opts = crate::core::contracts::SplitterOptions {
+        sheet_concurrency: 1,
+        skip_icons: false,
+    };
     check_cancel(cancel.as_ref())?;
 
     let total_frames = crate::core::plist::count_frames_in_plist(&candidate.plist_path)?;

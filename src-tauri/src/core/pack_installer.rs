@@ -94,6 +94,9 @@ pub struct CreateTexturePackRequest {
     pub metadata: PackMetadata,
     #[serde(default)]
     pub pack_png_path: Option<String>,
+    /// Optional source folder whose contents are copied into the new pack.
+    #[serde(default)]
+    pub source_dir: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -669,7 +672,10 @@ fn overlay_directory_files(from: &Path, onto: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Scaffold a new empty texture pack under texture-loader packs.
+/// Scaffold a new texture pack under texture-loader packs.
+///
+/// Optionally copies all files from `source_dir`, then writes `pack.json` from
+/// request metadata (overwriting any copied copy) and optional `pack.png`.
 pub fn create_texture_pack(
     request: &CreateTexturePackRequest,
     layout: &GameFilesLayout,
@@ -697,7 +703,24 @@ pub fn create_texture_pack(
         )));
     }
 
+    let source_dir = match request.source_dir.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+        Some(raw) => {
+            let src = parse_user_absolute_path(raw)?;
+            ensure_user_directory_path(&src)?;
+            if !src.is_dir() {
+                return Err(AppError::InvalidPath("source path must be an existing directory"));
+            }
+            Some(src)
+        }
+        None => None,
+    };
+
     fs::create_dir_all(&pack_dir)?;
+
+    if let Some(ref src) = source_dir {
+        copy_dir_recursive(src, &pack_dir)?;
+    }
+
     let pack_json_path = pack_dir.join("pack.json");
     let json = serde_json::to_string_pretty(&request.metadata).map_err(|err| {
         AppError::ParseError(format!("failed to serialize pack.json: {err}"))
@@ -714,6 +737,10 @@ pub fn create_texture_pack(
             fs::copy(&src, &dest_png)?;
             written_png = Some(dest_png.to_string_lossy().into_owned());
         }
+    }
+
+    if written_png.is_none() {
+        written_png = find_pack_png_in_dir(&pack_dir).map(|p| p.to_string_lossy().into_owned());
     }
 
     Ok(CreateTexturePackResult {
@@ -984,6 +1011,7 @@ where
         output_dir: output_dir.to_string_lossy().into_owned(),
         options: OperationOptions::Splitter(crate::core::contracts::SplitterOptions {
             sheet_concurrency: sheet_concurrency.clamp(1, 64),
+            skip_icons: false,
         }),
     };
     let cancel = Arc::new(AtomicBool::new(false));
@@ -2329,6 +2357,7 @@ mod tests {
                 author: "tester".to_string(),
             },
             pack_png_path: Some(png_src.to_string_lossy().into_owned()),
+            source_dir: None,
         };
 
         let created = create_texture_pack(&request, &layout).expect("create");
@@ -2341,6 +2370,42 @@ mod tests {
         let read = read_pack_metadata(&created.pack_dir).expect("read");
         assert_eq!(read.metadata.unwrap().name, "My Pack");
         assert!(read.pack_png_path.is_some());
+    }
+
+    #[test]
+    fn create_texture_pack_copies_source_dir_contents() {
+        let root = unique_temp("root-create-src");
+        let gd = unique_temp("gd-create-src");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let source = unique_temp("create-source");
+        fs::create_dir_all(source.join("icons")).expect("icons");
+        fs::write(source.join("sheet.png"), b"sheet").expect("sheet");
+        fs::write(source.join("icons").join("player.png"), b"icon").expect("icon");
+        fs::write(source.join("pack.png"), b"\x89PNG\r\n\x1a\nsrc").expect("pack png");
+
+        let request = CreateTexturePackRequest {
+            folder_name: "FromSource".to_string(),
+            metadata: PackMetadata {
+                textureldr: "1.5.0".to_string(),
+                name: "From Source".to_string(),
+                id: "tester.from-source".to_string(),
+                version: "2.0.0".to_string(),
+                author: "tester".to_string(),
+            },
+            pack_png_path: None,
+            source_dir: Some(source.to_string_lossy().into_owned()),
+        };
+
+        let created = create_texture_pack(&request, &layout).expect("create");
+        let pack = PathBuf::from(&created.pack_dir);
+        assert!(pack.join("sheet.png").is_file());
+        assert!(pack.join("icons").join("player.png").is_file());
+        assert!(created.pack_png_path.is_some());
+        let json = fs::read_to_string(pack.join("pack.json")).expect("json");
+        assert!(json.contains("From Source"));
+        assert!(json.contains("tester.from-source"));
     }
 
     #[test]

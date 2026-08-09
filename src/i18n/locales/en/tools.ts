@@ -12,6 +12,10 @@ const tools = {
     range1To64: "1–64",
   },
   splitter: {
+    settings: "Split Settings",
+    settingsDescription:
+      "Choose what to process and how many gamesheets run in parallel",
+    skipIcons: "Skip icons folder",
     performance: "Performance",
     performanceDescription:
       "Control how many gamesheets are processed in parallel",
@@ -474,12 +478,18 @@ const tools = {
     overlayPreparing: "Preparing…",
     createSection: "New texture pack",
     createDescription:
-      "Scaffold an empty pack under geode.texture-loader/packs so you can add textures yourself",
+      "Create a pack under geode.texture-loader/packs — optionally copy an existing pack folder, or start empty",
     folderName: "Folder name",
     folderNameHint: "Created under geode/config/geode.texture-loader/packs",
     folderNamePlaceholder: "My Pack",
     createMetadataHint: "Edit pack.json fields and optional pack.png in the metadata panel",
     dropPackPngHint: "Optional: drop pack.png here",
+    dropCreateHint: "Drop a pack folder or pack.png",
+    dropCreateHintSub: "Folder contents are copied into the new pack; pack.png is optional",
+    browseCreateSource: "Browse pack folder",
+    selectCreateSourceDialog: "Select pack folder to copy",
+    createSourceFolder: "Pack contents",
+    createSourceSelected: "Pack folder selected for create",
     createPack: "Create pack",
     creating: "Creating pack…",
     createSuccess: "Pack folder created",

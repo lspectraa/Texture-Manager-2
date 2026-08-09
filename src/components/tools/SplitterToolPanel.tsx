@@ -1,7 +1,8 @@
-import { Gauge } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { PickFolderFn } from "./types";
 import {
+  ToolCheckboxField,
   ToolNumberField,
   ToolPage,
   ToolPageHeader,
@@ -13,9 +14,11 @@ type SplitterToolPanelProps = {
   inputDir: string;
   outputDir: string;
   sheetConcurrency: number;
+  skipIcons: boolean;
   onInputDirChange: (value: string) => void;
   onOutputDirChange: (value: string) => void;
   onSheetConcurrencyChange: (value: number) => void;
+  onSkipIconsChange: (value: boolean) => void;
   pickFolder: PickFolderFn;
 };
 
@@ -23,9 +26,11 @@ export function SplitterToolPanel({
   inputDir,
   outputDir,
   sheetConcurrency,
+  skipIcons,
   onInputDirChange,
   onOutputDirChange,
   onSheetConcurrencyChange,
+  onSkipIconsChange,
   pickFolder,
 }: SplitterToolPanelProps) {
   const { t } = useTranslation("tools");
@@ -42,10 +47,16 @@ export function SplitterToolPanel({
         inputPlaceholder="C:/path/to/texturepack"
       />
       <ToolSection
-        title={t("splitter.performance")}
-        subtitle={t("splitter.performanceDescription")}
-        icon={Gauge}
+        title={t("splitter.settings")}
+        subtitle={t("splitter.settingsDescription")}
+        icon={Settings2}
+        columns={2}
       >
+        <ToolCheckboxField
+          label={t("splitter.skipIcons")}
+          checked={skipIcons}
+          onChange={onSkipIconsChange}
+        />
         <ToolNumberField
           label={t("splitter.concurrentGamesheets")}
           hint={t("common.range1To64")}

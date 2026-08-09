@@ -13,7 +13,9 @@ use crate::core::contracts::{
     phase_defaults, GeodeButtonsOptions, MergerOptions, OperationKind, OperationOptions,
     OperationPlan, PorterOptions, SplitterOptions,
 };
-use crate::core::convert_to_new_version::execute_convert_to_new_version as run_convert_to_new_version;
+use crate::core::convert_to_new_version::{
+    execute_convert_to_new_version as run_convert_to_new_version, sheet_is_under_icons,
+};
 use crate::core::game_files::{
     discover_sheet_pairs_with_game_plist_fallback, sheet_uses_external_plist, GameFilesLayout,
 };
@@ -383,7 +385,10 @@ where
     fs::create_dir_all(&split_dir)?;
 
     check_cancel(cancel.as_ref())?;
-    let sheet_pairs = discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?;
+    let mut sheet_pairs = discover_sheet_pairs_with_game_plist_fallback(input_dir, game_files)?;
+    if options.skip_icons {
+        sheet_pairs.retain(|pair| !sheet_is_under_icons(&pair.relative_dir));
+    }
     let mut total_sprites = 0usize;
     for pair in &sheet_pairs {
         total_sprites = total_sprites.saturating_add(count_frames_in_plist(&pair.plist_path)?);

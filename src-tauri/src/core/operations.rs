@@ -21,6 +21,7 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
             Some(OperationOptions::Splitter(existing)) => {
                 OperationOptions::Splitter(SplitterOptions {
                     sheet_concurrency: existing.sheet_concurrency.clamp(1, 64),
+                    skip_icons: existing.skip_icons,
                 })
             }
             None => OperationOptions::Splitter(defaults.splitter),
@@ -173,6 +174,7 @@ mod tests {
             options: Some(OperationOptions::Splitter(
                 crate::core::contracts::SplitterOptions {
                     sheet_concurrency: 2,
+                    skip_icons: true,
                 },
             )),
         };
@@ -181,6 +183,7 @@ mod tests {
         match plan.options {
             OperationOptions::Splitter(options) => {
                 assert_eq!(options.sheet_concurrency, 2);
+                assert!(options.skip_icons);
             }
             _ => panic!("expected splitter options"),
         }

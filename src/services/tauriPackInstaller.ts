@@ -63,6 +63,7 @@ export const createTexturePack = async (
     folderName: request.folderName,
     metadata: request.metadata,
     packPngPath: request.packPngPath ?? null,
+    sourceDir: request.sourceDir ?? null,
   });
 };
 

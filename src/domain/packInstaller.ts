@@ -41,6 +41,8 @@ export type CreateTexturePackRequest = {
   folderName: string;
   metadata: PackMetadata;
   packPngPath?: string;
+  /** Optional folder whose contents are copied into the new pack. */
+  sourceDir?: string;
 };
 
 export type CreateTexturePackResult = {
@@ -136,6 +138,8 @@ export type PackInstallerBridge = {
   packPngDataUrl: string | null;
   createMetadata: PackMetadata;
   createPackPngPath: string | null;
+  /** Optional source folder to copy into the new pack on create. */
+  createSourceDir: string | null;
   /** Pending library PNG path override before Save (null = clear, undefined = unchanged). */
   libraryPackPngPath: string | null | undefined;
   libraryPackPngDirty: boolean;
@@ -157,6 +161,7 @@ export const DEFAULT_PACK_INSTALLER_BRIDGE: PackInstallerBridge = {
   packPngDataUrl: null,
   createMetadata: DEFAULT_PACK_METADATA,
   createPackPngPath: null,
+  createSourceDir: null,
   libraryPackPngPath: undefined,
   libraryPackPngDirty: false,
   librarySaving: false,

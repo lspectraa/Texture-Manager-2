@@ -48,6 +48,7 @@ import {
   getPackPngDataUrl,
   installPackPlan,
   listInstalledPacks,
+  readPackMetadata,
   runPackOperation,
   updateInstalledPackMetadata,
 } from "../../services/tauriPackInstaller";
@@ -715,6 +716,68 @@ export function TexturePackInstallerToolPanel({
     }
   }, [setBridge, t]);
 
+  const applyCreateSourceDir = useCallback(
+    async (dir: string): Promise<void> => {
+      const trimmed = dir.trim();
+      if (!trimmed) {
+        return;
+      }
+      setBridge({ createSourceDir: trimmed });
+      setStatusTone("info");
+      setStatusMessage(t("packInstaller.createSourceSelected"));
+      try {
+        const meta = await readPackMetadata(trimmed);
+        const updates: Partial<PackInstallerBridge> = {
+          createSourceDir: trimmed,
+        };
+        if (meta.metadata) {
+          updates.createMetadata = {
+            ...bridgeRef.current.createMetadata,
+            ...meta.metadata,
+          };
+          if (!folderNameTouched) {
+            const suggested = folderNameFromPackName(meta.metadata.name);
+            if (suggested) {
+              setFolderName(suggested);
+            }
+          }
+        }
+        if (meta.packPngPath && !bridgeRef.current.createPackPngPath) {
+          const dataUrl = await getPackPngDataUrl(meta.packPngPath);
+          updates.packPngDataUrl = dataUrl;
+        }
+        setBridge(updates);
+      } catch {
+        // Source may not have pack.json / pack.png yet — still usable as content.
+      }
+    },
+    [folderNameTouched, setBridge, t],
+  );
+
+  const browseCreateSourceFolder = useCallback(async (): Promise<void> => {
+    if (!isTauriRuntime()) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.runtimeUnavailable"));
+      return;
+    }
+    try {
+      const selected = await open({
+        title: t("packInstaller.selectCreateSourceDialog"),
+        directory: true,
+        multiple: false,
+      });
+      if (typeof selected === "string" && selected.trim()) {
+        await applyCreateSourceDir(selected);
+      }
+    } catch {
+      // Cancelled.
+    }
+  }, [applyCreateSourceDir, t]);
+
+  const clearCreateSourceDir = useCallback((): void => {
+    setBridge({ createSourceDir: null });
+  }, [setBridge]);
+
   const clearPackPng = useCallback((): void => {
     if (bridgeRef.current.mode === "create") {
       setBridge({
@@ -1154,15 +1217,25 @@ export function TexturePackInstallerToolPanel({
       }
       if (bridgeRef.current.mode === "create") {
         const png = paths.find(isPngPath);
-        if (!png) {
-          setStatusTone("error");
-          setStatusMessage(t("errors:packInstaller.invalidDropPng"));
+        if (png && paths.length === 1) {
+          const dataUrl = await getPackPngDataUrl(png);
+          setBridge({ createPackPngPath: png, packPngDataUrl: dataUrl });
+          setStatusTone("info");
+          setStatusMessage(t("packInstaller.packPngSelected"));
           return;
         }
-        const dataUrl = await getPackPngDataUrl(png);
-        setBridge({ createPackPngPath: png, packPngDataUrl: dataUrl });
-        setStatusTone("info");
-        setStatusMessage(t("packInstaller.packPngSelected"));
+        if (paths.some(isZipPath)) {
+          setStatusTone("error");
+          setStatusMessage(t("errors:packInstaller.invalidDropCreate"));
+          return;
+        }
+        const folder = paths.find((path) => !isPngPath(path) && !isZipPath(path));
+        if (folder) {
+          await applyCreateSourceDir(folder);
+          return;
+        }
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.invalidDropCreate"));
         return;
       }
 
@@ -1213,7 +1286,7 @@ export function TexturePackInstallerToolPanel({
       }
       await runDiscovery(source);
     },
-    [busy, runDiscovery, setBridge, t],
+    [applyCreateSourceDir, busy, runDiscovery, setBridge, t],
   );
 
   // Tauri webview drag-drop (folders/zips with real OS paths).
@@ -1328,12 +1401,14 @@ export function TexturePackInstallerToolPanel({
       }
       case "create": {
         const createPngPath = bridgeRef.current.createPackPngPath;
+        const createSourceDir = bridgeRef.current.createSourceDir;
         setBridge({
           mode,
           selectedUnit: null,
           libraryPack: null,
           packPngDataUrl: null,
           createPackPngPath: createPngPath,
+          createSourceDir,
           libraryPackPngPath: undefined,
           libraryPackPngDirty: false,
         });
@@ -1343,6 +1418,20 @@ export function TexturePackInstallerToolPanel({
               setBridge({ packPngDataUrl: dataUrl });
             }
           });
+        } else if (createSourceDir) {
+          void readPackMetadata(createSourceDir)
+            .then(async (meta) => {
+              if (bridgeRef.current.mode !== "create" || !meta.packPngPath) {
+                return;
+              }
+              const dataUrl = await getPackPngDataUrl(meta.packPngPath);
+              if (bridgeRef.current.mode === "create") {
+                setBridge({ packPngDataUrl: dataUrl });
+              }
+            })
+            .catch(() => {
+              // Optional preview.
+            });
         }
         break;
       }
@@ -1554,6 +1643,7 @@ export function TexturePackInstallerToolPanel({
         folderName: resolvedFolder,
         metadata,
         packPngPath: bridge.createPackPngPath ?? undefined,
+        sourceDir: bridge.createSourceDir ?? undefined,
       });
       setCreatedPackDir(result.packDir);
       showCompletionOverlay(
@@ -1924,8 +2014,18 @@ export function TexturePackInstallerToolPanel({
               onDragLeave={onHtmlDragLeave}
               onDrop={onHtmlDrop}
             >
-              <p className="tm-pack-dropzone-title">{t("packInstaller.dropPackPngHint")}</p>
+              <p className="tm-pack-dropzone-title">{t("packInstaller.dropCreateHint")}</p>
+              <p className="tm-pack-dropzone-sub">{t("packInstaller.dropCreateHintSub")}</p>
               <div className="tm-pack-dropzone-actions">
+                <button
+                  type="button"
+                  className="tm-tool-path-browse"
+                  onClick={() => void browseCreateSourceFolder()}
+                  disabled={busy !== null || !geometryDashFound}
+                >
+                  <FolderOpen size={15} />
+                  {t("packInstaller.browseCreateSource")}
+                </button>
                 <button
                   type="button"
                   className="tm-tool-path-browse"
@@ -1936,6 +2036,24 @@ export function TexturePackInstallerToolPanel({
                 </button>
               </div>
             </div>
+            {bridge.createSourceDir ? (
+              <div className="tm-pack-source-bar">
+                <span title={bridge.createSourceDir}>
+                  {t("packInstaller.createSourceFolder")}
+                  {": "}
+                  {shortenPathForDisplay(bridge.createSourceDir)}
+                </span>
+                <button
+                  type="button"
+                  className="tm-pack-clear-btn"
+                  onClick={clearCreateSourceDir}
+                  disabled={busy !== null}
+                >
+                  <Trash2 size={14} />
+                  {t("packInstaller.clear")}
+                </button>
+              </div>
+            ) : null}
           </ToolSection>
 
           <div className="tm-pack-actions">

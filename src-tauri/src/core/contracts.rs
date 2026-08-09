@@ -24,6 +24,9 @@ pub struct DimensionOverride {
 pub struct SplitterOptions {
     /// Max concurrent gamesheets (plist/png pairs) processed in parallel.
     pub sheet_concurrency: u32,
+    /// When true, skip discovering/splitting sheets under an `icons` folder.
+    #[serde(default)]
+    pub skip_icons: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -173,6 +176,7 @@ pub fn phase_defaults() -> PhaseDefaults {
     PhaseDefaults {
         splitter: SplitterOptions {
             sheet_concurrency: 5,
+            skip_icons: false,
         },
         porter: PorterOptions {
             low_port: false,

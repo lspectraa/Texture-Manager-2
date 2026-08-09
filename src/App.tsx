@@ -224,6 +224,7 @@ function App() {
 
   const [splitterInputDir, setSplitterInputDir] = useState("");
   const [splitterOutputDir, setSplitterOutputDir] = useState("");
+  const [splitterSkipIcons, setSplitterSkipIcons] = useState(false);
   const [splitterSheetConcurrency, setSplitterSheetConcurrency] = useState(
     DEFAULT_SHEET_CONCURRENCY,
   );
@@ -317,6 +318,7 @@ function App() {
         setSplitterSheetConcurrency(
           response.splitter.sheetConcurrency || concurrency,
         );
+        setSplitterSkipIcons(response.splitter.skipIcons ?? false);
         setPorterSheetConcurrency(
           response.porter.sheetConcurrency || concurrency,
         );
@@ -599,6 +601,7 @@ function App() {
         options: {
           type: "splitter",
           sheetConcurrency: splitterSheetConcurrency,
+          skipIcons: splitterSkipIcons,
         },
       };
     }
@@ -1074,9 +1077,11 @@ function App() {
             inputDir={splitterInputDir}
             outputDir={splitterOutputDir}
             sheetConcurrency={splitterSheetConcurrency}
+            skipIcons={splitterSkipIcons}
             onInputDirChange={setSplitterInputDir}
             onOutputDirChange={setSplitterOutputDir}
             onSheetConcurrencyChange={setSplitterSheetConcurrency}
+            onSkipIconsChange={setSplitterSkipIcons}
             pickFolder={pickFolder}
           />
         );
