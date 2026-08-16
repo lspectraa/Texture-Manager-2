@@ -37,6 +37,17 @@ const common: AppLocaleResources["common"] = {
       "Свободное ПО: вы можете распространять и изменять его на условиях GNU General Public License. Гарантии отсутствуют.",
     licenseLink: "Посмотреть полную лицензию",
     licenseHint: "Открывает LICENSE на GitHub",
+    thirdPartyHeading: "Сторонние апскейлеры",
+    thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
+    thirdPartySummary:
+      "В приложение включены сторонние бинарные файлы и веса моделей. Они сохраняют лицензии MIT и BSD-3-Clause; полные уведомления поставляются вместе с программой.",
+    thirdPartyWaifu2x:
+      "Waifu2x CUNet — MIT. Оригинал: nagadomi; порт ncnn-Vulkan: nihui.",
+    thirdPartyRealesrgan:
+      "Real-ESRGAN AnimeVideo v3 — BSD-3-Clause (Xintao Wang). Порт ncnn-Vulkan — MIT (Xintao Wang / nihui).",
+    thirdPartyNcnn: "ncnn — BSD-3-Clause. Copyright (C) 2017 Tencent.",
+    thirdPartyLink: "Показать уведомления третьих сторон",
+    thirdPartyHint: "Открывает NOTICE на GitHub",
     version: "Версия",
     github: "Проект на GitHub",
     githubHint: "Исходный код и сообщения об ошибках",

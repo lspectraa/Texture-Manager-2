@@ -1,12 +1,7 @@
 import { Maximize2, Settings2 } from "lucide-react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  SHIPPED_UPSCALER_MODELS,
-  upscalerModelLabelKey,
-  type UpscalerModel,
-  type UpscalerTargetGraphics,
-} from "../../domain/operations";
+import { type UpscalerTargetGraphics } from "../../domain/operations";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -20,14 +15,12 @@ import {
 type UpscalerToolPanelProps = {
   inputDir: string;
   outputDir: string;
-  model: UpscalerModel;
   targetGraphics: UpscalerTargetGraphics;
   convertToLatest: boolean;
   gameVersion: string;
   versionOptions: string[];
   onInputDirChange: (value: string) => void;
   onOutputDirChange: (value: string) => void;
-  onModelChange: (value: UpscalerModel) => void;
   onTargetGraphicsChange: (value: UpscalerTargetGraphics) => void;
   onConvertToLatestChange: (value: boolean) => void;
   onGameVersionChange: (value: string) => void;
@@ -37,30 +30,18 @@ type UpscalerToolPanelProps = {
 export function UpscalerToolPanel({
   inputDir,
   outputDir,
-  model,
   targetGraphics,
   convertToLatest,
   gameVersion,
   versionOptions,
   onInputDirChange,
   onOutputDirChange,
-  onModelChange,
   onTargetGraphicsChange,
   onConvertToLatestChange,
   onGameVersionChange,
   pickFolder,
 }: UpscalerToolPanelProps) {
   const { t } = useTranslation("tools");
-
-  const showModelPicker = SHIPPED_UPSCALER_MODELS.length > 1;
-  const modelOptions = useMemo(
-    () =>
-      SHIPPED_UPSCALER_MODELS.map((value) => ({
-        value,
-        label: t(upscalerModelLabelKey(value)),
-      })),
-    [t],
-  );
 
   const targetOptions = useMemo(
     () => [
@@ -86,15 +67,6 @@ export function UpscalerToolPanel({
         icon={Settings2}
         columns={2}
       >
-        {showModelPicker ? (
-          <ToolSelectField
-            label={t("upscaler.model")}
-            hint={t("upscaler.modelHint")}
-            value={model}
-            options={modelOptions}
-            onChange={(value) => onModelChange(value as UpscalerModel)}
-          />
-        ) : null}
         <ToolSelectField
           label={t("upscaler.targetGraphics")}
           hint={t("upscaler.targetHint")}

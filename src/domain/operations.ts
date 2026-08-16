@@ -10,42 +10,8 @@ export type OperationKind =
 
 export type UpscalerModel = "realesrganAnime" | "waifu2x";
 
-/** Bundled with this build. The model picker is shown only when this has more than one entry. */
-export const SHIPPED_UPSCALER_MODELS: readonly UpscalerModel[] = ["waifu2x"];
-
+/** Gamesheet default. Icons always use Real-ESRGAN AnimeVideo v3. */
 export const DEFAULT_UPSCALER_MODEL: UpscalerModel = "waifu2x";
-
-export function isShippedUpscalerModel(value: UpscalerModel): boolean {
-  return (SHIPPED_UPSCALER_MODELS as readonly string[]).includes(value);
-}
-
-export function normalizeUpscalerModel(value: unknown): UpscalerModel {
-  const candidate: UpscalerModel | null =
-    value === "waifu2x" || value === "realcugan"
-      ? "waifu2x"
-      : value === "realesrganAnime"
-        ? "realesrganAnime"
-        : null;
-  if (candidate && isShippedUpscalerModel(candidate)) {
-    return candidate;
-  }
-  return DEFAULT_UPSCALER_MODEL;
-}
-
-export function upscalerModelLabelKey(
-  model: UpscalerModel,
-): "upscaler.modelRealesrgan" | "upscaler.modelWaifu2x" {
-  switch (model) {
-    case "realesrganAnime":
-      return "upscaler.modelRealesrgan";
-    case "waifu2x":
-      return "upscaler.modelWaifu2x";
-    default: {
-      const _exhaustive: never = model;
-      return _exhaustive;
-    }
-  }
-}
 
 export type UpscalerTargetGraphics = "hd" | "uhd";
 

@@ -29,10 +29,6 @@ const tools = {
     settings: "Upscale Settings",
     settingsDescription:
       "Choose target graphics tier",
-    model: "Upscale model",
-    modelHint: "Requires a Vulkan-compatible GPU. Run npm run fetch:upscaler-binaries for local builds.",
-    modelRealesrgan: "Real-ESRGAN AnimeVideo v3",
-    modelWaifu2x: "Waifu2x CUNet",
     targetGraphics: "Target graphics",
     targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",

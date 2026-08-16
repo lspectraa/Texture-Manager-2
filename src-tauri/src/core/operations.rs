@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::core::contracts::{
     phase_defaults, ConvertToNewVersionOptions, GeodeButtonsOptions, GlowMakerOptions,
     MergerOptions, OperationKind, OperationOptions, OperationPlan, OperationRequest, PorterOptions,
-    RandomizerOptions, SplitterOptions, UpscalerOptions,
+    RandomizerOptions, SplitterOptions, UpscalerModel, UpscalerOptions,
 };
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{ensure_user_directory_path, parse_user_absolute_path};
@@ -164,7 +164,7 @@ fn with_upscaler_defaults(existing: UpscalerOptions) -> Result<UpscalerOptions, 
         ));
     }
     Ok(UpscalerOptions {
-        model: existing.model.coerce_shipped(),
+        model: UpscalerModel::USER_DEFAULT,
         target_graphics: existing.target_graphics,
         convert_to_latest: existing.convert_to_latest,
         game_version,
@@ -308,7 +308,7 @@ mod tests {
             _ => panic!("expected upscaler options"),
         }
 
-        let unshipped = OperationRequest {
+        let forced_default = OperationRequest {
             kind: OperationKind::Upscaler,
             input_dir: abs_dir("tm2-op-in"),
             output_dir: abs_dir("tm2-op-out"),
@@ -321,7 +321,7 @@ mod tests {
                 cache_match_mode: Default::default(),
             })),
         };
-        let plan = build_operation_plan(unshipped).expect("plan should be built");
+        let plan = build_operation_plan(forced_default).expect("plan should be built");
         match plan.options {
             OperationOptions::Upscaler(options) => {
                 assert_eq!(options.model, UpscalerModel::Waifu2x);

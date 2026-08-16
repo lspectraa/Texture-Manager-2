@@ -159,4 +159,11 @@ This project is licensed under the [GNU General Public License v3.0 or later](LI
 
 You can redistribute it and/or modify it under the terms of the GPL. See `LICENSE` for the full text.
 
+The AI upscaler bundles third-party inference binaries and model weights. Those stay under their own licenses; Texture Manager 2 does not relicense them. Full copyright notices and license texts ship with the app in `src-tauri/resources/upscaler/NOTICE` (also linked from About):
+
+- **Waifu2x** (nagadomi) and **waifu2x-ncnn-vulkan** (nihui) — MIT
+- **Real-ESRGAN** / `realesr-animevideov3` (Xintao Wang) — BSD-3-Clause
+- **Real-ESRGAN ncnn Vulkan** (Xintao Wang / nihui) — MIT
+- **ncnn** (Tencent) — BSD-3-Clause
+
 © Spectra 2026

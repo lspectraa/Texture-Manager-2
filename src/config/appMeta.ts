@@ -12,6 +12,9 @@ export const APP_LINKS = {
   discord: "https://discord.gg/YFXhJZJCv6",
   /** Full GPL-3.0 text in this repository. */
   license: "https://github.com/lspectraa/Texture-Manager-2/blob/main/LICENSE",
+  /** MIT / BSD notices for bundled upscaler sidecars and models. */
+  thirdPartyNotice:
+    "https://github.com/lspectraa/Texture-Manager-2/blob/main/src-tauri/resources/upscaler/NOTICE",
   /** Pre-filled issue form for reporting localization mistakes. */
   translationIssue:
     "https://github.com/lspectraa/Texture-Manager-2/issues/new?title=Translation%20issue&labels=localization",

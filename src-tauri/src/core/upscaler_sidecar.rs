@@ -1,4 +1,4 @@
-//! Resolve and invoke ncnn-Vulkan CLI sidecars (Waifu2x shipped; other models stay wired).
+//! Resolve and invoke ncnn-Vulkan CLI sidecars (Waifu2x + Real-ESRGAN AnimeVideo v3).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -50,10 +50,10 @@ const TARGET_TRIPLE: &str = "x86_64-unknown-linux-gnu";
 )))]
 const TARGET_TRIPLE: &str = "unknown";
 
-/// GPU path: keep the graphics queue serial. `2:2:2` AVs this 2022 CUGAN build
-/// when the Tauri WebView is also using Vulkan on a hybrid laptop.
+/// GPU path: keep the graphics queue serial. `2:2:2` AVs the 2022 Real-ESRGAN
+/// sidecar when the Tauri WebView is also using Vulkan on a hybrid laptop.
 const BATCH_LOAD_PROC_SAVE_GPU: &str = "1:2:2";
-const BATCH_LOAD_PROC_SAVE_CUGAN: &str = "1:1:1";
+const BATCH_LOAD_PROC_SAVE_WAIFU2X: &str = "1:1:1";
 const BATCH_LOAD_PROC_SAVE_CPU: &str = "1:1:1";
 
 /// Sprites per CLI invocation. Large enough that the model stays loaded, small
@@ -63,10 +63,9 @@ pub const UPSCALE_CHUNK_SIZE: usize = 16;
 /// Pause between large chunks so DWM / other apps can run.
 const CHUNK_YIELD_MS: u64 = 250;
 
-/// Explicit tile size. Auto (`0`) for CUGAN: forced 64 AVs this 2022 build on
-/// current NVIDIA drivers (610.x) when launched from the Tauri process.
 const REALESRGAN_TILE_SIZE: &str = "128";
-const REALCUGAN_TILE_SIZE: &str = "0";
+/// Waifu2x tile size. Auto (`0`) is stable on current NVIDIA drivers.
+const WAIFU2X_TILE_SIZE: &str = "0";
 
 /// Extra pixels around each sprite so convolution does not see a hard transparent edge.
 const UPSCALE_EDGE_PAD: u32 = 12;
@@ -82,7 +81,7 @@ fn idx(x: u32, y: u32, width: u32) -> usize {
 }
 
 /// Copy RGB from opaque neighbors into fully-transparent pixels so the net does not
-/// treat sprite silhouettes as a hard black/clear edge (classic CUGAN halo).
+/// treat sprite silhouettes as a hard black/clear edge (classic ncnn halo).
 ///
 /// Work is limited to the occupied bounding box plus a pad-sized halo so large
 /// canvases stay cheap. RGB is ping-ponged in packed buffers so a 512×512 skip
@@ -594,7 +593,7 @@ fn gpu_try_order(binary: &Path, model: UpscalerModel) -> Vec<i32> {
         if id < 0 {
             return true;
         }
-        // Real-CUGAN regularly AVs on Intel Iris (bugbilz≠0) after NVIDIA fails.
+        // Waifu2x regularly AVs on Intel Iris (bugbilz≠0) after NVIDIA fails.
         if matches!(model, UpscalerModel::Waifu2x) && is_integrated_gpu_name(name) {
             return false;
         }
@@ -742,7 +741,7 @@ fn configure_model_args(
     cmd.arg("-j").arg(if gpu_id < 0 {
         BATCH_LOAD_PROC_SAVE_CPU
     } else if matches!(model, UpscalerModel::Waifu2x) {
-        BATCH_LOAD_PROC_SAVE_CUGAN
+        BATCH_LOAD_PROC_SAVE_WAIFU2X
     } else {
         BATCH_LOAD_PROC_SAVE_GPU
     });
@@ -761,7 +760,7 @@ fn configure_model_args(
             cmd.arg("-m").arg(models);
         }
         UpscalerModel::Waifu2x => {
-            cmd.arg("-t").arg(REALCUGAN_TILE_SIZE);
+            cmd.arg("-t").arg(WAIFU2X_TILE_SIZE);
             cmd.arg("-n").arg("-1");
             cmd.arg("-m").arg(models);
         }

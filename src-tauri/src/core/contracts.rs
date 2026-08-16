@@ -65,25 +65,13 @@ pub enum UpscalerModel {
     /// Real-ESRGAN AnimeVideo v3 — used automatically for icon sprites,
     /// including glow layers and bird/UFO capsules.
     RealesrganAnime,
-    /// Waifu2x CUNet (2025 ncnn). `realcugan` is accepted for old settings files.
-    #[serde(alias = "realcugan")]
+    /// Waifu2x CUNet — user/default model for non-icon sprites.
     Waifu2x,
 }
 
 impl UpscalerModel {
-    pub const DEFAULT_SHIPPED: Self = Self::Waifu2x;
-
-    pub fn is_shipped(self) -> bool {
-        matches!(self, Self::Waifu2x)
-    }
-
-    pub fn coerce_shipped(self) -> Self {
-        if self.is_shipped() {
-            self
-        } else {
-            Self::DEFAULT_SHIPPED
-        }
-    }
+    /// Gamesheet default. Icons still route to [`Self::RealesrganAnime`].
+    pub const USER_DEFAULT: Self = Self::Waifu2x;
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -259,7 +247,7 @@ pub fn phase_defaults() -> PhaseDefaults {
             sheet_concurrency: 5,
         },
         upscaler: UpscalerOptions {
-            model: UpscalerModel::Waifu2x,
+            model: UpscalerModel::USER_DEFAULT,
             target_graphics: UpscalerTargetGraphics::Uhd,
             convert_to_latest: false,
             game_version: String::new(),

@@ -8,7 +8,7 @@
  *
  * Add a kind to SHIPPED (and tauri.conf.json externalBin) when bundling another sidecar.
  */
-import { createWriteStream, existsSync, mkdirSync, rmSync, cpSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, rmSync, cpSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
@@ -29,12 +29,8 @@ const PACKAGES = {
   realesrgan: {
     binaryBaseName: "realesrgan-ncnn-vulkan",
     modelsDest: "models-realesrgan",
+    modelsKeepPrefix: "realesr-animevideov3",
     copyOpenMpDll: false,
-    notice: [
-      "Real-ESRGAN ncnn Vulkan — BSD-3-Clause / MIT (xinntao / nihui)",
-      "  https://github.com/xinntao/Real-ESRGAN",
-      "  https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan",
-    ],
     platforms: {
       windows: {
         url: `https://github.com/xinntao/Real-ESRGAN/releases/download/${REALESRGAN_TAG}/realesrgan-ncnn-vulkan-${REALESRGAN_DATE}-windows.zip`,
@@ -52,11 +48,6 @@ const PACKAGES = {
     binaryBaseName: "waifu2x-ncnn-vulkan",
     modelsDest: "models-cunet",
     copyOpenMpDll: true,
-    notice: [
-      "Waifu2x ncnn Vulkan — MIT (nihui / nagadomi waifu2x)",
-      "  https://github.com/nihui/waifu2x-ncnn-vulkan",
-      "  https://github.com/nagadomi/waifu2x",
-    ],
     platforms: {
       windows: {
         url: `https://github.com/nihui/waifu2x-ncnn-vulkan/releases/download/${WAIFU2X_TAG}/waifu2x-ncnn-vulkan-${WAIFU2X_TAG}-windows.zip`,
@@ -144,11 +135,10 @@ function copyBinary(srcExe, baseName, triples) {
   }
 }
 
-function copyModelsFromExtract(extractRoot, destName) {
+function copyModelsFromExtract(extractRoot, destName, keepPrefix) {
   const models =
     findDirRecursive(extractRoot, destName) ||
-    findDirRecursive(extractRoot, "models") ||
-    findDirRecursive(extractRoot, "models-se");
+    findDirRecursive(extractRoot, "models");
   if (!models) {
     throw new Error(`Could not find model folder under ${extractRoot}`);
   }
@@ -156,6 +146,14 @@ function copyModelsFromExtract(extractRoot, destName) {
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dirname(dest), { recursive: true });
   cpSync(models, dest, { recursive: true });
+  if (keepPrefix) {
+    for (const entry of readdirSync(dest)) {
+      if (!entry.startsWith(keepPrefix)) {
+        rmSync(join(dest, entry), { force: true, recursive: true });
+        console.log(`Removed unused weight ${entry}`);
+      }
+    }
+  }
   console.log(`Wrote models ${dest}`);
 }
 
@@ -180,7 +178,7 @@ async function fetchPackage(kind, platformKey) {
       throw new Error(`Executable ${cfg.exeName} not found in ${cfg.url}`);
     }
     copyBinary(exe, pkg.binaryBaseName, cfg.triples);
-    copyModelsFromExtract(extractRoot, pkg.modelsDest);
+    copyModelsFromExtract(extractRoot, pkg.modelsDest, pkg.modelsKeepPrefix);
     if (pkg.copyOpenMpDll) {
       const openMp = findFileRecursive(extractRoot, "vcomp140.dll");
       if (openMp) {
@@ -195,14 +193,12 @@ async function fetchPackage(kind, platformKey) {
 }
 
 function writeNotice() {
-  const lines = ["Third-party upscaler binaries", ""];
-  for (const kind of SHIPPED) {
-    const pkg = PACKAGES[kind];
-    if (pkg?.notice) {
-      lines.push(...pkg.notice, "");
-    }
+  const src = join(resourcesDir, "NOTICE");
+  if (!existsSync(src)) {
+    throw new Error(`Missing committed NOTICE at ${src}`);
   }
-  writeFileSync(join(binariesDir, "NOTICE"), lines.join("\n"));
+  mkdirSync(binariesDir, { recursive: true });
+  cpSync(src, join(binariesDir, "NOTICE"));
 }
 
 function removeBinariesWithBaseName(baseName) {

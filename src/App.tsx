@@ -23,11 +23,9 @@ import {
   OperationReport,
   OperationRequest,
   DEFAULT_UPSCALER_MODEL,
-  normalizeUpscalerModel,
 } from "./domain/operations";
 import type {
   GeodeButtonsOptions,
-  UpscalerModel,
   UpscalerTargetGraphics,
 } from "./domain/operations";
 import {
@@ -297,8 +295,6 @@ function App() {
 
   const [upscalerInputDir, setUpscalerInputDir] = useState("");
   const [upscalerOutputDir, setUpscalerOutputDir] = useState("");
-  const [upscalerModel, setUpscalerModel] =
-    useState<UpscalerModel>(DEFAULT_UPSCALER_MODEL);
   const [upscalerTargetGraphics, setUpscalerTargetGraphics] =
     useState<UpscalerTargetGraphics>("uhd");
   const [upscalerConvertToLatest, setUpscalerConvertToLatest] = useState(false);
@@ -396,7 +392,6 @@ function App() {
         setPorterSheetConcurrency(
           response.porter.sheetConcurrency || concurrency,
         );
-        setUpscalerModel(normalizeUpscalerModel(response.upscaler?.model));
         setUpscalerTargetGraphics(response.upscaler?.targetGraphics ?? "uhd");
         setUpscalerConvertToLatest(response.upscaler?.convertToLatest ?? false);
         if (response.upscaler?.gameVersion) {
@@ -721,7 +716,7 @@ function App() {
         outputDir: upscalerOutputDir,
         options: {
           type: "upscaler",
-          model: upscalerModel,
+          model: DEFAULT_UPSCALER_MODEL,
           targetGraphics: upscalerTargetGraphics,
           convertToLatest: upscalerConvertToLatest,
           gameVersion: upscalerGameVersion,
@@ -1255,14 +1250,12 @@ function App() {
           <UpscalerToolPanel
             inputDir={upscalerInputDir}
             outputDir={upscalerOutputDir}
-            model={upscalerModel}
             targetGraphics={upscalerTargetGraphics}
             convertToLatest={upscalerConvertToLatest}
             gameVersion={upscalerGameVersion}
             versionOptions={CONVERT_VERSION_OPTIONS}
             onInputDirChange={setUpscalerInputDir}
             onOutputDirChange={setUpscalerOutputDir}
-            onModelChange={setUpscalerModel}
             onTargetGraphicsChange={setUpscalerTargetGraphics}
             onConvertToLatestChange={setUpscalerConvertToLatest}
             onGameVersionChange={setUpscalerGameVersion}

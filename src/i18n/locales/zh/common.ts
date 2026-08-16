@@ -35,6 +35,17 @@ const common = {
       "自由软件：您可依据 GNU 通用公共许可证重新分发和修改。不作任何担保。",
     licenseLink: "查看完整许可证",
     licenseHint: "在 GitHub 上打开 LICENSE",
+    thirdPartyHeading: "第三方放大模型",
+    thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
+    thirdPartySummary:
+      "本应用内含推理程序与模型权重。它们仍适用各自的 MIT 与 BSD-3-Clause 许可；完整声明随应用一并提供。",
+    thirdPartyWaifu2x:
+      "Waifu2x CUNet — MIT。原作：nagadomi；ncnn-Vulkan 移植：nihui。",
+    thirdPartyRealesrgan:
+      "Real-ESRGAN AnimeVideo v3 — BSD-3-Clause（Xintao Wang）。ncnn-Vulkan 移植 — MIT（Xintao Wang / nihui）。",
+    thirdPartyNcnn: "ncnn — BSD-3-Clause。Copyright (C) 2017 Tencent。",
+    thirdPartyLink: "查看第三方声明",
+    thirdPartyHint: "在 GitHub 上打开 NOTICE",
     version: "版本",
     github: "GitHub 项目",
     githubHint: "源代码与问题反馈",

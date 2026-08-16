@@ -35,6 +35,17 @@ const common = {
       "Software livre: você pode redistribuí-lo e modificá-lo sob a Licença Pública Geral GNU. Não há garantia.",
     licenseLink: "Ver licença completa",
     licenseHint: "Abre LICENSE no GitHub",
+    thirdPartyHeading: "Upscalers de terceiros",
+    thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
+    thirdPartySummary:
+      "Este aplicativo inclui binários de inferência e pesos de modelos. Eles mantêm as licenças MIT e BSD-3-Clause; os avisos completos acompanham o aplicativo.",
+    thirdPartyWaifu2x:
+      "Waifu2x CUNet — MIT. Original de nagadomi; porta ncnn-Vulkan de nihui.",
+    thirdPartyRealesrgan:
+      "Real-ESRGAN AnimeVideo v3 — BSD-3-Clause (Xintao Wang). Porta ncnn-Vulkan — MIT (Xintao Wang / nihui).",
+    thirdPartyNcnn: "ncnn — BSD-3-Clause. Copyright (C) 2017 Tencent.",
+    thirdPartyLink: "Ver avisos de terceiros",
+    thirdPartyHint: "Abre NOTICE no GitHub",
     version: "Versão",
     github: "Projeto no GitHub",
     githubHint: "Código-fonte e problemas",
