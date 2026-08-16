@@ -25,6 +25,8 @@ const reports = {
     plists_one: "{{completed}} / {{total}} 个 plist",
     plists_other: "{{completed}} / {{total}} 个 plist",
     preparing: "正在准备操作…",
+    remaining: "预计剩余时间：{{time}}",
+    remainingEstimating: "预计剩余时间：计算中…",
     cancel: "取消",
   },
   alerts: {
@@ -39,6 +41,8 @@ const reports = {
     processed: "已处理",
     elapsed: "耗时",
     output: "输出",
+    aiUpscaled: "AI 放大",
+    fromCache: "来自缓存",
   },
   issues: {
     title: "问题",
@@ -55,6 +59,7 @@ const reports = {
   severity: {
     error: "错误",
     warning: "警告",
+    info: "info",
   },
 } as const;
 

@@ -25,6 +25,8 @@ const reports = {
     plists_one: "{{completed}} / {{total}} plist",
     plists_other: "{{completed}} / {{total}} plists",
     preparing: "Preparando operação…",
+    remaining: "Tempo restante estimado: {{time}}",
+    remainingEstimating: "Tempo restante estimado: calculando…",
     cancel: "Cancelar",
   },
   alerts: {
@@ -39,6 +41,8 @@ const reports = {
     processed: "Processados",
     elapsed: "Tempo decorrido",
     output: "Saída",
+    aiUpscaled: "IA ampliada",
+    fromCache: "Do cache",
   },
   issues: {
     title: "Problemas",
@@ -55,6 +59,7 @@ const reports = {
   severity: {
     error: "erro",
     warning: "aviso",
+    info: "info",
   },
 } as const;
 

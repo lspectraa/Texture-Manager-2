@@ -7,6 +7,7 @@
 //! the Cocos/node origin inside that image (`spriteOffset` anchor).
 
 use std::io::Cursor;
+use std::path::Path;
 use std::sync::Mutex;
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
@@ -107,6 +108,13 @@ pub fn particle_editor_sheet_frame_data_url(
             "gamesheet plist/png pair not found in Resources",
         ));
     }
+    crate::core::sprite_index::try_index_sheet_pair(
+        layout,
+        Path::new(""),
+        sheet_stem,
+        &plist_path,
+        &png_path,
+    );
 
     let mut plist_root = Value::from_file(&plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse gamesheet plist: {err}")))?;

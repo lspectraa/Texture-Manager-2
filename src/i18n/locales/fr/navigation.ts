@@ -66,6 +66,11 @@ const navigation = {
       label: "Portage",
       description: "Redimensionnez les sheets de textures pour d’autres tailles.",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "Randomiseur",
       description: "Mélangez les icônes avec une graine réutilisable.",

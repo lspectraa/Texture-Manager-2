@@ -65,6 +65,7 @@ type SettingsToolPanelProps = {
   onClearGeometryDashOverride: () => void;
   onRedetectGeometryDash: () => void;
   onOpenCacheFolder: () => void;
+  onRegenerateSpriteIndex: () => void;
   onResetDefaults: () => void;
   onCheckForUpdates: () => void;
   pickFolder: PickFolderFn;
@@ -154,6 +155,7 @@ export function SettingsToolPanel({
   onClearGeometryDashOverride,
   onRedetectGeometryDash,
   onOpenCacheFolder,
+  onRegenerateSpriteIndex,
   onResetDefaults,
   onCheckForUpdates,
   pickFolder,
@@ -507,6 +509,15 @@ export function SettingsToolPanel({
               <button
                 type="button"
                 className="tm-settings-action-btn"
+                disabled={busy || !settings.gameFilesRoot}
+                onClick={onRegenerateSpriteIndex}
+              >
+                <RefreshCw size={14} strokeWidth={1.9} />
+                {t("cache.regenerateSpriteIndex")}
+              </button>
+              <button
+                type="button"
+                className="tm-settings-action-btn"
                 disabled={busy}
                 onClick={onResetDefaults}
               >
@@ -514,6 +525,7 @@ export function SettingsToolPanel({
                 {t("cache.resetDefaults")}
               </button>
             </div>
+            <p className="tm-tool-section-note">{t("cache.regenerateSpriteIndexHint")}</p>
           </ToolSection>
 
           <ToolSection

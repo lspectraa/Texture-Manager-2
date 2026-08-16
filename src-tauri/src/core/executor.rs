@@ -16,13 +16,14 @@ use crate::core::contracts::{
 use crate::core::convert_to_new_version::{
     execute_convert_to_new_version as run_convert_to_new_version, sheet_is_under_icons,
 };
-use crate::core::game_files::{
-    discover_sheet_pairs_with_game_plist_fallback, sheet_uses_external_plist, GameFilesLayout,
-};
 use crate::core::discovery::{
     discover_merge_source_dirs, discover_standalone_fnts, discover_standalone_pngs, SheetCandidate,
 };
 use crate::core::errors::AppError;
+use crate::core::game_files::{
+    discover_sheet_pairs_with_game_plist_fallback, sheet_uses_external_plist, GameFilesLayout,
+};
+use crate::core::geode_buttons::run_geode_buttons;
 use crate::core::glow_maker::execute_glow_maker as run_glow_maker;
 use crate::core::merger::{direct_plist_files, merge_one_plist_file, merge_plist_from_memory};
 use crate::core::plist::count_frames_in_plist;
@@ -36,7 +37,7 @@ use crate::core::porter::{
 use crate::core::randomizer::execute_randomizer;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
 use crate::core::splitter::{split_sheet_candidate, split_sheet_candidate_memory};
-use crate::core::geode_buttons::run_geode_buttons;
+use crate::core::upscaler::execute_upscaler;
 
 fn progress_total_as_u32(total: usize) -> u32 {
     total.max(1).min(u32::MAX as usize) as u32
@@ -290,9 +291,19 @@ where
                 cancel,
             )?
         }
+        (OperationKind::Upscaler, OperationOptions::Upscaler(options)) => execute_upscaler(
+            plan,
+            input_dir,
+            output_dir,
+            started_at,
+            options,
+            game_files,
+            &on_progress,
+            cancel,
+        )?,
         _ => {
             return Err(AppError::InvalidOperation(
-                "executor currently supports splitter, porter, merger, convert to new version, glow maker, randomizer, and geode buttons",
+                "executor currently supports splitter, porter, merger, convert to new version, glow maker, randomizer, geode buttons, and upscaler",
             ));
         }
     };
@@ -333,6 +344,7 @@ where
                 message: "No matching sheets found for Geode Buttons.".to_string(),
                 file: None,
             }],
+            ..Default::default()
         });
     }
 
@@ -365,6 +377,7 @@ where
         output_dir: out_label,
         elapsed_ms: started_at.elapsed().as_millis(),
         issues: combined_issues,
+        ..Default::default()
     })
 }
 
@@ -453,6 +466,7 @@ where
         output_dir: split_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }
 
@@ -1103,6 +1117,7 @@ where
         output_dir: porter_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }
 
@@ -1217,5 +1232,6 @@ where
         output_dir: merged_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }

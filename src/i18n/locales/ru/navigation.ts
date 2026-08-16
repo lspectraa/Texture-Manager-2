@@ -68,6 +68,11 @@ const navigation: AppLocaleResources["navigation"] = {
       label: "Конвертер размера",
       description: "Изменяйте размер атласов текстур для разных разрешений.",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "Рандомизатор",
       description: "Перемешивайте иконки с помощью повторно используемого сида.",

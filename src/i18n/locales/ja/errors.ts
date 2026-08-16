@@ -10,6 +10,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "スプリッターには入力と出力の両方のディレクトリが必要です。",
     porterPathsRequired: "ポーターには入力と出力の両方のディレクトリが必要です。",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "マージャーには入力と出力の両方のディレクトリが必要です。",
     glowMakerPathsRequired: "グロウメーカーには入力と出力の両方のディレクトリが必要です。",
     convertPathsRequired: "新しいバージョンへの変換には入力と出力の両方のディレクトリが必要です。",

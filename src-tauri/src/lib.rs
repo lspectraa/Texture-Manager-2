@@ -5,9 +5,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::core::contracts::{
-    phase_defaults, GlowMakerOptions, OperationRequest, PhaseDefaults,
-};
+use crate::core::contracts::{phase_defaults, GlowMakerOptions, OperationRequest, PhaseDefaults};
 use crate::core::executor::execute_operation_plan;
 use crate::core::game_files::{
     bootstrap_game_files, invalidate_geometry_dash_detection_cache, refresh_game_files_layout,
@@ -19,28 +17,20 @@ use crate::core::geode_buttons::{
     resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
 };
 use crate::core::glow_preview::{glow_maker_preview_data_url, random_uhd_icon_preview_data_url};
-use crate::core::particle_editor::{
-    particle_editor_load_texture as particle_editor_load_texture_core,
-    particle_editor_open as particle_editor_open_core,
-    particle_editor_save as particle_editor_save_core,
-    ParticleOpenResult, ParticleSaveRequest,
-};
-use crate::core::particle_sprites::{
-    particle_editor_sheet_frame_data_url, ParticlePreviewSprite,
-};
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
+    icon_editor_copy_sheet as icon_editor_copy_sheet_core,
     icon_editor_extract_frames as icon_editor_extract_frames_core,
     icon_editor_import_frame as icon_editor_import_frame_core,
     icon_editor_png_data_url as icon_editor_png_data_url_core,
-    icon_editor_rotate_frame as icon_editor_rotate_frame_core,
-    icon_editor_copy_sheet as icon_editor_copy_sheet_core,
     icon_editor_rename_sheet as icon_editor_rename_sheet_core,
-    icon_editor_swap_rename_sheet as icon_editor_swap_rename_sheet_core,
+    icon_editor_rotate_frame as icon_editor_rotate_frame_core,
     icon_editor_save_plist as icon_editor_save_plist_core,
     icon_editor_save_png_data_url as icon_editor_save_png_data_url_core,
-    icon_editor_sheet_info as icon_editor_sheet_info_core, IconEditorExtractedFrame,
-    IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult, IconEditorSheetInfo,
+    icon_editor_sheet_info as icon_editor_sheet_info_core,
+    icon_editor_swap_rename_sheet as icon_editor_swap_rename_sheet_core, IconEditorExtractedFrame,
+    IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult,
+    IconEditorSheetInfo,
 };
 use crate::core::operations::build_operation_plan;
 use crate::core::pack_installer::{
@@ -48,15 +38,19 @@ use crate::core::pack_installer::{
     create_texture_pack as create_texture_pack_core,
     delete_installed_pack as delete_installed_pack_core,
     discover_pack_install as discover_pack_install_core,
-    install_pack_plan as install_pack_plan_core,
-    list_installed_packs as list_installed_packs_core,
-    read_pack_metadata as read_pack_metadata_core,
-    run_pack_operation as run_pack_operation_core,
-    update_installed_pack_metadata as update_installed_pack_metadata_core, CreateTexturePackRequest,
-    CreateTexturePackResult, InstallPackOptions, InstallPackResult, InstallPlan,
-    InstalledPackSummary, PackMetadata, PackOperationKind, ReadPackMetadataResult,
+    install_pack_plan as install_pack_plan_core, list_installed_packs as list_installed_packs_core,
+    read_pack_metadata as read_pack_metadata_core, run_pack_operation as run_pack_operation_core,
+    update_installed_pack_metadata as update_installed_pack_metadata_core,
+    CreateTexturePackRequest, CreateTexturePackResult, InstallPackOptions, InstallPackResult,
+    InstallPlan, InstalledPackSummary, PackMetadata, PackOperationKind, ReadPackMetadataResult,
     RunPackOperationOptions, RunPackOperationResult,
 };
+use crate::core::particle_editor::{
+    particle_editor_load_texture as particle_editor_load_texture_core,
+    particle_editor_open as particle_editor_open_core,
+    particle_editor_save as particle_editor_save_core, ParticleOpenResult, ParticleSaveRequest,
+};
+use crate::core::particle_sprites::{particle_editor_sheet_frame_data_url, ParticlePreviewSprite};
 use crate::core::report::OperationReport;
 use crate::core::settings::{
     add_custom_app_background as add_custom_app_background_core,
@@ -172,6 +166,19 @@ async fn remove_custom_app_background(
 }
 
 #[tauri::command]
+async fn regenerate_sprite_index(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<u32, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        crate::core::sprite_index::regenerate_indexed_sheets(&layout)
+            .map(|n| n as u32)
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn save_app_settings(
     game_files: tauri::State<'_, GameFilesState>,
     request: SaveAppSettingsRequest,
@@ -263,9 +270,8 @@ fn open_path_in_os(
         crate::core::safe_fs::parse_user_absolute_path(&path).map_err(|err| err.to_string())?;
     let layout = game_files.snapshot();
     let root = crate::core::game_files::resolve_game_files_root();
-    std::fs::create_dir_all(&root).map_err(|err| {
-        format!("failed to ensure game-files root exists: {err}")
-    })?;
+    std::fs::create_dir_all(&root)
+        .map_err(|err| format!("failed to ensure game-files root exists: {err}"))?;
 
     // Allow game-files root, or Geode config/mods under a resolved GD install
     // (Create Pack "open folder" targets texture-loader packs).
@@ -372,7 +378,8 @@ async fn run_operation(
 #[tauri::command]
 async fn icon_editor_sheet_info(plist_path: String) -> Result<IconEditorSheetInfo, String> {
     run_blocking(move || {
-        icon_editor_sheet_info_core(std::path::Path::new(&plist_path)).map_err(|err| err.to_string())
+        icon_editor_sheet_info_core(std::path::Path::new(&plist_path))
+            .map_err(|err| err.to_string())
     })
     .await
 }
@@ -533,26 +540,18 @@ async fn icon_editor_save_png_data_url(
 
 #[tauri::command]
 async fn particle_editor_open(path: String) -> Result<ParticleOpenResult, String> {
-    run_blocking(move || {
-        particle_editor_open_core(&path).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || particle_editor_open_core(&path).map_err(|err| err.to_string())).await
 }
 
 #[tauri::command]
 async fn particle_editor_save(request: ParticleSaveRequest) -> Result<(), String> {
-    run_blocking(move || {
-        particle_editor_save_core(request).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || particle_editor_save_core(request).map_err(|err| err.to_string())).await
 }
 
 #[tauri::command]
 async fn particle_editor_load_texture(path: String) -> Result<String, String> {
-    run_blocking(move || {
-        particle_editor_load_texture_core(&path).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || particle_editor_load_texture_core(&path).map_err(|err| err.to_string()))
+        .await
 }
 
 #[tauri::command]
@@ -566,10 +565,8 @@ async fn discover_pack_install(
     path: String,
 ) -> Result<InstallPlan, String> {
     let layout = game_files.snapshot();
-    run_blocking(move || {
-        discover_pack_install_core(&path, &layout).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || discover_pack_install_core(&path, &layout).map_err(|err| err.to_string()))
+        .await
 }
 
 #[tauri::command]
@@ -607,18 +604,13 @@ async fn create_texture_pack(
         pack_png_path,
         source_dir,
     };
-    run_blocking(move || {
-        create_texture_pack_core(&request, &layout).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || create_texture_pack_core(&request, &layout).map_err(|err| err.to_string()))
+        .await
 }
 
 #[tauri::command]
 async fn read_pack_metadata(pack_dir: String) -> Result<ReadPackMetadataResult, String> {
-    run_blocking(move || {
-        read_pack_metadata_core(&pack_dir).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || read_pack_metadata_core(&pack_dir).map_err(|err| err.to_string())).await
 }
 
 #[tauri::command]
@@ -638,10 +630,7 @@ async fn list_installed_packs(
     game_files: tauri::State<'_, GameFilesState>,
 ) -> Result<Vec<InstalledPackSummary>, String> {
     let layout = game_files.snapshot();
-    run_blocking(move || {
-        list_installed_packs_core(&layout).map_err(|err| err.to_string())
-    })
-    .await
+    run_blocking(move || list_installed_packs_core(&layout).map_err(|err| err.to_string())).await
 }
 
 #[tauri::command]
@@ -714,7 +703,8 @@ async fn geode_buttons_target_index_cmd(
         }
         let plist = crate::core::safe_fs::parse_user_absolute_path(&plist_path)
             .map_err(|err| err.to_string())?;
-        geode_buttons_target_index(&plist, &layout, use_game_files_cache).map_err(|err| err.to_string())
+        geode_buttons_target_index(&plist, &layout, use_game_files_cache)
+            .map_err(|err| err.to_string())
     })
     .await
 }
@@ -730,9 +720,7 @@ async fn geode_buttons_autoselect_plist_cmd(
         if !trimmed.is_empty() {
             let dir = crate::core::safe_fs::parse_user_absolute_path(trimmed)
                 .map_err(|err| err.to_string())?;
-            if let Some(path) =
-                resolve_geode_buttons_plist(&dir).map_err(|err| err.to_string())?
-            {
+            if let Some(path) = resolve_geode_buttons_plist(&dir).map_err(|err| err.to_string())? {
                 return Ok(Some(path));
             }
         }
@@ -769,13 +757,8 @@ async fn glow_maker_preview_cmd(
     let layout = game_files.snapshot();
     let refresh = refresh.unwrap_or(false);
     run_blocking(move || {
-        glow_maker_preview_data_url(
-            &layout,
-            &options,
-            refresh,
-            icon_plist_path.as_deref(),
-        )
-        .map_err(|err| err.to_string())
+        glow_maker_preview_data_url(&layout, &options, refresh, icon_plist_path.as_deref())
+            .map_err(|err| err.to_string())
     })
     .await
 }
@@ -846,6 +829,7 @@ pub fn run() {
             app_background_png_data_url,
             add_custom_app_background,
             remove_custom_app_background,
+            regenerate_sprite_index,
             save_app_settings,
             set_geometry_dash_dir,
             clear_geometry_dash_dir,

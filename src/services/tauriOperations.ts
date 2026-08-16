@@ -32,6 +32,13 @@ export const getPhaseDefaults = async (): Promise<PhaseDefaults> => {
         gameVersion: "",
         sheetConcurrency: 5,
       },
+      upscaler: {
+        model: "waifu2x",
+        targetGraphics: "uhd",
+        convertToLatest: false,
+        gameVersion: "",
+        sheetConcurrency: 1,
+      },
     };
   }
 

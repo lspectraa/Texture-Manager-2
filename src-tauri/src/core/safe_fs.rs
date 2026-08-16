@@ -70,7 +70,10 @@ pub fn ensure_safe_relative_path(value: &str) -> Result<(), AppError> {
                 }
                 saw_normal = true;
             }
-            Component::CurDir | Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+            Component::CurDir
+            | Component::ParentDir
+            | Component::RootDir
+            | Component::Prefix(_) => {
                 return Err(AppError::InvalidPath(
                     "path must contain only normal relative segments",
                 ));
@@ -274,17 +277,15 @@ pub fn ensure_png_output_path(path: &Path) -> Result<(), AppError> {
 /// Decode a `data:image/png;base64,...` payload with size and magic checks.
 pub fn decode_png_data_url(png_data_url: &str) -> Result<Vec<u8>, AppError> {
     let trimmed = png_data_url.trim();
-    let encoded = if let Some(rest) = trimmed
-        .strip_prefix(PNG_DATA_URL_PREFIX)
-        .or_else(|| {
-            // Allow optional whitespace / case variants of the media type prefix.
-            let lower = trimmed.to_ascii_lowercase();
-            if lower.starts_with("data:image/png;base64,") {
-                trimmed.get("data:image/png;base64,".len()..)
-            } else {
-                None
-            }
-        }) {
+    let encoded = if let Some(rest) = trimmed.strip_prefix(PNG_DATA_URL_PREFIX).or_else(|| {
+        // Allow optional whitespace / case variants of the media type prefix.
+        let lower = trimmed.to_ascii_lowercase();
+        if lower.starts_with("data:image/png;base64,") {
+            trimmed.get("data:image/png;base64,".len()..)
+        } else {
+            None
+        }
+    }) {
         rest
     } else {
         return Err(AppError::InvalidOperation(

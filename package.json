@@ -25,6 +25,7 @@
     "check:env": "powershell -ExecutionPolicy Bypass -File ./scripts/check-prereqs.ps1",
     "phase0:verify": "npm run check:env && npm run build",
     "sync:version": "node ./scripts/sync-version.mjs",
+    "fetch:upscaler-binaries": "node ./scripts/fetch-upscaler-binaries.mjs",
     "setup:updater-signing": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-updater-signing.ps1",
     "test": "vitest run",
     "test:watch": "vitest",

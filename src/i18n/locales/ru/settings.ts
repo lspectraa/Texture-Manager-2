@@ -52,6 +52,9 @@ const settings: AppLocaleResources["settings"] = {
     gameFilesRoot: "Корневая папка игровых файлов",
     splitCache: "Кэш разделения",
     openCacheFolder: "Открыть папку кэша",
+    regenerateSpriteIndex: "Пересоздать индекс спрайтов",
+    regenerateSpriteIndexHint:
+      "Обновляет только листы из sprite-index.json (без полного сканирования Resources).",
     resetDefaults: "Сбросить настройки",
   },
   geometryDash: {

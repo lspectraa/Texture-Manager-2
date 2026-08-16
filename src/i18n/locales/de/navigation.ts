@@ -66,6 +66,11 @@ const navigation = {
       label: "Porter",
       description: "Textur-Sheets für andere Größen skalieren.",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "Randomizer",
       description: "Icons mit einem wiederverwendbaren Seed mischen.",

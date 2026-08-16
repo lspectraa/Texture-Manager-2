@@ -4,6 +4,7 @@ import {
   GitBranch,
   Image,
   Layers,
+  Maximize2,
   PackageOpen,
   RefreshCw,
   Scissors,
@@ -24,7 +25,8 @@ export type AppToolId =
   | "convertToNewVersion"
   | "geodeButtons"
   | "texturePackInstaller"
-  | "particleEditor";
+  | "particleEditor"
+  | "upscaler";
 
 export type ToolAccent = "sky" | "violet" | "mint" | "amber" | "rose" | "cyan";
 
@@ -107,6 +109,12 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         label: "tools.porter.label",
         description: "tools.porter.description",
         icon: GitBranch,
+      },
+      {
+        id: "upscaler",
+        label: "tools.upscaler.label",
+        description: "tools.upscaler.description",
+        icon: Maximize2,
       },
     ],
   },

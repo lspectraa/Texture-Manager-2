@@ -10,6 +10,7 @@ pub enum OperationKind {
     Randomizer,
     GlowMaker,
     GeodeButtons,
+    Upscaler,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -56,6 +57,66 @@ pub struct ConvertToNewVersionOptions {
     pub game_version: String,
     /// Max concurrent plist/png gamesheets processed in parallel.
     pub sheet_concurrency: u32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum UpscalerModel {
+    /// Real-ESRGAN AnimeVideo v3 — used automatically for icon sprites,
+    /// including glow layers and bird/UFO capsules.
+    RealesrganAnime,
+    /// Waifu2x CUNet (2025 ncnn). `realcugan` is accepted for old settings files.
+    #[serde(alias = "realcugan")]
+    Waifu2x,
+}
+
+impl UpscalerModel {
+    pub const DEFAULT_SHIPPED: Self = Self::Waifu2x;
+
+    pub fn is_shipped(self) -> bool {
+        matches!(self, Self::Waifu2x)
+    }
+
+    pub fn coerce_shipped(self) -> Self {
+        if self.is_shipped() {
+            self
+        } else {
+            Self::DEFAULT_SHIPPED
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum UpscalerTargetGraphics {
+    Hd,
+    Uhd,
+}
+
+/// How pack sprites are matched to vanilla game-file sprites for cache reuse.
+/// Kept for serde compatibility; upscaler always uses loose similarity after exact hash.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum UpscalerCacheMatchMode {
+    ExactHash,
+    #[default]
+    LooseSimilarity,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpscalerOptions {
+    pub model: UpscalerModel,
+    pub target_graphics: UpscalerTargetGraphics,
+    /// When true, run Convert to Latest on the Upscaled/ tree after upscaling.
+    pub convert_to_latest: bool,
+    /// Previous game version for convert (required when `convert_to_latest`).
+    pub game_version: String,
+    /// Max concurrent gamesheets (1–4; VRAM-bound).
+    pub sheet_concurrency: u32,
+    /// Sprite-cache matching strategy against vanilla game files.
+    #[serde(default)]
+    pub cache_match_mode: UpscalerCacheMatchMode,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -127,7 +188,10 @@ pub struct GeodeButtonsOptions {
     pub variant_rules: Vec<GeodeButtonsVariantRule>,
     /// Optional per-family overrides: family id -> variant -> hsv delta.
     pub family_variant_rules: Option<
-        std::collections::BTreeMap<String, std::collections::BTreeMap<GeodeButtonsVariant, HsvDelta>>,
+        std::collections::BTreeMap<
+            String,
+            std::collections::BTreeMap<GeodeButtonsVariant, HsvDelta>,
+        >,
     >,
     /// Max concurrent sheets (1–64). Typically 1 here.
     pub sheet_concurrency: u32,
@@ -143,6 +207,7 @@ pub enum OperationOptions {
     Randomizer(RandomizerOptions),
     GlowMaker(GlowMakerOptions),
     GeodeButtons(GeodeButtonsOptions),
+    Upscaler(UpscalerOptions),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -170,6 +235,7 @@ pub struct PhaseDefaults {
     pub porter: PorterOptions,
     pub merger: MergerOptions,
     pub convert_to_new_version: ConvertToNewVersionOptions,
+    pub upscaler: UpscalerOptions,
 }
 
 pub fn phase_defaults() -> PhaseDefaults {
@@ -192,6 +258,14 @@ pub fn phase_defaults() -> PhaseDefaults {
             game_version: String::new(),
             sheet_concurrency: 5,
         },
+        upscaler: UpscalerOptions {
+            model: UpscalerModel::Waifu2x,
+            target_graphics: UpscalerTargetGraphics::Uhd,
+            convert_to_latest: false,
+            game_version: String::new(),
+            sheet_concurrency: 1,
+            cache_match_mode: UpscalerCacheMatchMode::LooseSimilarity,
+        },
     }
 }
 
@@ -204,5 +278,7 @@ mod tests {
         let defaults = phase_defaults();
         assert_eq!(defaults.convert_to_new_version.game_version, "");
         assert_eq!(defaults.convert_to_new_version.sheet_concurrency, 5);
+        assert_eq!(defaults.upscaler.sheet_concurrency, 1);
+        assert!(!defaults.upscaler.convert_to_latest);
     }
 }

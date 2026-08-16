@@ -17,6 +17,9 @@ const errors: AppLocaleResources["errors"] = {
       "Для разделения необходимо указать входную и выходную папки.",
     porterPathsRequired:
       "Для переноса необходимо указать входную и выходную папки.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired:
       "Для объединения необходимо указать входную и выходную папки.",
     glowMakerPathsRequired:

@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use crate::core::contracts::{
-    phase_defaults, ConvertToNewVersionOptions, GeodeButtonsOptions, GlowMakerOptions, MergerOptions,
-    OperationKind, OperationOptions, OperationPlan, OperationRequest, PorterOptions,
-    RandomizerOptions, SplitterOptions,
+    phase_defaults, ConvertToNewVersionOptions, GeodeButtonsOptions, GlowMakerOptions,
+    MergerOptions, OperationKind, OperationOptions, OperationPlan, OperationRequest, PorterOptions,
+    RandomizerOptions, SplitterOptions, UpscalerOptions,
 };
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{ensure_user_directory_path, parse_user_absolute_path};
@@ -92,11 +92,14 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
                 family_variant_rules: None,
                 sheet_concurrency: 1,
             }),
-            Some(_) => {
-                return Err(AppError::InvalidOperation(
-                    "geode buttons options mismatch",
-                ))
+            Some(_) => return Err(AppError::InvalidOperation("geode buttons options mismatch")),
+        },
+        OperationKind::Upscaler => match request.options {
+            Some(OperationOptions::Upscaler(existing)) => {
+                OperationOptions::Upscaler(with_upscaler_defaults(existing)?)
             }
+            None => OperationOptions::Upscaler(defaults.upscaler),
+            Some(_) => return Err(AppError::InvalidOperation("upscaler options mismatch")),
         },
     };
 
@@ -153,6 +156,23 @@ fn with_convert_to_new_version_defaults(
     }
 }
 
+fn with_upscaler_defaults(existing: UpscalerOptions) -> Result<UpscalerOptions, AppError> {
+    let game_version = existing.game_version.trim().to_string();
+    if existing.convert_to_latest && game_version.is_empty() {
+        return Err(AppError::InvalidOperation(
+            "game version is required when convert to latest is enabled",
+        ));
+    }
+    Ok(UpscalerOptions {
+        model: existing.model.coerce_shipped(),
+        target_graphics: existing.target_graphics,
+        convert_to_latest: existing.convert_to_latest,
+        game_version,
+        sheet_concurrency: existing.sheet_concurrency.clamp(1, 1),
+        cache_match_mode: existing.cache_match_mode,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::core::contracts::{
@@ -162,7 +182,10 @@ mod tests {
     use crate::core::operations::build_operation_plan;
 
     fn abs_dir(name: &str) -> String {
-        std::env::temp_dir().join(name).to_string_lossy().into_owned()
+        std::env::temp_dir()
+            .join(name)
+            .to_string_lossy()
+            .into_owned()
     }
 
     #[test]
@@ -257,6 +280,69 @@ mod tests {
             }
             _ => panic!("expected convert to new version options"),
         }
+    }
+
+    #[test]
+    fn upscaler_clamps_concurrency_and_requires_version_when_converting() {
+        use crate::core::contracts::{UpscalerModel, UpscalerOptions, UpscalerTargetGraphics};
+
+        let ok = OperationRequest {
+            kind: OperationKind::Upscaler,
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
+            options: Some(OperationOptions::Upscaler(UpscalerOptions {
+                model: UpscalerModel::Waifu2x,
+                target_graphics: UpscalerTargetGraphics::Hd,
+                convert_to_latest: false,
+                game_version: String::new(),
+                sheet_concurrency: 99,
+                cache_match_mode: Default::default(),
+            })),
+        };
+        let plan = build_operation_plan(ok).expect("plan should be built");
+        match plan.options {
+            OperationOptions::Upscaler(options) => {
+                assert_eq!(options.sheet_concurrency, 1);
+                assert_eq!(options.model, UpscalerModel::Waifu2x);
+            }
+            _ => panic!("expected upscaler options"),
+        }
+
+        let unshipped = OperationRequest {
+            kind: OperationKind::Upscaler,
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
+            options: Some(OperationOptions::Upscaler(UpscalerOptions {
+                model: UpscalerModel::RealesrganAnime,
+                target_graphics: UpscalerTargetGraphics::Hd,
+                convert_to_latest: false,
+                game_version: String::new(),
+                sheet_concurrency: 1,
+                cache_match_mode: Default::default(),
+            })),
+        };
+        let plan = build_operation_plan(unshipped).expect("plan should be built");
+        match plan.options {
+            OperationOptions::Upscaler(options) => {
+                assert_eq!(options.model, UpscalerModel::Waifu2x);
+            }
+            _ => panic!("expected upscaler options"),
+        }
+
+        let missing_version = OperationRequest {
+            kind: OperationKind::Upscaler,
+            input_dir: abs_dir("tm2-op-in"),
+            output_dir: abs_dir("tm2-op-out"),
+            options: Some(OperationOptions::Upscaler(UpscalerOptions {
+                model: UpscalerModel::RealesrganAnime,
+                target_graphics: UpscalerTargetGraphics::Uhd,
+                convert_to_latest: true,
+                game_version: "  ".to_string(),
+                sheet_concurrency: 1,
+                cache_match_mode: Default::default(),
+            })),
+        };
+        assert!(build_operation_plan(missing_version).is_err());
     }
 
     #[test]

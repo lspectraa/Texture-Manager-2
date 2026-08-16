@@ -29,7 +29,7 @@ const navigation = {
     },
     sheets: {
       title: "Sheet Pipeline",
-      subtitle: "Split, merge, and resize sheets",
+      subtitle: "Split, merge, resize, and upscale sheets",
     },
     batch: {
       title: "Batch Utilities",
@@ -65,6 +65,11 @@ const navigation = {
     porter: {
       label: "Porter",
       description: "Resize texture sheets for different sizes.",
+    },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
     },
     randomizer: {
       label: "Randomizer",

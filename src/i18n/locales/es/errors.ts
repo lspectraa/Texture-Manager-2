@@ -18,6 +18,9 @@ const errors: AppLocaleResources["errors"] = {
       "El Divisor requiere los directorios de entrada y salida.",
     porterPathsRequired:
       "El Adaptador requiere los directorios de entrada y salida.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired:
       "El Combinador requiere los directorios de entrada y salida.",
     glowMakerPathsRequired:

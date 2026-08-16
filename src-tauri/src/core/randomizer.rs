@@ -375,5 +375,6 @@ where
         output_dir: randomized_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }

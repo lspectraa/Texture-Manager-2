@@ -10,6 +10,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "Splitter requires both input and output directories.",
     porterPathsRequired: "Porter requires both input and output directories.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "Merger requires both input and output directories.",
     glowMakerPathsRequired:
       "Glow Maker requires both input and output directories.",

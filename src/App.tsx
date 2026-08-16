@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Clock3,
   Copy,
+  Cpu,
+  Database,
   Download,
   Files,
   FolderOutput,
@@ -20,8 +22,14 @@ import {
   OperationProgress,
   OperationReport,
   OperationRequest,
+  DEFAULT_UPSCALER_MODEL,
+  normalizeUpscalerModel,
 } from "./domain/operations";
-import type { GeodeButtonsOptions } from "./domain/operations";
+import type {
+  GeodeButtonsOptions,
+  UpscalerModel,
+  UpscalerTargetGraphics,
+} from "./domain/operations";
 import {
   DEFAULT_PACK_INSTALLER_BRIDGE,
   type PackInstallerBridge,
@@ -35,6 +43,7 @@ import {
 import { GlowMakerToolPanel } from "./components/tools/GlowMakerToolPanel";
 import { MergerToolPanel } from "./components/tools/MergerToolPanel";
 import { PorterToolPanel } from "./components/tools/PorterToolPanel";
+import { UpscalerToolPanel } from "./components/tools/UpscalerToolPanel";
 import { SplitterToolPanel } from "./components/tools/SplitterToolPanel";
 import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVersionToolPanel";
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
@@ -85,6 +94,7 @@ import {
   getAppSettings,
   openPathInOs,
   redetectGeometryDashDir,
+  regenerateSpriteIndex,
   removeCustomAppBackground,
   saveAppSettings,
   setGeometryDashDir,
@@ -110,7 +120,8 @@ type PrimaryTool =
   | "glowMaker"
   | "geodeButtons"
   | "texturePackInstaller"
-  | "particleEditor";
+  | "particleEditor"
+  | "upscaler";
 
 type Rgb = [number, number, number];
 
@@ -144,6 +155,50 @@ const interpolateProgressColor = (ratio: number): Rgb => {
 const rgbCss = ([r, g, b]: Rgb): string => `rgb(${r} ${g} ${b})`;
 const rgbaCss = ([r, g, b]: Rgb, alpha: number): string =>
   `rgb(${r} ${g} ${b} / ${clamp01(alpha)})`;
+
+const operationWorkRatio = (progress: OperationProgress): number => {
+  if (progress.spritesTotal > 0) {
+    return clamp01(progress.spritesCompleted / progress.spritesTotal);
+  }
+  if ((progress.plistsTotal ?? 0) > 0) {
+    return clamp01((progress.plistsCompleted ?? 0) / (progress.plistsTotal ?? 1));
+  }
+  return 0;
+};
+
+const formatEtaDuration = (ms: number): string => {
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  if (totalSec < 60) {
+    return `${totalSec}s`;
+  }
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
+  if (hours > 0) {
+    return seconds > 0
+      ? `${hours}h ${minutes}m ${seconds}s`
+      : `${hours}h ${minutes}m`;
+  }
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+};
+
+const estimateRemainingMs = (
+  startedAt: number,
+  sampledAt: number,
+  now: number,
+  ratio: number,
+): number | null => {
+  if (ratio <= 0) {
+    return null;
+  }
+  const sample = Math.max(sampledAt, startedAt);
+  const clock = Math.max(now, sample);
+  const elapsed = clock - startedAt;
+  if (elapsed < 800) {
+    return null;
+  }
+  return Math.max(0, elapsed * ((1 - ratio) / ratio));
+};
 const CONVERT_VERSION_OPTIONS = Object.keys(convertVersionMap);
 const DEFAULT_SHEET_CONCURRENCY = 5;
 const NAV_COLLAPSED_STORAGE_KEY = "texture-manager-2.nav-collapsed";
@@ -170,6 +225,10 @@ function App() {
   >("working");
   const [operationProgress, setOperationProgress] =
     useState<OperationProgress | null>(null);
+  const operationStartedAtRef = useRef<number | null>(null);
+  const lastProgressAtRef = useRef<number | null>(null);
+  const lastRemainingMsRef = useRef<number | null>(null);
+  const [etaNow, setEtaNow] = useState(0);
   const [report, setReport] = useState<OperationReport | null>(null);
   const [isNavCollapsed, setIsNavCollapsed] = useState(() =>
     readStoredCollapsed(NAV_COLLAPSED_STORAGE_KEY),
@@ -235,6 +294,21 @@ function App() {
   const [porterSheetConcurrency, setPorterSheetConcurrency] = useState(
     DEFAULT_SHEET_CONCURRENCY,
   );
+
+  const [upscalerInputDir, setUpscalerInputDir] = useState("");
+  const [upscalerOutputDir, setUpscalerOutputDir] = useState("");
+  const [upscalerModel, setUpscalerModel] =
+    useState<UpscalerModel>(DEFAULT_UPSCALER_MODEL);
+  const [upscalerTargetGraphics, setUpscalerTargetGraphics] =
+    useState<UpscalerTargetGraphics>("uhd");
+  const [upscalerConvertToLatest, setUpscalerConvertToLatest] = useState(false);
+  const [upscalerGameVersion, setUpscalerGameVersion] = useState<string>(() => {
+    if (CONVERT_VERSION_OPTIONS.includes("2.2")) {
+      return "2.2";
+    }
+    return CONVERT_VERSION_OPTIONS[0] ?? "";
+  });
+  const [upscalerSheetConcurrency, setUpscalerSheetConcurrency] = useState(1);
 
   const [mergerInputDir, setMergerInputDir] = useState("");
   const [mergerOutputDir, setMergerOutputDir] = useState("");
@@ -322,6 +396,13 @@ function App() {
         setPorterSheetConcurrency(
           response.porter.sheetConcurrency || concurrency,
         );
+        setUpscalerModel(normalizeUpscalerModel(response.upscaler?.model));
+        setUpscalerTargetGraphics(response.upscaler?.targetGraphics ?? "uhd");
+        setUpscalerConvertToLatest(response.upscaler?.convertToLatest ?? false);
+        if (response.upscaler?.gameVersion) {
+          setUpscalerGameVersion(response.upscaler.gameVersion);
+        }
+        setUpscalerSheetConcurrency(1);
         setMergerSheetConcurrency(
           response.merger.sheetConcurrency || concurrency,
         );
@@ -625,6 +706,30 @@ function App() {
       };
     }
 
+    if (selectedTool === "upscaler") {
+      if (!upscalerInputDir || !upscalerOutputDir) {
+        setRunError(t("errors:validation.upscalerPathsRequired"));
+        return;
+      }
+      if (upscalerConvertToLatest && !upscalerGameVersion.trim()) {
+        setRunError(t("errors:validation.upscalerVersionRequired"));
+        return;
+      }
+      request = {
+        kind: "upscaler",
+        inputDir: upscalerInputDir,
+        outputDir: upscalerOutputDir,
+        options: {
+          type: "upscaler",
+          model: upscalerModel,
+          targetGraphics: upscalerTargetGraphics,
+          convertToLatest: upscalerConvertToLatest,
+          gameVersion: upscalerGameVersion,
+          sheetConcurrency: upscalerSheetConcurrency,
+        },
+      };
+    }
+
     if (selectedTool === "merger") {
       if (!mergerInputDir || !mergerOutputDir) {
         setRunError(t("errors:validation.mergerPathsRequired"));
@@ -726,7 +831,11 @@ function App() {
       setIsCancelHovered(false);
       setOverlayState("working");
       setOperationProgress(null);
+      operationStartedAtRef.current = Date.now();
+      lastProgressAtRef.current = null;
+      lastRemainingMsRef.current = null;
       const operationReport = await runOperation(request, (progress) => {
+        lastProgressAtRef.current = Date.now();
         setOperationProgress(progress);
       });
       setReport(operationReport);
@@ -757,8 +866,23 @@ function App() {
       setIsCancelling(false);
       setIsCancelHovered(false);
       setOperationProgress(null);
+      operationStartedAtRef.current = null;
+      lastProgressAtRef.current = null;
+      lastRemainingMsRef.current = null;
     }
   };
+
+  useEffect(() => {
+    if (!isRunning || overlayState !== "working") {
+      return;
+    }
+    const tick = () => {
+      setEtaNow(Date.now());
+    };
+    tick();
+    const id = window.setInterval(tick, 250);
+    return () => window.clearInterval(id);
+  }, [isRunning, overlayState]);
 
   const progressRatio =
     operationProgress !== null && operationProgress.spritesTotal > 0
@@ -782,6 +906,25 @@ function App() {
           : progressAccent
   ;
   const showProgressDetails = overlayState === "working";
+  let remainingMs: number | null = lastRemainingMsRef.current;
+  if (
+    showProgressDetails &&
+    operationProgress &&
+    operationStartedAtRef.current !== null
+  ) {
+    const nextRemaining = estimateRemainingMs(
+      operationStartedAtRef.current,
+      lastProgressAtRef.current ?? operationStartedAtRef.current,
+      etaNow,
+      operationWorkRatio(operationProgress),
+    );
+    if (nextRemaining !== null) {
+      lastRemainingMsRef.current = nextRemaining;
+      remainingMs = nextRemaining;
+    }
+  } else if (!showProgressDetails) {
+    remainingMs = null;
+  }
   const progressCardStyle =
     overlayState === "working"
       ? {
@@ -983,6 +1126,14 @@ function App() {
                 );
               });
             }}
+            onRegenerateSpriteIndex={() => {
+              runSettingsAction(async () => {
+                await regenerateSpriteIndex();
+                return getAppSettings();
+              }).catch(() => {
+                // Error surfaced via settingsError.
+              });
+            }}
             onAppBackgroundChange={(appBackground) => {
               setAppSettings((prev) =>
                 prev.appBackground === appBackground
@@ -1096,6 +1247,25 @@ function App() {
             onOutputDirChange={setPorterOutputDir}
             onLowPortChange={setPorterLowPort}
             onSheetConcurrencyChange={setPorterSheetConcurrency}
+            pickFolder={pickFolder}
+          />
+        );
+      case "upscaler":
+        return (
+          <UpscalerToolPanel
+            inputDir={upscalerInputDir}
+            outputDir={upscalerOutputDir}
+            model={upscalerModel}
+            targetGraphics={upscalerTargetGraphics}
+            convertToLatest={upscalerConvertToLatest}
+            gameVersion={upscalerGameVersion}
+            versionOptions={CONVERT_VERSION_OPTIONS}
+            onInputDirChange={setUpscalerInputDir}
+            onOutputDirChange={setUpscalerOutputDir}
+            onModelChange={setUpscalerModel}
+            onTargetGraphicsChange={setUpscalerTargetGraphics}
+            onConvertToLatestChange={setUpscalerConvertToLatest}
+            onGameVersionChange={setUpscalerGameVersion}
             pickFolder={pickFolder}
           />
         );
@@ -1335,6 +1505,18 @@ function App() {
                 {t("reports:progress.preparing")}
               </p>
             ) : null}
+            {showProgressDetails && !isCancelling ? (
+              <p className="tm-progress-count">
+                {remainingMs === null
+                  ? t("reports:progress.remainingEstimating")
+                  : t("reports:progress.remaining", {
+                      time:
+                        remainingMs < 1000
+                          ? "< 1s"
+                          : formatEtaDuration(remainingMs),
+                    })}
+              </p>
+            ) : null}
             {showProgressDetails && isTauriRuntime() ? (
               <button
                 type="button"
@@ -1569,6 +1751,38 @@ function App() {
                         </span>
                       </span>
                     </div>
+                    {report.operation === "upscaler" ||
+                    (report.spritesAiUpscaled ?? 0) > 0 ||
+                    (report.spritesFromCache ?? 0) > 0 ? (
+                      <>
+                        <div className="tm-report-stat">
+                          <span className="tm-report-stat-icon" aria-hidden>
+                            <Cpu size={14} strokeWidth={1.9} />
+                          </span>
+                          <span className="tm-report-stat-copy">
+                            <span className="tm-report-stat-label">
+                              {t("reports:summary.aiUpscaled")}
+                            </span>
+                            <span className="tm-report-stat-value">
+                              {report.spritesAiUpscaled ?? 0}
+                            </span>
+                          </span>
+                        </div>
+                        <div className="tm-report-stat">
+                          <span className="tm-report-stat-icon" aria-hidden>
+                            <Database size={14} strokeWidth={1.9} />
+                          </span>
+                          <span className="tm-report-stat-copy">
+                            <span className="tm-report-stat-label">
+                              {t("reports:summary.fromCache")}
+                            </span>
+                            <span className="tm-report-stat-value">
+                              {report.spritesFromCache ?? 0}
+                            </span>
+                          </span>
+                        </div>
+                      </>
+                    ) : null}
                     <div className="tm-report-stat">
                       <span className="tm-report-stat-icon" aria-hidden>
                         <Clock3 size={14} strokeWidth={1.9} />

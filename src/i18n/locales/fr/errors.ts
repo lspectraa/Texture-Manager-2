@@ -11,6 +11,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "Le Découpeur nécessite un dossier d’entrée et un dossier de sortie.",
     porterPathsRequired: "Le Portage nécessite un dossier d’entrée et un dossier de sortie.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "Le Fusionneur nécessite un dossier d’entrée et un dossier de sortie.",
     glowMakerPathsRequired:
       "Le Créateur de glow nécessite un dossier d’entrée et un dossier de sortie.",

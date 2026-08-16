@@ -8,7 +8,7 @@ use crate::core::porter::porter_stem_eligible;
 
 /// True when `path` is under `input_root` and either:
 /// - the first path segment after `input_root` is one of the tool output buckets
-///   (`Split`, `Merged`, `Ported`, `GeneratedGlow`, `ConvertedToLatestVersion`, `Randomized`), or
+///   (`Split`, `Merged`, `Ported`, `GeneratedGlow`, `ConvertedToLatestVersion`, `Randomized`, `Upscaled`), or
 /// - any nested segment is `GeneratedGlow` (for icon glow output inside `icons/GeneratedGlow`).
 pub fn path_is_under_reserved_output_subtree(input_root: &Path, path: &Path) -> bool {
     let Ok(rel) = path.strip_prefix(input_root) else {
@@ -42,6 +42,7 @@ pub fn is_reserved_output_dir_name(name: &OsStr) -> bool {
         || s.eq_ignore_ascii_case("GeneratedGlow")
         || s.eq_ignore_ascii_case("ConvertedToLatestVersion")
         || s.eq_ignore_ascii_case("Randomized")
+        || s.eq_ignore_ascii_case("Upscaled")
 }
 
 fn reserved_output_dir_name(name: &OsStr) -> bool {

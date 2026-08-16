@@ -25,6 +25,8 @@ const reports = {
     plists_one: "{{completed}} / {{total}} plist",
     plists_other: "{{completed}} / {{total}} plist",
     preparing: "処理を準備中…",
+    remaining: "残り時間（推定）: {{time}}",
+    remainingEstimating: "残り時間（推定）: 計算中…",
     cancel: "キャンセル",
   },
   alerts: {
@@ -39,6 +41,8 @@ const reports = {
     processed: "処理数",
     elapsed: "経過時間",
     output: "出力",
+    aiUpscaled: "AI拡大",
+    fromCache: "キャッシュから",
   },
   issues: {
     title: "問題",
@@ -55,6 +59,7 @@ const reports = {
   severity: {
     error: "エラー",
     warning: "警告",
+    info: "info",
   },
 } as const;
 

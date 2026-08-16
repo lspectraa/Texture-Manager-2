@@ -1,6 +1,7 @@
 use image::{Rgba, RgbaImage};
 
 use crate::core::contracts::GlowMakerOptions;
+use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 
 fn idx(x: u32, y: u32, width: u32) -> usize {
     (y as usize)
@@ -183,9 +184,10 @@ fn soften_exterior_alpha(original: &[u8], composed: &mut [u8], width: u32, heigh
         if base == 0 {
             continue;
         }
-        let soft = ((base as f32 * 0.55 + blurred[i] as f32 * 0.30 + twice_blurred[i] as f32 * 0.15)
-            .round()
-            .clamp(0.0, 255.0)) as u8;
+        let soft =
+            ((base as f32 * 0.55 + blurred[i] as f32 * 0.30 + twice_blurred[i] as f32 * 0.15)
+                .round()
+                .clamp(0.0, 255.0)) as u8;
         composed[i] = base.max(soft);
     }
 }
@@ -202,6 +204,8 @@ fn soften_exterior_alpha(original: &[u8], composed: &mut [u8], width: u32, heigh
 ///
 /// The original glow texture is never read; output is generated entirely from primary.
 pub fn render_icon_glow_from_primary(primary: &RgbaImage, options: &GlowMakerOptions) -> RgbaImage {
+    let cleaned = clear_orthogonally_isolated_pixels(primary);
+    let primary = &cleaned;
     let radius = options.thickness.max(1);
     let outline_min_alpha = options.tolerance;
     let pad = radius;
@@ -252,20 +256,22 @@ pub fn render_icon_glow_from_primary(primary: &RgbaImage, options: &GlowMakerOpt
 
 /// Extended rainbow with strong cyan, purple, and reddish-violet at the right end.
 const RAINBOW_STOPS: [[u8; 3]; 10] = [
-    [255, 0, 0],     // Red
-    [255, 127, 0],   // Orange
-    [255, 255, 0],   // Yellow
-    [0, 255, 0],     // Green
-    [0, 255, 255],   // Strong cyan
-    [0, 200, 255],   // Azure
-    [0, 0, 255],     // Blue
-    [160, 0, 255],   // Strong purple
-    [255, 0, 180],   // Reddish magenta
-    [220, 0, 90],    // Deep reddish-violet (right end)
+    [255, 0, 0],   // Red
+    [255, 127, 0], // Orange
+    [255, 255, 0], // Yellow
+    [0, 255, 0],   // Green
+    [0, 255, 255], // Strong cyan
+    [0, 200, 255], // Azure
+    [0, 0, 255],   // Blue
+    [160, 0, 255], // Strong purple
+    [255, 0, 180], // Reddish magenta
+    [220, 0, 90],  // Deep reddish-violet (right end)
 ];
 
 fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
-    (a as f32 + (b as f32 - a as f32) * t).round().clamp(0.0, 255.0) as u8
+    (a as f32 + (b as f32 - a as f32) * t)
+        .round()
+        .clamp(0.0, 255.0) as u8
 }
 
 fn rainbow_rgb_at(x: u32, width: u32) -> [u8; 3] {
@@ -299,5 +305,44 @@ fn apply_rainbow_gradient(image: &mut RgbaImage) {
             let rgb = rainbow_rgb_at(x, width);
             image.put_pixel(x, y, Rgba([rgb[0], rgb[1], rgb[2], pixel.0[3]]));
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::render_icon_glow_from_primary;
+    use crate::core::contracts::GlowMakerOptions;
+    use image::{Rgba, RgbaImage};
+
+    fn glow_opts() -> GlowMakerOptions {
+        GlowMakerOptions {
+            thickness: 3,
+            tolerance: 6,
+            dimensions: None,
+            rainbow_glow: false,
+            composite_layers: false,
+        }
+    }
+
+    #[test]
+    fn isolated_specks_do_not_seed_glow() {
+        let mut primary = RgbaImage::from_pixel(20, 16, Rgba([0, 0, 0, 0]));
+        for y in 4..12 {
+            for x in 4..12 {
+                primary.put_pixel(x, y, Rgba([80, 160, 255, 255]));
+            }
+        }
+        primary.put_pixel(18, 1, Rgba([255, 255, 255, 255]));
+        let glow = render_icon_glow_from_primary(&primary, &glow_opts());
+        let pad = 3u32;
+        assert!(
+            glow.get_pixel(4 + pad, 4 + pad).0[3] > 0,
+            "body must still seed glow"
+        );
+        assert_eq!(
+            glow.get_pixel(18 + pad, 1 + pad).0[3],
+            0,
+            "isolated speck must not bloom into glow"
+        );
     }
 }

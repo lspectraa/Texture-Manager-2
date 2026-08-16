@@ -10,6 +10,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "Splitter benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     porterPathsRequired: "Porter benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "Merger benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     glowMakerPathsRequired: "Glow-Maker benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     convertPathsRequired:

@@ -47,6 +47,9 @@ const settings = {
     gameFilesRoot: "게임 파일 루트",
     splitCache: "분할 캐시",
     openCacheFolder: "캐시 폴더 열기",
+    regenerateSpriteIndex: "스프라이트 인덱스 재생성",
+    regenerateSpriteIndexHint:
+      "sprite-index.json에 이미 있는 시트만 다시 빌드합니다(Resources 전체 검색 없음).",
     resetDefaults: "기본값으로 초기화",
   },
   geometryDash: {

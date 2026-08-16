@@ -637,6 +637,11 @@ pub(crate) fn apply_alpha_trim_to_frame_dict(
     trimmed.image
 }
 
+/// Public trim used by the sprite hash index (same opaque-crop rules as merge).
+pub fn trim_transparent_rgba(image: &RgbaImage) -> RgbaImage {
+    trim_transparent_edges(image).image
+}
+
 fn trim_transparent_edges(image: &RgbaImage) -> TrimResult {
     let width = image.width();
     let height = image.height();

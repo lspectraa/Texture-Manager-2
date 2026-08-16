@@ -27,6 +27,8 @@ const reports: AppLocaleResources["reports"] = {
     plists_one: "{{completed}} / {{total}} plist",
     plists_other: "{{completed}} / {{total}} plist",
     preparing: "Подготовка операции…",
+    remaining: "Ост. времени (оценка): {{time}}",
+    remainingEstimating: "Ост. времени (оценка): расчёт…",
     cancel: "Отмена",
   },
   alerts: {
@@ -41,6 +43,8 @@ const reports: AppLocaleResources["reports"] = {
     processed: "Обработано",
     elapsed: "Затрачено времени",
     output: "Результат",
+    aiUpscaled: "ИИ апскейл",
+    fromCache: "Из кэша",
   },
   issues: {
     title: "Проблемы",
@@ -57,6 +61,7 @@ const reports: AppLocaleResources["reports"] = {
   severity: {
     error: "ошибка",
     warning: "предупреждение",
+    info: "info",
   },
 };
 

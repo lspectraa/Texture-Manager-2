@@ -47,6 +47,9 @@ jobs:
       - name: Sync version from package.json
         run: npm run sync:version
 
+      - name: Fetch upscaler ncnn sidecars and models
+        run: node ./scripts/fetch-upscaler-binaries.mjs
+
       - name: Build installer and draft GitHub release
         uses: tauri-apps/tauri-action@v0
         env:

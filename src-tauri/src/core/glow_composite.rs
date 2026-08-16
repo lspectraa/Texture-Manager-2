@@ -67,7 +67,10 @@ pub fn icon_stem_from_frame_name(name: &str) -> Option<String> {
     None
 }
 
-fn find_sprite_key<'a>(sprites: &'a BTreeMap<String, RgbaImage>, canonical: &str) -> Option<&'a str> {
+fn find_sprite_key<'a>(
+    sprites: &'a BTreeMap<String, RgbaImage>,
+    canonical: &str,
+) -> Option<&'a str> {
     let target = normalize_frame_key(canonical);
     sprites
         .keys()
@@ -87,7 +90,9 @@ fn frames_dictionary(root: &Value) -> Result<&Dictionary, AppError> {
     root.as_dictionary()
         .and_then(|dict| dict.get("frames"))
         .and_then(Value::as_dictionary)
-        .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
+        .ok_or_else(|| {
+            AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
+        })
 }
 
 fn frame_sprite_offset(frames: &Dictionary, sprite_key: &str) -> PointF32 {
@@ -122,7 +127,10 @@ pub fn sprite_offset_for_frame(plist_root: &Value, frame_key: &str) -> PointF32 
     }
 }
 
-fn layer_center_relative_to_primary(layer_offset: PointF32, primary_offset: PointF32) -> (f32, f32) {
+fn layer_center_relative_to_primary(
+    layer_offset: PointF32,
+    primary_offset: PointF32,
+) -> (f32, f32) {
     (
         layer_offset.x - primary_offset.x,
         -(layer_offset.y - primary_offset.y),

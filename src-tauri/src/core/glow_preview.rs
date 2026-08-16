@@ -165,6 +165,21 @@ fn sample_from_sheet_candidate(
     })
 }
 
+fn sample_from_sheet_candidate_indexed(
+    layout: &GameFilesLayout,
+    pair: &SheetCandidate,
+    primary_pick: PrimaryFramePick,
+) -> Result<PreviewIconSample, AppError> {
+    crate::core::sprite_index::try_index_sheet_pair(
+        layout,
+        &pair.relative_dir,
+        &pair.stem,
+        &pair.plist_path,
+        &pair.png_path,
+    );
+    sample_from_sheet_candidate(pair, primary_pick)
+}
+
 /// Prefer GD primary frames (`{kind}_{id}_001.png`).
 ///
 /// Custom single-sprite sheets may use exactly one non-glow frame. When only
@@ -349,10 +364,11 @@ fn sample_with_visible_primary(mut sample: PreviewIconSample) -> Option<PreviewI
     // "not safe to show without compositing".
     if sample.sprites.len() > 1 {
         sample.primary = blank_preview_rgba();
-        if sample.primary_frame.is_empty()
-            || !sample.sprites.contains_key(&sample.primary_frame)
-        {
-            if let Some(key) = compositable_primary_keys(&sample.sprites).into_iter().next() {
+        if sample.primary_frame.is_empty() || !sample.sprites.contains_key(&sample.primary_frame) {
+            if let Some(key) = compositable_primary_keys(&sample.sprites)
+                .into_iter()
+                .next()
+            {
                 sample.primary_frame = key;
             }
         }
@@ -449,7 +465,7 @@ fn load_random_uhd_preview_icon(
 
     let sheet_idx = rand::rng().random_range(0..pairs.len());
     let pair = &pairs[sheet_idx];
-    sample_from_sheet_candidate(pair, PrimaryFramePick::Random)
+    sample_from_sheet_candidate_indexed(layout, pair, PrimaryFramePick::Random)
 }
 
 fn preview_icon_sample(
@@ -484,10 +500,7 @@ fn preview_icon_sample(
     Ok(sample)
 }
 
-fn glow_source_for_preview(
-    options: &GlowMakerOptions,
-    sample: &PreviewIconSample,
-) -> RgbaImage {
+fn glow_source_for_preview(options: &GlowMakerOptions, sample: &PreviewIconSample) -> RgbaImage {
     let standalone_ok = is_icon_primary_frame(&sample.primary_frame)
         || (sample.sprites.len() <= 1
             && !sample.primary_frame.is_empty()
@@ -609,11 +622,9 @@ pub fn random_uhd_icon_preview_data_url(
     let sample = preview_icon_sample(layout, refresh, audience, icon_plist_path)?;
     let offset = sprite_offset_for_frame(&sample.plist_root, &sample.primary_frame);
 
-    let (icon, anchor_x, anchor_y) = if let Some(composite) = try_composite_preview_image(&sample)
-    {
+    let (icon, anchor_x, anchor_y) = if let Some(composite) = try_composite_preview_image(&sample) {
         let offset = sprite_offset_for_frame(&sample.plist_root, &sample.primary_frame);
-        let (ax, ay) =
-            trimmed_sprite_anchor(composite.width(), composite.height(), offset);
+        let (ax, ay) = trimmed_sprite_anchor(composite.width(), composite.height(), offset);
         (composite, ax, ay)
     } else if is_icon_primary_frame(&sample.primary_frame)
         || (sample.sprites.len() <= 1 && rgba_has_visible_pixels(&sample.primary))
@@ -629,9 +640,10 @@ pub fn random_uhd_icon_preview_data_url(
     let mut bytes = Vec::new();
     {
         let mut cursor = Cursor::new(&mut bytes);
-        icon.write_to(&mut cursor, ImageFormat::Png).map_err(|err| {
-            AppError::ParseError(format!("failed to encode glow preview PNG: {err}"))
-        })?;
+        icon.write_to(&mut cursor, ImageFormat::Png)
+            .map_err(|err| {
+                AppError::ParseError(format!("failed to encode glow preview PNG: {err}"))
+            })?;
     }
     Ok(ParticlePreviewSprite {
         data_url: format!("data:image/png;base64,{}", BASE64_STANDARD.encode(&bytes)),
@@ -694,7 +706,10 @@ mod tests {
         assert!(is_excluded_preview_icon_stem("spider_05_03-uhd", particle));
         assert!(!is_excluded_preview_icon_stem("player_12-uhd", particle));
         assert!(!is_excluded_preview_icon_stem("ship_03-uhd", particle));
-        assert!(!is_excluded_preview_icon_stem("player_ball_01-uhd", particle));
+        assert!(!is_excluded_preview_icon_stem(
+            "player_ball_01-uhd",
+            particle
+        ));
     }
 
     #[test]
@@ -828,10 +843,8 @@ mod tests {
 
     #[test]
     fn custom_plist_preview_uses_sibling_png_and_returns_pixels() {
-        let dir = std::env::temp_dir().join(format!(
-            "tm-glow-preview-custom-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("tm-glow-preview-custom-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).expect("temp dir");
         let plist_path = dir.join("player_99-uhd.plist");
@@ -843,9 +856,7 @@ mod tests {
                 atlas.put_pixel(x, y, Rgba([40, 180, 255, 255]));
             }
         }
-        atlas
-            .save(&png_path)
-            .expect("write atlas png");
+        atlas.save(&png_path).expect("write atlas png");
 
         std::fs::write(
             &plist_path,

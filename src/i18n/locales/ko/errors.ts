@@ -10,6 +10,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "분할기에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",
     porterPathsRequired: "포터에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "병합기에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",
     glowMakerPathsRequired: "글로우 메이커에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",
     convertPathsRequired: "새 버전으로 변환에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",

@@ -10,6 +10,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "拆分器需要同时指定输入和输出目录。",
     porterPathsRequired: "移植器需要同时指定输入和输出目录。",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "合并器需要同时指定输入和输出目录。",
     glowMakerPathsRequired: "光晕生成器需要同时指定输入和输出目录。",
     convertPathsRequired: "转换到新版本需要同时指定输入和输出目录。",

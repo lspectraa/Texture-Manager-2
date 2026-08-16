@@ -47,6 +47,9 @@ const settings = {
     gameFilesRoot: "ゲームファイルのルート",
     splitCache: "分割キャッシュ",
     openCacheFolder: "キャッシュフォルダーを開く",
+    regenerateSpriteIndex: "スプライト索引を再生成",
+    regenerateSpriteIndexHint:
+      "sprite-index.json に既にあるシートだけ再構築します（Resources 全体は走査しません）。",
     resetDefaults: "既定値に戻す",
   },
   geometryDash: {

@@ -8,9 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use serde::{Deserialize, Serialize};
 
 use crate::core::contracts::SplitterOptions;
-use crate::core::discovery::{
-    discover_sheet_pairs, discover_unpaired_png_keys, SheetCandidate,
-};
+use crate::core::discovery::{discover_sheet_pairs, discover_unpaired_png_keys, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{
     ensure_no_parent_dir_components, ensure_user_absolute_path, is_safe_path_segment,
@@ -429,7 +427,12 @@ fn steam_install_from_registry() -> Vec<PathBuf> {
 fn candidate_steam_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
-    for env_key in ["ProgramFiles(x86)", "ProgramFiles", "PROGRAMFILES(X86)", "PROGRAMFILES"] {
+    for env_key in [
+        "ProgramFiles(x86)",
+        "ProgramFiles",
+        "PROGRAMFILES(X86)",
+        "PROGRAMFILES",
+    ] {
         if let Ok(pf) = std::env::var(env_key) {
             if !pf.trim().is_empty() {
                 push_unique(&mut roots, PathBuf::from(pf).join("Steam"));
@@ -445,10 +448,7 @@ fn candidate_steam_roots() -> Vec<PathBuf> {
         if !is_fixed_drive_letter(letter) {
             continue;
         }
-        push_unique(
-            &mut roots,
-            PathBuf::from(format!(r"{letter}:\Steam")),
-        );
+        push_unique(&mut roots, PathBuf::from(format!(r"{letter}:\Steam")));
         push_unique(
             &mut roots,
             PathBuf::from(format!(r"{letter}:\SteamLibrary")),
@@ -464,12 +464,7 @@ fn candidate_steam_roots() -> Vec<PathBuf> {
     }
 
     if let Some(home) = home_dir() {
-        push_unique(
-            &mut roots,
-            home.join("AppData")
-                .join("Local")
-                .join("Steam"),
-        );
+        push_unique(&mut roots, home.join("AppData").join("Local").join("Steam"));
         // macOS
         push_unique(
             &mut roots,
@@ -481,7 +476,14 @@ fn candidate_steam_roots() -> Vec<PathBuf> {
         push_unique(&mut roots, home.join(".steam").join("steam"));
         push_unique(&mut roots, home.join(".steam").join("root"));
         push_unique(&mut roots, home.join(".local").join("share").join("Steam"));
-        push_unique(&mut roots, home.join(".var").join("app").join("com.valvesoftware.Steam").join("data").join("Steam"));
+        push_unique(
+            &mut roots,
+            home.join(".var")
+                .join("app")
+                .join("com.valvesoftware.Steam")
+                .join("data")
+                .join("Steam"),
+        );
     }
 
     for registry_root in steam_install_from_registry() {
@@ -499,9 +501,7 @@ fn steam_library_roots() -> Vec<PathBuf> {
         .flat_map(|steam| {
             [
                 steam.join("steamapps").join("libraryfolders.vdf"),
-                steam
-                    .join("config")
-                    .join("libraryfolders.vdf"),
+                steam.join("config").join("libraryfolders.vdf"),
             ]
         })
         .collect();
@@ -694,7 +694,10 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     let _ = fs::create_dir_all(root.join("custom-backgrounds"));
 
     let override_path = read_settings_geometry_dash_override(&root);
-    let geometry_dash_dir = if override_path.as_ref().is_some_and(|path| !path.trim().is_empty()) {
+    let geometry_dash_dir = if override_path
+        .as_ref()
+        .is_some_and(|path| !path.trim().is_empty())
+    {
         resolve_geometry_dash_dir_with_override(override_path.as_deref())
             .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
     } else {
@@ -825,15 +828,27 @@ pub fn find_current_sheet_for_input(
     };
 
     let png_path = resolve_png_beside_plist(&plist_path);
-    Ok(Some(SheetCandidate {
+    let candidate = SheetCandidate {
         stem: stem.to_string(),
         relative_dir: relative_dir.to_path_buf(),
-        plist_path,
-        png_path,
-    }))
+        plist_path: plist_path.clone(),
+        png_path: png_path.clone(),
+    };
+    if plist_path.is_file() && png_path.is_file() {
+        crate::core::sprite_index::try_index_sheet_pair(
+            layout,
+            relative_dir,
+            stem,
+            &plist_path,
+            &png_path,
+        );
+    }
+    Ok(Some(candidate))
 }
 
-pub fn discover_current_sheet_pairs(layout: &GameFilesLayout) -> Result<Vec<SheetCandidate>, AppError> {
+pub fn discover_current_sheet_pairs(
+    layout: &GameFilesLayout,
+) -> Result<Vec<SheetCandidate>, AppError> {
     discover_sheet_pairs(&layout.resources)
 }
 
@@ -1058,8 +1073,9 @@ fn save_split_cache_hashes(
 ) -> Result<(), AppError> {
     fs::create_dir_all(&layout.current_split)?;
     let path = split_cache_hashes_path(layout);
-    let json = serde_json::to_string_pretty(file)
-        .map_err(|err| AppError::IoError(format!("failed to serialize split cache hashes: {err}")))?;
+    let json = serde_json::to_string_pretty(file).map_err(|err| {
+        AppError::IoError(format!("failed to serialize split cache hashes: {err}"))
+    })?;
     fs::write(&path, json).map_err(|err| {
         AppError::IoError(format!(
             "failed to write split cache hashes `{}`: {err}",
@@ -1129,6 +1145,16 @@ pub fn ensure_sheet_split_cached(
     manifest.schema_version = 1;
     manifest.entries.insert(key, current_hash);
     save_split_cache_hashes(layout, &manifest)?;
+
+    // Best-effort sprite hash index when we touch a sheet under Resources/cache paths.
+    crate::core::sprite_index::try_index_sheet_pair(
+        layout,
+        &pair.relative_dir,
+        &pair.stem,
+        &pair.plist_path,
+        &pair.png_path,
+    );
+
     Ok(split_dir)
 }
 
@@ -1520,10 +1546,8 @@ mod tests {
         fs::create_dir_all(&nested).expect("create nested");
         let sprite_path = nested.join("baseCircle_Big_Primary.png");
         fs::write(&sprite_path, b"png").expect("write sprite");
-        let resolved = resolve_cached_split_sprite(
-            &split_dir,
-            "geode.loader/baseCircle_Big_Primary.png",
-        );
+        let resolved =
+            resolve_cached_split_sprite(&split_dir, "geode.loader/baseCircle_Big_Primary.png");
         assert_eq!(resolved, Some(sprite_path));
         let _ = fs::remove_dir_all(&temp);
     }
@@ -1534,10 +1558,7 @@ mod tests {
         let gd = root.join("Geometry Dash");
         let resources = gd.join("Resources");
         let icons = resources.join("icons");
-        let mod_res = gd
-            .join("geode")
-            .join("resources")
-            .join("geode.loader");
+        let mod_res = gd.join("geode").join("resources").join("geode.loader");
         fs::create_dir_all(&icons).expect("resources");
         fs::create_dir_all(&mod_res).expect("geode.loader");
         fs::write(resources.join("BlankSheet-uhd.plist"), b"p").unwrap();
@@ -1550,7 +1571,10 @@ mod tests {
         let layout = test_layout(&root, &gd);
         let root_sheet =
             find_current_sheet_for_input(&layout, Path::new(""), "BlankSheet-uhd").unwrap();
-        assert!(root_sheet.unwrap().plist_path.ends_with("BlankSheet-uhd.plist"));
+        assert!(root_sheet
+            .unwrap()
+            .plist_path
+            .ends_with("BlankSheet-uhd.plist"));
 
         let icon_sheet =
             find_current_sheet_for_input(&layout, Path::new("icons"), "player_02-uhd").unwrap();
@@ -1589,7 +1613,8 @@ mod tests {
         let layout = test_layout(&root, &gd);
         assert!(layout.geometry_dash_found());
 
-        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        let pairs =
+            discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0].stem, "GJ_GameSheet-uhd");
         assert_eq!(pairs[0].png_path, pack.join("GJ_GameSheet-uhd.png"));
@@ -1616,7 +1641,8 @@ mod tests {
         fs::write(pack.join("GJ_GameSheet-uhd.png"), b"pack-png").expect("pack png");
 
         let layout = test_layout(&root, &gd);
-        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        let pairs =
+            discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0].plist_path, pack.join("GJ_GameSheet-uhd.plist"));
         assert_eq!(pairs[0].png_path, pack.join("GJ_GameSheet-uhd.png"));
@@ -1637,7 +1663,8 @@ mod tests {
         fs::write(pack.join("edit_eAlphaBtn_001.png"), b"btn").expect("pack png");
 
         let layout = test_layout(&root, &gd);
-        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        let pairs =
+            discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
         assert!(pairs.is_empty());
 
         let _ = fs::remove_dir_all(&root);
@@ -1656,7 +1683,8 @@ mod tests {
 
         let layout = test_layout(&root, &unresolved);
         assert!(!layout.geometry_dash_found());
-        let pairs = discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
+        let pairs =
+            discover_sheet_pairs_with_game_plist_fallback(&pack, &layout).expect("discover");
         assert!(pairs.is_empty());
 
         let _ = fs::remove_dir_all(&root);
@@ -1686,10 +1714,7 @@ mod tests {
         assert_eq!(pairs.len(), 1);
         assert_eq!(pairs[0].stem, "player_01-uhd");
         assert_eq!(pairs[0].png_path, pack_icons.join("player_01-uhd.png"));
-        assert_eq!(
-            pairs[0].plist_path,
-            icons_res.join("player_01-uhd.plist")
-        );
+        assert_eq!(pairs[0].plist_path, icons_res.join("player_01-uhd.plist"));
 
         let _ = fs::remove_dir_all(&root);
     }

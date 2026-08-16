@@ -66,6 +66,11 @@ const navigation = {
       label: "ポーター",
       description: "テクスチャシートを別のサイズにリサイズします。",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "ランダマイザー",
       description: "再利用できるシードでアイコンをシャッフルします。",

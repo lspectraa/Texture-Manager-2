@@ -29,7 +29,7 @@ pub struct OperationProgress {
     pub plists_total: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct OperationReport {
     pub operation: String,
@@ -38,4 +38,10 @@ pub struct OperationReport {
     pub output_dir: String,
     pub elapsed_ms: u128,
     pub issues: Vec<ReportIssue>,
+    /// Sprites resolved via AI sidecar (upscaler).
+    #[serde(default)]
+    pub sprites_ai_upscaled: usize,
+    /// Sprites reused from the sprite hash / game-files cache (upscaler).
+    #[serde(default)]
+    pub sprites_from_cache: usize,
 }

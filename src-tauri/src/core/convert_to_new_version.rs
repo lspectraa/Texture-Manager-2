@@ -281,9 +281,9 @@ fn find_legacy_glow_sheet_pair<'a>(
     quality_suffix: &str,
 ) -> Option<&'a SheetCandidate> {
     let stem = format!("GJ_GameSheetGlow{quality_suffix}");
-    sheet_pairs.iter().find(|pair| {
-        pair.relative_dir == relative_dir && pair.stem.eq_ignore_ascii_case(&stem)
-    })
+    sheet_pairs
+        .iter()
+        .find(|pair| pair.relative_dir == relative_dir && pair.stem.eq_ignore_ascii_case(&stem))
 }
 
 fn is_numeric_icon_token(token: &str) -> bool {
@@ -309,6 +309,18 @@ pub(crate) fn icon_sheet_id_from_frame_name(frame_name: &str) -> Option<String> 
     }
 
     None
+}
+
+/// Icon sprites in 2.2 live under `icons/`; 2.0 / 2.11 pack them into mixed gamesheets
+/// (`GJ_GameSheet02`, glow sheet, etc.). Detect by folder or frame identity, not sheet filename.
+pub(crate) fn is_icon_sprite(relative_dir: &Path, frame_name: &str) -> bool {
+    if sheet_is_under_icons(relative_dir) {
+        return true;
+    }
+    match icon_sheet_id_from_frame_name(frame_name) {
+        Some(id) => !is_excluded_legacy_icon_id(&id),
+        None => false,
+    }
 }
 
 pub(crate) fn group_frame_names_by_icon_id(
@@ -587,10 +599,8 @@ where
     )?;
     issues.extend(merge_issues);
 
-    let destination_dir = flattened_bundle_output_dir(
-        converted_dir,
-        &PathBuf::from(modern_stem.as_str()),
-    );
+    let destination_dir =
+        flattened_bundle_output_dir(converted_dir, &PathBuf::from(modern_stem.as_str()));
     save_merged_sheet(
         &destination_dir,
         modern_stem.as_str(),
@@ -813,11 +823,8 @@ where
 
     for (icon_id, icon_frame_names) in &groups {
         let output_stem = format!("{icon_id}{quality_suffix}");
-        let glow_frames = resolve_glow_frames_for_icon(
-            icon_id.as_str(),
-            &split,
-            glow_sheet_split.as_ref(),
-        );
+        let glow_frames =
+            resolve_glow_frames_for_icon(icon_id.as_str(), &split, glow_sheet_split.as_ref());
 
         let mut frame_entries: BTreeMap<String, Value> = BTreeMap::new();
         let sheet02_frames = frames_dictionary(&split.plist_root)?;
@@ -830,11 +837,8 @@ where
             frame_entries.insert(frame_name.clone(), frame_value.clone());
         }
 
-        let mut icon_plist_root = build_icon_plist_from_frames(
-            &frame_entries,
-            &split.plist_root,
-            output_stem.as_str(),
-        )?;
+        let mut icon_plist_root =
+            build_icon_plist_from_frames(&frame_entries, &split.plist_root, output_stem.as_str())?;
 
         let mut icon_sprites: BTreeMap<String, RgbaImage> = BTreeMap::new();
         for frame_name in icon_frame_names {
@@ -868,12 +872,7 @@ where
         )?;
         issues.extend(merge_issues);
 
-        save_merged_sheet(
-            &icons_dir,
-            output_stem.as_str(),
-            &icon_plist_root,
-            &atlas,
-        )?;
+        save_merged_sheet(&icons_dir, output_stem.as_str(), &icon_plist_root, &atlas)?;
         sheets_written = sheets_written.saturating_add(1);
     }
 
@@ -1297,9 +1296,7 @@ where
     let sheet_pairs: Vec<SheetCandidate> = all_sheet_pairs
         .iter()
         .filter(|pair| !sheet_is_under_icons(&pair.relative_dir))
-        .filter(|pair| {
-            !(legacy_icon_split && is_legacy_icon_glow_sheet(&pair.stem).is_some())
-        })
+        .filter(|pair| !(legacy_icon_split && is_legacy_icon_glow_sheet(&pair.stem).is_some()))
         .cloned()
         .collect();
     let plists_total = sheet_pairs.len() as u32;
@@ -1452,6 +1449,7 @@ where
         output_dir: converted_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }
 
@@ -1465,9 +1463,10 @@ mod tests {
     use super::{
         frame_belongs_to_extracted_icon, group_frame_names_by_icon_id, group_icon_output_frames,
         icon_sheet_id_from_frame_name, is_excluded_legacy_icon_id, is_fireboost_frame_name,
-        is_glow_frame_name, is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet,
-        is_legacy_icon_split_version, missing_frame_keys, sheet_is_under_icons,
-        should_remove_from_legacy_gamesheet02, should_remove_from_legacy_glow_sheet,
+        is_glow_frame_name, is_icon_sprite, is_legacy_combined_icon_sheet,
+        is_legacy_icon_glow_sheet, is_legacy_icon_split_version, missing_frame_keys,
+        sheet_is_under_icons, should_remove_from_legacy_gamesheet02,
+        should_remove_from_legacy_glow_sheet,
     };
 
     #[test]
@@ -1624,8 +1623,24 @@ mod tests {
             icon_sheet_id_from_frame_name("player_ball_00_2_001.png"),
             Some("player_ball_00".to_string())
         );
-        assert_eq!(icon_sheet_id_from_frame_name("edit_eAlphaBtn_001.png"), None);
+        assert_eq!(
+            icon_sheet_id_from_frame_name("edit_eAlphaBtn_001.png"),
+            None
+        );
         assert_eq!(icon_sheet_id_from_frame_name("not_an_icon.png"), None);
+    }
+
+    #[test]
+    fn is_icon_sprite_uses_folder_or_frame_identity_not_sheet_filename() {
+        assert!(is_icon_sprite(Path::new("icons"), "anything.png"));
+        assert!(is_icon_sprite(Path::new("pack/icons/extra"), "weird.png"));
+        assert!(is_icon_sprite(Path::new(""), "player_02_001.png"));
+        assert!(is_icon_sprite(Path::new(""), "bird_01_glow_001.png"));
+        assert!(is_icon_sprite(Path::new(""), "robot_01_03_001.png"));
+        assert!(!is_icon_sprite(Path::new(""), "edit_eAlphaBtn_001.png"));
+        assert!(!is_icon_sprite(Path::new(""), "portal_01_front_001.png"));
+        assert!(!is_icon_sprite(Path::new(""), "boost_01_001.png"));
+        assert!(!is_icon_sprite(Path::new(""), "GJ_GameSheet02-uhd.png"));
     }
 
     #[test]

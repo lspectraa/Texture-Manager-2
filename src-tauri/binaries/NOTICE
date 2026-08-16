@@ -1,0 +1,9 @@
+Third-party upscaler binaries
+
+Waifu2x ncnn Vulkan — MIT (nihui / nagadomi waifu2x)
+  https://github.com/nihui/waifu2x-ncnn-vulkan
+  https://github.com/nagadomi/waifu2x
+
+Real-ESRGAN ncnn Vulkan — BSD-3-Clause / MIT (xinntao / nihui)
+  https://github.com/xinntao/Real-ESRGAN
+  https://github.com/xinntao/Real-ESRGAN-ncnn-vulkan

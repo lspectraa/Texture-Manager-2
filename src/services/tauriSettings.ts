@@ -220,3 +220,12 @@ export const openPathInOs = async (path: string): Promise<void> => {
   }
   await invoke<void>("open_path_in_os", { path });
 };
+
+/** Rebuild sprite hash index entries for previously indexed sheets only. */
+export const regenerateSpriteIndex = async (): Promise<number> => {
+  if (!isTauriRuntime()) {
+    return 0;
+  }
+  const count = await invoke<number>("regenerate_sprite_index");
+  return Number.isFinite(count) ? Math.max(0, Math.floor(count)) : 0;
+};

@@ -48,6 +48,9 @@ const settings = {
     gameFilesRoot: "Racine des fichiers du jeu",
     splitCache: "Cache de découpe",
     openCacheFolder: "Ouvrir le dossier de cache",
+    regenerateSpriteIndex: "Régénérer l’index des sprites",
+    regenerateSpriteIndexHint:
+      "Ne reconstruit que les feuilles déjà listées dans sprite-index.json (pas de scan complet de Resources).",
     resetDefaults: "Rétablir les valeurs par défaut",
   },
   geometryDash: {

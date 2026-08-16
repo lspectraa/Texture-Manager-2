@@ -10,6 +10,9 @@ const errors = {
   validation: {
     splitterPathsRequired: "O Divisor exige os diretórios de entrada e de saída.",
     porterPathsRequired: "O Conversor exige os diretórios de entrada e de saída.",
+    upscalerPathsRequired: "Upscaler requires both input and output directories.",
+    upscalerVersionRequired:
+      "Upscaler convert-to-latest requires a previous game version.",
     mergerPathsRequired: "O Combinador exige os diretórios de entrada e de saída.",
     glowMakerPathsRequired: "O Criador de brilho exige os diretórios de entrada e de saída.",
     convertPathsRequired:

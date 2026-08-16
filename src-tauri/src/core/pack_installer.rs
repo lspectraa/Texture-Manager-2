@@ -363,13 +363,7 @@ where
 
                 if options.convert_to_latest_version && unit.kind == InstallUnitKind::Pack {
                     let phase = format!("Converting {}", unit.label);
-                    emit_pack_progress(
-                        &on_progress,
-                        &unit.id,
-                        &phase,
-                        index as u32,
-                        total,
-                    );
+                    emit_pack_progress(&on_progress, &unit.id, &phase, index as u32, total);
                     let progress = Arc::clone(&on_progress);
                     let unit_id = unit.id.clone();
                     let phase_label = phase.clone();
@@ -378,12 +372,7 @@ where
                         layout,
                         options,
                         move |op| {
-                            emit_mapped_operation_progress(
-                                &progress,
-                                &unit_id,
-                                &phase_label,
-                                &op,
-                            );
+                            emit_mapped_operation_progress(&progress, &unit_id, &phase_label, &op);
                         },
                     ) {
                         Ok(info) => {
@@ -412,29 +401,13 @@ where
 
                 if unit_ok && options.port_packs && unit.kind == InstallUnitKind::Pack {
                     let phase = format!("Porting {}", unit.label);
-                    emit_pack_progress(
-                        &on_progress,
-                        &unit.id,
-                        &phase,
-                        index as u32,
-                        total,
-                    );
+                    emit_pack_progress(&on_progress, &unit.id, &phase, index as u32, total);
                     let progress = Arc::clone(&on_progress);
                     let unit_id = unit.id.clone();
                     let phase_label = phase.clone();
-                    match port_installed_pack(
-                        &destination,
-                        layout,
-                        options,
-                        move |op| {
-                            emit_mapped_operation_progress(
-                                &progress,
-                                &unit_id,
-                                &phase_label,
-                                &op,
-                            );
-                        },
-                    ) {
+                    match port_installed_pack(&destination, layout, options, move |op| {
+                        emit_mapped_operation_progress(&progress, &unit_id, &phase_label, &op);
+                    }) {
                         Ok(info) => {
                             if !info.trim().is_empty() {
                                 issues.push(PackInstallIssue {
@@ -469,10 +442,7 @@ where
                 skipped += 1;
                 issues.push(PackInstallIssue {
                     level: ReportLevel::Error,
-                    message: format!(
-                        "Failed to install `{}`: {err}",
-                        unit.label
-                    ),
+                    message: format!("Failed to install `{}`: {err}", unit.label),
                 });
             }
         }
@@ -580,10 +550,7 @@ where
         )));
     }
 
-    Ok(format!(
-        "{} sheet/file update(s)",
-        report.files_processed
-    ))
+    Ok(format!("{} sheet/file update(s)", report.files_processed))
 }
 
 /// Port an already-installed pack and overlay `{temp}/Ported` into the pack folder.
@@ -703,12 +670,19 @@ pub fn create_texture_pack(
         )));
     }
 
-    let source_dir = match request.source_dir.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+    let source_dir = match request
+        .source_dir
+        .as_deref()
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+    {
         Some(raw) => {
             let src = parse_user_absolute_path(raw)?;
             ensure_user_directory_path(&src)?;
             if !src.is_dir() {
-                return Err(AppError::InvalidPath("source path must be an existing directory"));
+                return Err(AppError::InvalidPath(
+                    "source path must be an existing directory",
+                ));
             }
             Some(src)
         }
@@ -722,9 +696,8 @@ pub fn create_texture_pack(
     }
 
     let pack_json_path = pack_dir.join("pack.json");
-    let json = serde_json::to_string_pretty(&request.metadata).map_err(|err| {
-        AppError::ParseError(format!("failed to serialize pack.json: {err}"))
-    })?;
+    let json = serde_json::to_string_pretty(&request.metadata)
+        .map_err(|err| AppError::ParseError(format!("failed to serialize pack.json: {err}")))?;
     fs::write(&pack_json_path, format!("{json}\n"))?;
 
     let mut written_png = None;
@@ -806,7 +779,9 @@ pub fn list_installed_packs(
         }
 
         let meta_result = read_pack_metadata(&child.to_string_lossy())?;
-        let metadata = meta_result.metadata.or_else(|| Some(default_pack_metadata(folder_name)));
+        let metadata = meta_result
+            .metadata
+            .or_else(|| Some(default_pack_metadata(folder_name)));
         let (_, file_count) = build_tree_and_count(&child);
         packs.push(InstalledPackSummary {
             id: format!("library:{folder_name}"),
@@ -849,9 +824,8 @@ pub fn update_installed_pack_metadata(
     let dir = resolve_installed_pack_dir(pack_dir, layout)?;
 
     let pack_json_path = dir.join("pack.json");
-    let json = serde_json::to_string_pretty(metadata).map_err(|err| {
-        AppError::ParseError(format!("failed to serialize pack.json: {err}"))
-    })?;
+    let json = serde_json::to_string_pretty(metadata)
+        .map_err(|err| AppError::ParseError(format!("failed to serialize pack.json: {err}")))?;
     fs::write(&pack_json_path, format!("{json}\n"))?;
 
     if update_pack_png {
@@ -880,10 +854,7 @@ pub fn update_installed_pack_metadata(
 }
 
 /// Permanently delete an installed pack folder under texture-loader packs.
-pub fn delete_installed_pack(
-    pack_dir: &str,
-    layout: &GameFilesLayout,
-) -> Result<(), AppError> {
+pub fn delete_installed_pack(pack_dir: &str, layout: &GameFilesLayout) -> Result<(), AppError> {
     if !layout.geometry_dash_found() {
         return Err(geometry_dash_required_error());
     }
@@ -968,13 +939,7 @@ where
                 fs::create_dir_all(&output_dir)?;
             }
             ensure_user_directory_path(&output_dir)?;
-            run_pack_split_operation(
-                &dir,
-                &output_dir,
-                sheet_concurrency,
-                layout,
-                map_progress,
-            )?
+            run_pack_split_operation(&dir, &output_dir, sheet_concurrency, layout, map_progress)?
         }
     };
 
@@ -1073,10 +1038,7 @@ fn resolve_installed_pack_dir(
 }
 
 /// Remove a temp extract directory created by discovery (under game-files root).
-pub fn cleanup_pack_install_temp(
-    temp_dir: &str,
-    layout: &GameFilesLayout,
-) -> Result<(), AppError> {
+pub fn cleanup_pack_install_temp(temp_dir: &str, layout: &GameFilesLayout) -> Result<(), AppError> {
     let path = parse_user_absolute_path(temp_dir)?;
     let temp_root = pack_install_temp_root(layout);
     if !temp_root.exists() {
@@ -1117,9 +1079,9 @@ fn extract_zip_to_dir(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
     })?;
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i).map_err(|err| {
-            AppError::IoError(format!("failed to read zip entry {i}: {err}"))
-        })?;
+        let mut entry = archive
+            .by_index(i)
+            .map_err(|err| AppError::IoError(format!("failed to read zip entry {i}: {err}")))?;
         let Some(enclosed) = entry.enclosed_name().map(|p| p.to_path_buf()) else {
             continue;
         };
@@ -1459,7 +1421,10 @@ fn find_pack_folders_under_config(config_dir: &Path) -> Vec<PathBuf> {
 
         // Pack folders may also sit directly under a config mod folder (or nested)
         // with pack.png / pack.json as the marker.
-        packs.extend(find_dirs_with_pack_markers(&mod_folder, MAX_PACKS_DIR_SEARCH_DEPTH));
+        packs.extend(find_dirs_with_pack_markers(
+            &mod_folder,
+            MAX_PACKS_DIR_SEARCH_DEPTH,
+        ));
     }
     packs.sort();
     packs.dedup();
@@ -1579,10 +1544,7 @@ fn directory_looks_like_pack(dir: &Path) -> bool {
     }
     // `icons/` and `geode.loader/` hold assets inside a pack — never treat them as pack roots
     // just because they contain .png/.plist (Sunix Icons layout).
-    if dir
-        .file_name()
-        .is_some_and(|n| is_pack_content_dir_name(n))
-    {
+    if dir.file_name().is_some_and(|n| is_pack_content_dir_name(n)) {
         return dir.join("pack.json").is_file() || find_pack_png_in_dir(dir).is_some();
     }
     if dir.join("pack.json").is_file() || find_pack_png_in_dir(dir).is_some() {
@@ -1716,7 +1678,11 @@ fn build_tree_children(
     let mut files = Vec::new();
     for entry in read.flatten() {
         let path = entry.path();
-        let Some(name) = path.file_name().and_then(|n| n.to_str()).map(str::to_string) else {
+        let Some(name) = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_string)
+        else {
             continue;
         };
         // Nested zips inside packages are not install sources; omit from preview.
@@ -1774,9 +1740,8 @@ fn apply_pack_install_overrides(unit: &InstallUnit, destination: &Path) -> Resul
 
     if let Some(metadata) = &unit.metadata {
         let pack_json_path = destination.join("pack.json");
-        let json = serde_json::to_string_pretty(metadata).map_err(|err| {
-            AppError::ParseError(format!("failed to serialize pack.json: {err}"))
-        })?;
+        let json = serde_json::to_string_pretty(metadata)
+            .map_err(|err| AppError::ParseError(format!("failed to serialize pack.json: {err}")))?;
         fs::write(pack_json_path, format!("{json}\n"))?;
     }
 
@@ -1807,11 +1772,7 @@ fn default_pack_metadata(folder_name: &str) -> PackMetadata {
     }
 }
 
-fn install_unit(
-    kind: InstallUnitKind,
-    source: &Path,
-    destination: &Path,
-) -> Result<(), AppError> {
+fn install_unit(kind: InstallUnitKind, source: &Path, destination: &Path) -> Result<(), AppError> {
     match kind {
         InstallUnitKind::Mod => {
             ensure_existing_user_file(source)?;
@@ -1886,7 +1847,8 @@ fn ensure_destination_allowed(
     mods_root: &Path,
 ) -> Result<(), AppError> {
     ensure_user_absolute_path(destination)?;
-    if path_is_under_prefix(destination, config_root) || path_is_under_prefix(destination, mods_root)
+    if path_is_under_prefix(destination, config_root)
+        || path_is_under_prefix(destination, mods_root)
     {
         return Ok(());
     }
@@ -2031,7 +1993,10 @@ mod tests {
         fs::create_dir_all(source.join("config").join("hiimjustin000.more_icons"))
             .expect("more icons");
         fs::write(
-            source.join("config").join("hiimjustin000.more_icons").join("settings.json"),
+            source
+                .join("config")
+                .join("hiimjustin000.more_icons")
+                .join("settings.json"),
             "{}",
         )
         .expect("settings");
@@ -2095,7 +2060,10 @@ mod tests {
         fs::write(other_pack.join("pack.png"), b"b").expect("png");
 
         // Direct pack folder under config/another.mod (no packs/ wrapper).
-        let direct = source.join("config").join("another.mod").join("Direct Pack");
+        let direct = source
+            .join("config")
+            .join("another.mod")
+            .join("Direct Pack");
         fs::create_dir_all(&direct).expect("direct");
         fs::write(direct.join("pack.png"), b"c").expect("png");
         fs::create_dir_all(direct.join("icons")).expect("icons");
@@ -2119,7 +2087,11 @@ mod tests {
             pack_labels.contains(&"Direct Pack"),
             "missing direct pack under config/*: {pack_labels:?}"
         );
-        for unit in plan.units.iter().filter(|u| u.kind == InstallUnitKind::Pack) {
+        for unit in plan
+            .units
+            .iter()
+            .filter(|u| u.kind == InstallUnitKind::Pack)
+        {
             assert!(unit.pack_png_path.is_some(), "pack.png for {}", unit.label);
         }
     }
@@ -2153,7 +2125,11 @@ mod tests {
             .iter()
             .filter(|u| u.kind == InstallUnitKind::Pack)
             .collect();
-        assert_eq!(pack_units.len(), 2, "expected both packs under nested packs/");
+        assert_eq!(
+            pack_units.len(),
+            2,
+            "expected both packs under nested packs/"
+        );
         for unit in pack_units {
             assert!(
                 unit.pack_png_path.is_some(),
@@ -2293,7 +2269,10 @@ mod tests {
         assert!(progresses.load(std::sync::atomic::Ordering::Relaxed) >= 1);
         assert!(dest.join("pack.json").is_file());
         assert!(dest.join("sheet.png").is_file());
-        assert!(!dest.join("old.txt").exists(), "overwrite should replace dir");
+        assert!(
+            !dest.join("old.txt").exists(),
+            "overwrite should replace dir"
+        );
     }
 
     #[test]
@@ -2453,13 +2432,12 @@ mod tests {
         make_gd_found(&gd);
         let layout = test_layout(&root, &gd);
         let outside = unique_temp("outside").join("evil");
-        let err = ensure_destination_allowed(
-            &outside,
-            &layout.geode_config(),
-            &layout.geode_mods(),
-        )
-        .expect_err("escape");
-        assert!(err.to_string().contains("geode/config") || err.to_string().contains("destination"));
+        let err =
+            ensure_destination_allowed(&outside, &layout.geode_config(), &layout.geode_mods())
+                .expect_err("escape");
+        assert!(
+            err.to_string().contains("geode/config") || err.to_string().contains("destination")
+        );
     }
 
     #[test]
@@ -2477,10 +2455,7 @@ mod tests {
         fs::write(packs.join("Split").join("pack.json"), "{}").expect("reserved json");
 
         let listed = list_installed_packs(&layout).expect("list");
-        let names: Vec<_> = listed
-            .iter()
-            .map(|p| p.folder_name.as_str())
-            .collect();
+        let names: Vec<_> = listed.iter().map(|p| p.folder_name.as_str()).collect();
         assert_eq!(names, vec!["Alpha", "Beta"]);
         assert!(listed.iter().any(|p| p.pack_png_path.is_some()));
         assert!(listed.iter().all(|p| p.id.starts_with("library:")));

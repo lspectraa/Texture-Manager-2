@@ -25,6 +25,28 @@ const tools = {
     lowGraphics: "Nach Low Graphics portieren",
     concurrentGamesheetsAndTextures: "Parallele Gamesheets und Texturen",
   },
+  upscaler: {
+    settings: "Upscale Settings",
+    settingsDescription:
+      "Choose target graphics tier",
+    model: "Upscale model",
+    modelHint: "Requires a Vulkan-compatible GPU. Run npm run fetch:upscaler-binaries for local builds.",
+    modelRealesrgan: "Real-ESRGAN AnimeVideo v3",
+    modelWaifu2x: "Waifu2x CUNet",
+    targetGraphics: "Target graphics",
+    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
+    targetUhd: "UHD",
+    targetHd: "HD",
+    concurrentGamesheets: "Concurrent gamesheets",
+    range1To4: "1–4 (GPU memory limited)",
+    convertToLatest: "Also convert to latest version after upscaling",
+    convertSection: "Convert After Upscale",
+    convertSectionDescription:
+      "Optional: inject missing latest-game frames into the upscaled pack",
+    previousGameVersion: "Previous game version",
+    convertHint:
+      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+  },
   merger: {
     options: "Merge-Optionen",
     optionsDescription: "Merge-Verhalten und Durchsatz anpassen",

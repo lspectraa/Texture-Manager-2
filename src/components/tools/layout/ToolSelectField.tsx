@@ -5,7 +5,7 @@ type ToolSelectFieldProps = {
   label: string;
   hint?: string;
   value: string;
-  options: readonly string[];
+  options: readonly string[] | readonly AppSelectOption[];
   onChange: (value: string) => void;
   disabled?: boolean;
 };
@@ -18,10 +18,9 @@ export function ToolSelectField({
   onChange,
   disabled = false,
 }: ToolSelectFieldProps) {
-  const selectOptions: AppSelectOption[] = options.map((option) => ({
-    value: option,
-    label: option,
-  }));
+  const selectOptions: AppSelectOption[] = options.map((option) =>
+    typeof option === "string" ? { value: option, label: option } : option,
+  );
 
   return (
     <ToolField label={label} hint={hint}>

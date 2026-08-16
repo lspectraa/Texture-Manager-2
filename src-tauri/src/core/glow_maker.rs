@@ -235,11 +235,7 @@ where
             continue;
         };
         let glow_source = if options.composite_layers {
-            match composite_icon_layers_for_glow(
-                &split.sprites,
-                &split.plist_root,
-                &primary_name,
-            ) {
+            match composite_icon_layers_for_glow(&split.sprites, &split.plist_root, &primary_name) {
                 Ok(Some((composite, _, _))) => composite,
                 Ok(None) => primary_sprite.clone(),
                 Err(err) => {
@@ -445,5 +441,6 @@ where
         output_dir: generated_glow_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }

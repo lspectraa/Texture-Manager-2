@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use image::imageops::{overlay, rotate270};
+use image::imageops::rotate270;
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 use plist::{Dictionary, Value};
 use rayon::prelude::*;
@@ -284,6 +284,12 @@ pub(crate) fn extract_frame_image(
 
 fn bake_offset(image: DynamicImage, offset_x: i32, offset_y: i32) -> RgbaImage {
     let sprite = image.to_rgba8();
+    // Zero offset: return pixels unchanged. `overlay` alpha-blends onto a clear canvas and
+    // can alter semi-transparent edge texels (breaking sprite-hash cache lookups).
+    if offset_x == 0 && offset_y == 0 {
+        return sprite;
+    }
+
     let width = sprite.width() + offset_x.unsigned_abs();
     let height = sprite.height() + offset_y.unsigned_abs();
 
@@ -300,7 +306,8 @@ fn bake_offset(image: DynamicImage, offset_x: i32, offset_y: i32) -> RgbaImage {
         0
     };
 
-    overlay(&mut canvas, &sprite, i64::from(paste_x), i64::from(paste_y));
+    // Copy (no blend) so RGB/A of the crop stay bit-identical after padding.
+    let _ = image::imageops::replace(&mut canvas, &sprite, i64::from(paste_x), i64::from(paste_y));
     canvas
 }
 

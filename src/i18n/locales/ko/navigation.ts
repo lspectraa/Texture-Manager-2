@@ -66,6 +66,11 @@ const navigation = {
       label: "포터",
       description: "텍스처 시트를 다른 크기로 조정합니다.",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "랜덤라이저",
       description: "재사용 가능한 시드로 아이콘을 섞습니다.",

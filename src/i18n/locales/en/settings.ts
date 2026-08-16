@@ -47,6 +47,9 @@ const settings = {
     gameFilesRoot: "Game-files root",
     splitCache: "Split cache",
     openCacheFolder: "Open cache folder",
+    regenerateSpriteIndex: "Regenerate sprite index",
+    regenerateSpriteIndexHint:
+      "Rebuilds only sheets already listed in sprite-index.json (does not scan all of Resources).",
     resetDefaults: "Reset defaults",
   },
   geometryDash: {

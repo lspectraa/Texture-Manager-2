@@ -46,6 +46,9 @@ const settings = {
     gameFilesRoot: "游戏文件根目录",
     splitCache: "拆分缓存",
     openCacheFolder: "打开缓存文件夹",
+    regenerateSpriteIndex: "重新生成精灵索引",
+    regenerateSpriteIndexHint:
+      "仅重建 sprite-index.json 中已记录的图集（不会扫描整个 Resources）。",
     resetDefaults: "恢复默认值",
   },
   geometryDash: {

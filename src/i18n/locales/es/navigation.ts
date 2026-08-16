@@ -68,6 +68,11 @@ const navigation: AppLocaleResources["navigation"] = {
       label: "Adaptador",
       description: "Redimensiona hojas de texturas para distintos tamaños.",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "Aleatorizador",
       description: "Mezcla iconos con una semilla que puedes reutilizar.",

@@ -346,9 +346,10 @@ fn gzip(bytes: &[u8]) -> Result<Vec<u8>, AppError> {
 fn get_texture_embed_bytes(dict: &Dictionary) -> Option<Vec<u8>> {
     match dict.get("textureImageData") {
         Some(Value::Data(bytes)) if !bytes.is_empty() => Some(bytes.clone()),
-        Some(Value::String(s)) if !s.trim().is_empty() => {
-            BASE64_STANDARD.decode(s.trim()).ok().filter(|b| !b.is_empty())
-        }
+        Some(Value::String(s)) if !s.trim().is_empty() => BASE64_STANDARD
+            .decode(s.trim())
+            .ok()
+            .filter(|b| !b.is_empty()),
         _ => None,
     }
 }
@@ -400,21 +401,17 @@ fn parse_particle_config(dict: &Dictionary) -> ParticleConfig {
     ParticleConfig {
         angle: dict_get_f64(dict, "angle").unwrap_or(def.angle),
         angle_variance: dict_get_f64(dict, "angleVariance").unwrap_or(def.angle_variance),
-        emitter_type: dict_get_i64(dict, "emitterType")
-            .unwrap_or(def.emitter_type as i64) as i32,
+        emitter_type: dict_get_i64(dict, "emitterType").unwrap_or(def.emitter_type as i64) as i32,
         duration: dict_get_f64(dict, "duration").unwrap_or(def.duration),
-        max_particles: dict_get_i64(dict, "maxParticles")
-            .unwrap_or(def.max_particles as i64) as i32,
-        source_positionx: dict_get_f64(dict, "sourcePositionx")
-            .unwrap_or(def.source_positionx),
-        source_positiony: dict_get_f64(dict, "sourcePositiony")
-            .unwrap_or(def.source_positiony),
+        max_particles: dict_get_i64(dict, "maxParticles").unwrap_or(def.max_particles as i64)
+            as i32,
+        source_positionx: dict_get_f64(dict, "sourcePositionx").unwrap_or(def.source_positionx),
+        source_positiony: dict_get_f64(dict, "sourcePositiony").unwrap_or(def.source_positiony),
         source_position_variancex: dict_get_f64(dict, "sourcePositionVariancex")
             .unwrap_or(def.source_position_variancex),
         source_position_variancey: dict_get_f64(dict, "sourcePositionVariancey")
             .unwrap_or(def.source_position_variancey),
-        particle_lifespan: dict_get_f64(dict, "particleLifespan")
-            .unwrap_or(def.particle_lifespan),
+        particle_lifespan: dict_get_f64(dict, "particleLifespan").unwrap_or(def.particle_lifespan),
         particle_lifespan_variance: dict_get_f64(dict, "particleLifespanVariance")
             .unwrap_or(def.particle_lifespan_variance),
         emission_rate: dict_get_f64(dict, "emissionRate").unwrap_or(def.emission_rate),
@@ -430,12 +427,10 @@ fn parse_particle_config(dict: &Dictionary) -> ParticleConfig {
             .unwrap_or(def.tangential_acceleration),
         tangential_acceleration_variance: dict_get_f64(dict, "tangentialAccelerationVariance")
             .unwrap_or(def.tangential_acceleration_variance),
-        rotation_is_dir: dict_get_bool(dict, "rotationIsDir")
-            .unwrap_or(def.rotation_is_dir),
-        position_type: dict_get_i64(dict, "positionType")
-            .unwrap_or(def.position_type as i64) as i32,
-        y_coord_flipped: dict_get_f64(dict, "yCoordFlipped")
-            .unwrap_or(def.y_coord_flipped),
+        rotation_is_dir: dict_get_bool(dict, "rotationIsDir").unwrap_or(def.rotation_is_dir),
+        position_type: dict_get_i64(dict, "positionType").unwrap_or(def.position_type as i64)
+            as i32,
+        y_coord_flipped: dict_get_f64(dict, "yCoordFlipped").unwrap_or(def.y_coord_flipped),
         opacity_modify_rgb: dict_get_bool(dict, "opacityModifyRGB")
             .unwrap_or(def.opacity_modify_rgb),
         max_radius: dict_get_f64(dict, "maxRadius")
@@ -450,16 +445,13 @@ fn parse_particle_config(dict: &Dictionary) -> ParticleConfig {
         min_radius_variance: dict_get_f64(dict, "minRadiusVariance")
             .or_else(|| dict_get_f64(dict, "endRadiusVariance"))
             .unwrap_or(def.min_radius_variance),
-        rotate_per_second: dict_get_f64(dict, "rotatePerSecond")
-            .unwrap_or(def.rotate_per_second),
+        rotate_per_second: dict_get_f64(dict, "rotatePerSecond").unwrap_or(def.rotate_per_second),
         rotate_per_second_variance: dict_get_f64(dict, "rotatePerSecondVariance")
             .unwrap_or(def.rotate_per_second_variance),
         start_color_red: dict_get_f64(dict, "startColorRed").unwrap_or(def.start_color_red),
-        start_color_green: dict_get_f64(dict, "startColorGreen")
-            .unwrap_or(def.start_color_green),
+        start_color_green: dict_get_f64(dict, "startColorGreen").unwrap_or(def.start_color_green),
         start_color_blue: dict_get_f64(dict, "startColorBlue").unwrap_or(def.start_color_blue),
-        start_color_alpha: dict_get_f64(dict, "startColorAlpha")
-            .unwrap_or(def.start_color_alpha),
+        start_color_alpha: dict_get_f64(dict, "startColorAlpha").unwrap_or(def.start_color_alpha),
         start_color_variance_red: dict_get_f64(dict, "startColorVarianceRed")
             .unwrap_or(def.start_color_variance_red),
         start_color_variance_green: dict_get_f64(dict, "startColorVarianceGreen")
@@ -471,8 +463,7 @@ fn parse_particle_config(dict: &Dictionary) -> ParticleConfig {
         finish_color_red: dict_get_f64(dict, "finishColorRed").unwrap_or(def.finish_color_red),
         finish_color_green: dict_get_f64(dict, "finishColorGreen")
             .unwrap_or(def.finish_color_green),
-        finish_color_blue: dict_get_f64(dict, "finishColorBlue")
-            .unwrap_or(def.finish_color_blue),
+        finish_color_blue: dict_get_f64(dict, "finishColorBlue").unwrap_or(def.finish_color_blue),
         finish_color_alpha: dict_get_f64(dict, "finishColorAlpha")
             .unwrap_or(def.finish_color_alpha),
         finish_color_variance_red: dict_get_f64(dict, "finishColorVarianceRed")
@@ -501,8 +492,7 @@ fn parse_particle_config(dict: &Dictionary) -> ParticleConfig {
             .unwrap_or(def.blend_func_source as i64) as i32,
         blend_func_destination: dict_get_i64(dict, "blendFuncDestination")
             .unwrap_or(def.blend_func_destination as i64) as i32,
-        texture_file_name: dict_get_string(dict, "textureFileName")
-            .unwrap_or_default(),
+        texture_file_name: dict_get_string(dict, "textureFileName").unwrap_or_default(),
     }
 }
 
@@ -533,16 +523,25 @@ fn config_to_plist_dict(config: &ParticleConfig) -> Dictionary {
     put_real!("sourcePositionVariancex", config.source_position_variancex);
     put_real!("sourcePositionVariancey", config.source_position_variancey);
     put_real!("particleLifespan", config.particle_lifespan);
-    put_real!("particleLifespanVariance", config.particle_lifespan_variance);
+    put_real!(
+        "particleLifespanVariance",
+        config.particle_lifespan_variance
+    );
     put_real!("emissionRate", config.emission_rate);
     put_real!("gravityx", config.gravityx);
     put_real!("gravityy", config.gravityy);
     put_real!("speed", config.speed);
     put_real!("speedVariance", config.speed_variance);
     put_real!("radialAcceleration", config.radial_acceleration);
-    put_real!("radialAccelerationVariance", config.radial_acceleration_variance);
+    put_real!(
+        "radialAccelerationVariance",
+        config.radial_acceleration_variance
+    );
     put_real!("tangentialAcceleration", config.tangential_acceleration);
-    put_real!("tangentialAccelerationVariance", config.tangential_acceleration_variance);
+    put_real!(
+        "tangentialAccelerationVariance",
+        config.tangential_acceleration_variance
+    );
     d.insert(
         "rotationIsDir".to_string(),
         Value::Integer(plist::Integer::from(i64::from(config.rotation_is_dir))),
@@ -572,13 +571,25 @@ fn config_to_plist_dict(config: &ParticleConfig) -> Dictionary {
     put_real!("finishColorBlue", config.finish_color_blue);
     put_real!("finishColorAlpha", config.finish_color_alpha);
     put_real!("finishColorVarianceRed", config.finish_color_variance_red);
-    put_real!("finishColorVarianceGreen", config.finish_color_variance_green);
+    put_real!(
+        "finishColorVarianceGreen",
+        config.finish_color_variance_green
+    );
     put_real!("finishColorVarianceBlue", config.finish_color_variance_blue);
-    put_real!("finishColorVarianceAlpha", config.finish_color_variance_alpha);
+    put_real!(
+        "finishColorVarianceAlpha",
+        config.finish_color_variance_alpha
+    );
     put_real!("startParticleSize", config.start_particle_size);
-    put_real!("startParticleSizeVariance", config.start_particle_size_variance);
+    put_real!(
+        "startParticleSizeVariance",
+        config.start_particle_size_variance
+    );
     put_real!("finishParticleSize", config.finish_particle_size);
-    put_real!("finishParticleSizeVariance", config.finish_particle_size_variance);
+    put_real!(
+        "finishParticleSizeVariance",
+        config.finish_particle_size_variance
+    );
     put_real!("rotationStart", config.rotation_start);
     put_real!("rotationStartVariance", config.rotation_start_variance);
     put_real!("rotationEnd", config.rotation_end);
@@ -619,9 +630,7 @@ pub fn particle_editor_open(path: &str) -> Result<ParticleOpenResult, AppError> 
     let texture_file_name = config.texture_file_name.clone();
     let embed_bytes = get_texture_embed_bytes(dict);
 
-    let plist_dir = plist_path
-        .parent()
-        .unwrap_or_else(|| Path::new(""));
+    let plist_dir = plist_path.parent().unwrap_or_else(|| Path::new(""));
 
     let (texture_png_data_url, texture_source, warnings) =
         resolve_particle_texture(plist_dir, &texture_file_name, embed_bytes);
@@ -667,9 +676,8 @@ pub fn particle_editor_save(request: ParticleSaveRequest) -> Result<(), AppError
             if !fname.is_empty() {
                 let sibling = plist_path.with_file_name(fname);
                 let png_bytes = decode_png_data_url(data_url)?;
-                fs::write(&sibling, &png_bytes).map_err(|e| {
-                    AppError::IoError(format!("failed to write sibling PNG: {e}"))
-                })?;
+                fs::write(&sibling, &png_bytes)
+                    .map_err(|e| AppError::IoError(format!("failed to write sibling PNG: {e}")))?;
             }
         }
     }
@@ -682,7 +690,6 @@ pub fn particle_editor_save(request: ParticleSaveRequest) -> Result<(), AppError
 /// Read an arbitrary image file (PNG, TIFF, …) from disk and return it as a PNG data URL.
 /// Used by the "Replace Texture" action in the editor.
 pub fn particle_editor_load_texture(path: &str) -> Result<String, AppError> {
-
     let file_path = parse_user_absolute_path(path)?;
     ensure_readable_image_file(&file_path)?;
 
@@ -708,24 +715,28 @@ pub fn particle_editor_load_texture(path: &str) -> Result<String, AppError> {
 mod tests {
     use super::*;
 
-    const KNOBBELBOY_PLIST: &str =
-        r"C:\Program Files (x86)\Steam\steamapps\common\Geometry Dash\geode\config\geode.texture-loader\packs\Knobbelboy Particles\dragEffect.plist";
+    const KNOBBELBOY_PLIST: &str = r"C:\Program Files (x86)\Steam\steamapps\common\Geometry Dash\geode\config\geode.texture-loader\packs\Knobbelboy Particles\dragEffect.plist";
 
-    const SUNIX_PLIST: &str =
-        r"C:\Program Files (x86)\Steam\steamapps\common\Geometry Dash\geode\config\geode.texture-loader\packs\Sunix Arrow Particles\dragEffect.plist";
+    const SUNIX_PLIST: &str = r"C:\Program Files (x86)\Steam\steamapps\common\Geometry Dash\geode\config\geode.texture-loader\packs\Sunix Arrow Particles\dragEffect.plist";
 
     #[test]
     fn verify_samples_knobbelboy_sibling_png() {
         let result = particle_editor_open(KNOBBELBOY_PLIST)
             .expect("particle_editor_open should succeed for Knobbelboy dragEffect.plist");
 
-        println!("[Knobbelboy] textureFileName = {}", result.texture_file_name);
+        println!(
+            "[Knobbelboy] textureFileName = {}",
+            result.texture_file_name
+        );
         println!("[Knobbelboy] textureSource   = {:?}", result.texture_source);
         println!(
             "[Knobbelboy] data URL present = {}",
             result.texture_png_data_url.is_some()
         );
-        println!("[Knobbelboy] maxParticles    = {}", result.config.max_particles);
+        println!(
+            "[Knobbelboy] maxParticles    = {}",
+            result.config.max_particles
+        );
         println!("[Knobbelboy] warnings        = {:?}", result.warnings);
 
         assert_eq!(
@@ -750,7 +761,10 @@ mod tests {
             "maxParticles should be positive"
         );
         assert!(
-            result.texture_file_name.to_ascii_lowercase().contains("estrella"),
+            result
+                .texture_file_name
+                .to_ascii_lowercase()
+                .contains("estrella"),
             "textureFileName should reference estrella.png"
         );
     }

@@ -65,6 +65,11 @@ const navigation = {
       label: "移植器",
       description: "把贴图 sheet 缩放到其他尺寸。",
     },
+    upscaler: {
+      label: "Upscaler",
+      description:
+        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+    },
     randomizer: {
       label: "随机器",
       description: "使用可复用的随机种子打乱图标。",

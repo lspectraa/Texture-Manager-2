@@ -129,14 +129,18 @@ fn frames_dictionary<'a>(root: &'a Value) -> Result<&'a Dictionary, AppError> {
     root.as_dictionary()
         .and_then(|dict| dict.get("frames"))
         .and_then(Value::as_dictionary)
-        .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
+        .ok_or_else(|| {
+            AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
+        })
 }
 
 fn frames_dictionary_mut(root: &mut Value) -> Result<&mut Dictionary, AppError> {
     root.as_dictionary_mut()
         .and_then(|dict| dict.get_mut("frames"))
         .and_then(Value::as_dictionary_mut)
-        .ok_or_else(|| AppError::ParseError("plist missing top-level `frames` dictionary".to_string()))
+        .ok_or_else(|| {
+            AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
+        })
 }
 
 fn parse_two_uints_loose(raw: &str) -> Option<(u32, u32)> {
@@ -153,7 +157,10 @@ fn parse_two_uints_loose(raw: &str) -> Option<(u32, u32)> {
 fn sprite_size_from_frame_dict(frame_dict: &Dictionary) -> Option<GeodeButtonsTargetSize> {
     let raw = frame_dict.get("spriteSize")?.as_string()?;
     let (w, h) = parse_two_uints_loose(raw)?;
-    Some(GeodeButtonsTargetSize { width: w, height: h })
+    Some(GeodeButtonsTargetSize {
+        width: w,
+        height: h,
+    })
 }
 
 fn push_frame(
@@ -163,12 +170,14 @@ fn push_frame(
     frame_name: &str,
     sprite_size: GeodeButtonsTargetSize,
 ) {
-    let entry = groups.entry(group_id.to_string()).or_insert_with(|| GeodeButtonsTargetGroup {
-        id: group_id.to_string(),
-        label: group_label.to_string(),
-        frames: Vec::new(),
-        preview_png_data_url: None,
-    });
+    let entry = groups
+        .entry(group_id.to_string())
+        .or_insert_with(|| GeodeButtonsTargetGroup {
+            id: group_id.to_string(),
+            label: group_label.to_string(),
+            frames: Vec::new(),
+            preview_png_data_url: None,
+        });
     entry.frames.push(GeodeButtonsTargetFrame {
         name: frame_name.to_string(),
         sprite_size,
@@ -227,9 +236,10 @@ pub fn geode_buttons_target_index(
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
 
     let frames = frames_dictionary(&root)?;
-    let circle_re =
-        Regex::new(r"^geode\.loader/baseCircle_(?P<size>[A-Za-z]+?)(?P<alt>Alt)?_(?P<color>[A-Za-z]+)\.png$")
-            .map_err(|err| AppError::ParseError(format!("failed to compile regex: {err}")))?;
+    let circle_re = Regex::new(
+        r"^geode\.loader/baseCircle_(?P<size>[A-Za-z]+?)(?P<alt>Alt)?_(?P<color>[A-Za-z]+)\.png$",
+    )
+    .map_err(|err| AppError::ParseError(format!("failed to compile regex: {err}")))?;
 
     let mut groups: BTreeMap<String, GeodeButtonsTargetGroup> = BTreeMap::new();
 
@@ -362,9 +372,7 @@ pub fn resolve_geode_buttons_default_sheet(
     }
     const STEMS: [&str; 3] = ["BlankSheet-uhd", "BlankSheet-hd", "BlankSheet"];
     for stem in STEMS {
-        if let Some(pair) =
-            find_current_sheet_for_input(layout, Path::new("geode.loader"), stem)?
-        {
+        if let Some(pair) = find_current_sheet_for_input(layout, Path::new("geode.loader"), stem)? {
             return Ok(Some(pair));
         }
     }
@@ -388,7 +396,9 @@ pub fn resolve_geode_buttons_default_input_dir(layout: &GameFilesLayout) -> Stri
 }
 
 fn path_is_under(parent: &Path, child: &Path) -> bool {
-    let parent_norm = parent.canonicalize().unwrap_or_else(|_| parent.to_path_buf());
+    let parent_norm = parent
+        .canonicalize()
+        .unwrap_or_else(|_| parent.to_path_buf());
     let child_norm = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
     child_norm.strip_prefix(&parent_norm).is_ok()
 }
@@ -524,11 +534,7 @@ fn apply_value_delta_rgb(r: f32, g: f32, b: f32, val_delta: f32) -> (f32, f32, f
     let d = clamp01(val_delta.abs());
     if val_delta >= 0.0 {
         // Photoshop-like brightness: +1.0 pushes every channel to white.
-        (
-            r + (1.0 - r) * d,
-            g + (1.0 - g) * d,
-            b + (1.0 - b) * d,
-        )
+        (r + (1.0 - r) * d, g + (1.0 - g) * d, b + (1.0 - b) * d)
     } else {
         // -1.0 pushes every channel to black.
         (r * (1.0 - d), g * (1.0 - d), b * (1.0 - d))
@@ -606,7 +612,9 @@ fn opaque_content_dims(img: &RgbaImage) -> (u32, u32) {
     ((max_x - min_x + 1).max(1), (max_y - min_y + 1).max(1))
 }
 
-fn build_family_largest_dims(source_sprites: &BTreeMap<String, RgbaImage>) -> BTreeMap<String, (u32, u32)> {
+fn build_family_largest_dims(
+    source_sprites: &BTreeMap<String, RgbaImage>,
+) -> BTreeMap<String, (u32, u32)> {
     let mut out: BTreeMap<String, (u32, u32)> = BTreeMap::new();
     for (name, img) in source_sprites {
         let Some(family_id) = frame_family_id(name.as_str()) else {
@@ -726,7 +734,9 @@ fn frame_family_id(frame_name: &str) -> Option<String> {
     Some(format!("{base_type}:{}", variant_slug(&variant)))
 }
 
-fn frame_variant_from_color_suffix(frame_name: &str) -> Option<crate::core::contracts::GeodeButtonsVariant> {
+fn frame_variant_from_color_suffix(
+    frame_name: &str,
+) -> Option<crate::core::contracts::GeodeButtonsVariant> {
     use crate::core::contracts::GeodeButtonsVariant as V;
     let suffix = frame_name
         .rsplit_once('_')
@@ -760,11 +770,7 @@ fn resolve_hsv_delta(
     }
     for rule in &options.variant_rules {
         if rule.variant == variant {
-            return (
-                rule.hsv.hue_deg,
-                rule.hsv.sat_delta,
-                rule.hsv.val_delta,
-            );
+            return (rule.hsv.hue_deg, rule.hsv.sat_delta, rule.hsv.val_delta);
         }
     }
     (0.0, 0.0, 0.0)
@@ -814,9 +820,7 @@ fn load_template_rgba(path: &str) -> Result<RgbaImage, AppError> {
     let img = image::open(&p).map_err(|err| {
         AppError::ParseError(format!(
             "failed to open template png `{}`: {err}",
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("template")
+            p.file_name().and_then(|n| n.to_str()).unwrap_or("template")
         ))
     })?;
     Ok(img.to_rgba8())
@@ -830,9 +834,7 @@ pub fn geode_buttons_template_preview_data_url(path: &str) -> Result<String, App
     let img = image::open(&p).map_err(|err| {
         AppError::ParseError(format!(
             "failed to open template image `{}`: {err}",
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("template")
+            p.file_name().and_then(|n| n.to_str()).unwrap_or("template")
         ))
     })?;
     let mut bytes = Vec::new();
@@ -841,9 +843,7 @@ pub fn geode_buttons_template_preview_data_url(path: &str) -> Result<String, App
         img.write_to(&mut cursor, ImageFormat::Png).map_err(|err| {
             AppError::ParseError(format!(
                 "failed to encode template preview `{}`: {err}",
-                p.file_name()
-                    .and_then(|n| n.to_str())
-                    .unwrap_or("template")
+                p.file_name().and_then(|n| n.to_str()).unwrap_or("template")
             ))
         })?;
     }
@@ -942,7 +942,8 @@ where
         if requires_variant && variant.is_none() {
             issues.push(ReportIssue {
                 level: ReportLevel::Warning,
-                message: "frame color suffix not mapped to a UI variant; leaving original pixels".to_string(),
+                message: "frame color suffix not mapped to a UI variant; leaving original pixels"
+                    .to_string(),
                 file: Some(frame_name.clone()),
             });
             continue;
@@ -958,35 +959,37 @@ where
             continue;
         };
 
-        let base_raw = if let Some(template_path) = template_path_for_frame(options, frame_name.as_str()) {
-            if let Some(img) = template_cache.get(&template_path) {
-                img.clone()
+        let base_raw =
+            if let Some(template_path) = template_path_for_frame(options, frame_name.as_str()) {
+                if let Some(img) = template_cache.get(&template_path) {
+                    img.clone()
+                } else {
+                    let loaded = load_template_rgba(&template_path)?;
+                    template_cache.insert(template_path.clone(), loaded.clone());
+                    loaded
+                }
             } else {
-                let loaded = load_template_rgba(&template_path)?;
-                template_cache.insert(template_path.clone(), loaded.clone());
-                loaded
-            }
-        } else {
-            if let Some(img) = family_base_cache.get(&family_id) {
-                img.clone()
-            } else {
-                let Some(fallback) = largest_family_sprite(&family_id, &source_sprites) else {
-                    issues.push(ReportIssue {
-                        level: ReportLevel::Warning,
-                        message: format!("no source frames found for family `{family_id}`"),
-                        file: Some(frame_name.clone()),
-                    });
-                    continue;
-                };
-                family_base_cache.insert(family_id.to_string(), fallback.clone());
-                fallback
-            }
-        };
+                if let Some(img) = family_base_cache.get(&family_id) {
+                    img.clone()
+                } else {
+                    let Some(fallback) = largest_family_sprite(&family_id, &source_sprites) else {
+                        issues.push(ReportIssue {
+                            level: ReportLevel::Warning,
+                            message: format!("no source frames found for family `{family_id}`"),
+                            file: Some(frame_name.clone()),
+                        });
+                        continue;
+                    };
+                    family_base_cache.insert(family_id.to_string(), fallback.clone());
+                    fallback
+                }
+            };
 
         // Apply the stored largest-relative ratio (input is assumed to be the family largest).
         let mut out = downscale_by_stored_ratio(&base_raw, ratio);
 
-        let effective_variant = variant.unwrap_or(crate::core::contracts::GeodeButtonsVariant::Primary);
+        let effective_variant =
+            variant.unwrap_or(crate::core::contracts::GeodeButtonsVariant::Primary);
         let (h, s, val) = resolve_hsv_delta(options, family_id.as_str(), effective_variant);
         apply_hsv_delta(&mut out, h, s, val);
 
@@ -1054,6 +1057,7 @@ where
         output_dir: out_dir.to_string_lossy().to_string(),
         elapsed_ms: started_at.elapsed().as_millis(),
         issues,
+        ..Default::default()
     })
 }
 
@@ -1096,7 +1100,15 @@ mod tests {
         // Both apply against the same largest baseline (300), not mid→small.
         assert_eq!(mid.apply_dim(300), 201);
         assert_eq!(small.apply_dim(300), 99);
-        assert_eq!(ScaleRatio { numer: 1, denom: 3, scale: 1.0 / 3.0 }.apply_dim(100), 33);
+        assert_eq!(
+            ScaleRatio {
+                numer: 1,
+                denom: 3,
+                scale: 1.0 / 3.0
+            }
+            .apply_dim(100),
+            33
+        );
     }
 
     #[test]
@@ -1116,14 +1128,8 @@ mod tests {
             }
         }
         let mut sprites = BTreeMap::new();
-        sprites.insert(
-            "geode.loader/baseCircle_Large_Green.png".to_string(),
-            large,
-        );
-        sprites.insert(
-            "geode.loader/baseCircle_Small_Green.png".to_string(),
-            small,
-        );
+        sprites.insert("geode.loader/baseCircle_Large_Green.png".to_string(), large);
+        sprites.insert("geode.loader/baseCircle_Small_Green.png".to_string(), small);
         let largest = build_family_largest_dims(&sprites);
         assert_eq!(largest.get("circle:primary").copied(), Some((20, 20)));
         let ratios = build_family_frame_ratios(&sprites, &largest);
@@ -1212,7 +1218,8 @@ mod tests {
         let custom = unique_temp_dir("custom");
         fs::create_dir_all(gd.join("Resources")).expect("resources");
         fs::create_dir_all(gd.join("Resources").join("icons")).expect("icons");
-        fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader")).expect("loader");
+        fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader"))
+            .expect("loader");
         fs::create_dir_all(&custom).expect("custom");
 
         let layout = test_layout(&root, &gd);
@@ -1251,7 +1258,8 @@ mod tests {
 
         assert!(layout.geometry_dash_found());
         assert!(geode_buttons_plist_is_under_game_files(&layout, &plist));
-        let cached = resolve_geode_buttons_cached_sheet_candidate(&layout, &plist).expect("resolve");
+        let cached =
+            resolve_geode_buttons_cached_sheet_candidate(&layout, &plist).expect("resolve");
         let default = resolve_geode_buttons_default_sheet(&layout).expect("default");
         assert!(
             cached.is_some() || default.is_some(),
@@ -1268,7 +1276,8 @@ mod tests {
         let gd = unique_temp_dir("gd3");
         fs::create_dir_all(gd.join("Resources")).expect("resources");
         fs::create_dir_all(gd.join("Resources").join("icons")).expect("icons");
-        fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader")).expect("loader");
+        fs::create_dir_all(gd.join("geode").join("resources").join("geode.loader"))
+            .expect("loader");
         let layout = test_layout(&root, &gd);
         let missing = gd
             .join("geode")
@@ -1287,4 +1296,3 @@ mod tests {
         let _ = fs::remove_dir_all(&gd);
     }
 }
-

@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root, GameFilesLayout,
+    detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root,
+    GameFilesLayout,
 };
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::safe_fs::{
@@ -392,7 +393,9 @@ pub fn add_custom_app_background(source_path: &Path) -> Result<AppBackgroundOpti
         .into_iter()
         .find(|option| option.id == id)
         .ok_or_else(|| {
-            AppError::IoError("Custom background was written but could not be rediscovered.".to_string())
+            AppError::IoError(
+                "Custom background was written but could not be rediscovered.".to_string(),
+            )
         })
 }
 
@@ -714,11 +717,7 @@ mod tests {
                 },
             )
             .expect("apply language");
-            let expected = code
-                .split(['-', '_'])
-                .next()
-                .unwrap()
-                .to_ascii_lowercase();
+            let expected = code.split(['-', '_']).next().unwrap().to_ascii_lowercase();
             assert_eq!(next.language, expected);
         }
     }
