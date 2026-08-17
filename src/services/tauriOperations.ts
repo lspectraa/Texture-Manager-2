@@ -38,6 +38,8 @@ export const getPhaseDefaults = async (): Promise<PhaseDefaults> => {
         convertToLatest: false,
         gameVersion: "",
         sheetConcurrency: 1,
+        glowThickness: 4,
+        glowTolerance: 32,
       },
     };
   }

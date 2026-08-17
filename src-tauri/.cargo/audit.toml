@@ -1,0 +1,7 @@
+[advisories]
+ignore = [
+    # Transitive Tauri 2 Linux GTK3 stack (gtk 0.18 / webkit2gtk 2.0) cannot
+    # take glib 0.20.0. src-tauri/vendor/glib backports the VariantStrIter
+    # `&mut` fix from gtk-rs-core#1343 onto 0.18.5 (RUSTSEC-2024-0429).
+    "RUSTSEC-2024-0429",
+]

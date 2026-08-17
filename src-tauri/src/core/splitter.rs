@@ -11,6 +11,7 @@ use crate::core::contracts::SplitterOptions;
 use crate::core::discovery::SheetCandidate;
 use crate::core::errors::AppError;
 use crate::core::image_io::save_dynamic_png_fast;
+use crate::core::plist::{denormalize_plist_if_format2, normalize_plist_frames_to_format3};
 use crate::core::report::{ReportIssue, ReportLevel};
 use crate::core::safe_fs::{is_safe_path_segment, path_from_slashes};
 
@@ -37,6 +38,7 @@ where
 {
     let mut plist_root = Value::from_file(&candidate.plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    normalize_plist_frames_to_format3(&mut plist_root);
     let source_image = image::open(&candidate.png_path)
         .map_err(|err| AppError::ParseError(format!("failed to open png: {err}")))?;
 
@@ -100,6 +102,7 @@ where
 {
     let mut plist_root = Value::from_file(&candidate.plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    normalize_plist_frames_to_format3(&mut plist_root);
     let source_image = image::open(&candidate.png_path)
         .map_err(|err| AppError::ParseError(format!("failed to open png: {err}")))?;
 
@@ -174,6 +177,7 @@ where
     }
 
     let plist_output_path = output_dir.join(format!("{}.plist", candidate.stem));
+    denormalize_plist_if_format2(&mut plist_root);
     plist_root
         .to_file_xml(plist_output_path)
         .map_err(|err| AppError::IoError(err.to_string()))?;
@@ -396,4 +400,61 @@ fn parse_numbers(value: &str) -> Result<Vec<f32>, AppError> {
         numbers.push(parsed);
     }
     Ok(numbers)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::extract_frame_image;
+    use crate::core::contracts::SplitterOptions;
+    use crate::core::plist::normalize_plist_frames_to_format3;
+    use image::{Rgba, RgbaImage};
+    use plist::{Dictionary, Value};
+
+    #[test]
+    fn extract_frame_image_reads_normalized_format2_rotated_frame() {
+        let mut frame = Dictionary::new();
+        frame.insert(
+            "frame".to_string(),
+            Value::String("{{1,2},{4,3}}".to_string()),
+        );
+        frame.insert("offset".to_string(), Value::String("{0,0}".to_string()));
+        frame.insert("rotated".to_string(), Value::Boolean(true));
+        frame.insert(
+            "sourceColorRect".to_string(),
+            Value::String("{{0,0},{4,3}}".to_string()),
+        );
+        frame.insert("sourceSize".to_string(), Value::String("{4,3}".to_string()));
+
+        let mut frames = Dictionary::new();
+        frames.insert("bird_01_001.png".to_string(), Value::Dictionary(frame));
+        let mut metadata = Dictionary::new();
+        metadata.insert("format".to_string(), Value::Integer(2.into()));
+        let mut root = Dictionary::new();
+        root.insert("frames".to_string(), Value::Dictionary(frames));
+        root.insert("metadata".to_string(), Value::Dictionary(metadata));
+        let mut plist_root = Value::Dictionary(root);
+        normalize_plist_frames_to_format3(&mut plist_root);
+
+        let frame_dict = plist_root
+            .as_dictionary_mut()
+            .and_then(|dict| dict.get_mut("frames"))
+            .and_then(Value::as_dictionary_mut)
+            .and_then(|frames| frames.get_mut("bird_01_001.png"))
+            .and_then(Value::as_dictionary_mut)
+            .expect("frame");
+
+        let mut atlas = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 0]));
+        atlas.put_pixel(1, 2, Rgba([255, 0, 0, 255]));
+        let extracted = extract_frame_image(
+            &image::DynamicImage::ImageRgba8(atlas),
+            frame_dict,
+            &SplitterOptions {
+                sheet_concurrency: 1,
+                skip_icons: false,
+            },
+        )
+        .expect("extract");
+        assert!(extracted.width() >= 1);
+        assert!(extracted.height() >= 1);
+    }
 }

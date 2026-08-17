@@ -11,6 +11,7 @@ use crate::core::contracts::{DimensionOverride, MergerOptions};
 use crate::core::errors::AppError;
 use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::image_io::save_rgba_png_fast;
+use crate::core::plist::{denormalize_plist_if_format2, normalize_plist_frames_to_format3};
 use crate::core::report::{ReportIssue, ReportLevel};
 use crate::core::safe_fs::{is_safe_path_segment, path_from_slashes};
 
@@ -65,6 +66,7 @@ where
 {
     let mut plist_root = Value::from_file(plist_file)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    normalize_plist_frames_to_format3(&mut plist_root);
 
     let root_dict = plist_root.as_dictionary_mut().ok_or(AppError::ParseError(
         "plist root must be a dictionary".to_string(),
@@ -192,6 +194,7 @@ where
             format!("{{{},{} }}", packed_width.max(1), packed_height.max(1)).replace(" ", ""),
         ),
     );
+    denormalize_plist_if_format2(&mut plist_root);
 
     fs::create_dir_all(destination_dir)?;
     let output_base_name = plist_file
@@ -352,6 +355,7 @@ where
             format!("{{{},{} }}", packed_width.max(1), packed_height.max(1)).replace(" ", ""),
         ),
     );
+    denormalize_plist_if_format2(plist_root);
 
     Ok((
         atlas,

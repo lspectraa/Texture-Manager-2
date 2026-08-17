@@ -805,8 +805,8 @@ fn texture_file_name_from_plist(plist_path: &Path) -> Option<String> {
     None
 }
 
-/// Find a latest placeholder sheet for an input pack sheet under the Steam/Geode source tree.
-pub fn find_current_sheet_for_input(
+/// Locate a latest placeholder sheet without touching the sprite-index JSON.
+pub fn locate_current_sheet_pair(
     layout: &GameFilesLayout,
     relative_dir: &Path,
     stem: &str,
@@ -828,21 +828,33 @@ pub fn find_current_sheet_for_input(
     };
 
     let png_path = resolve_png_beside_plist(&plist_path);
-    let candidate = SheetCandidate {
+    if !plist_path.is_file() || !png_path.is_file() {
+        return Ok(None);
+    }
+    Ok(Some(SheetCandidate {
         stem: stem.to_string(),
         relative_dir: relative_dir.to_path_buf(),
-        plist_path: plist_path.clone(),
-        png_path: png_path.clone(),
+        plist_path,
+        png_path,
+    }))
+}
+
+/// Find a latest placeholder sheet for an input pack sheet under the Steam/Geode source tree.
+pub fn find_current_sheet_for_input(
+    layout: &GameFilesLayout,
+    relative_dir: &Path,
+    stem: &str,
+) -> Result<Option<SheetCandidate>, AppError> {
+    let Some(candidate) = locate_current_sheet_pair(layout, relative_dir, stem)? else {
+        return Ok(None);
     };
-    if plist_path.is_file() && png_path.is_file() {
-        crate::core::sprite_index::try_index_sheet_pair(
-            layout,
-            relative_dir,
-            stem,
-            &plist_path,
-            &png_path,
-        );
-    }
+    crate::core::sprite_index::try_index_sheet_pair(
+        layout,
+        relative_dir,
+        stem,
+        &candidate.plist_path,
+        &candidate.png_path,
+    );
     Ok(Some(candidate))
 }
 

@@ -305,6 +305,8 @@ function App() {
     return CONVERT_VERSION_OPTIONS[0] ?? "";
   });
   const [upscalerSheetConcurrency, setUpscalerSheetConcurrency] = useState(1);
+  const [upscalerGlowThickness, setUpscalerGlowThickness] = useState(4);
+  const [upscalerGlowTolerance, setUpscalerGlowTolerance] = useState(32);
 
   const [mergerInputDir, setMergerInputDir] = useState("");
   const [mergerOutputDir, setMergerOutputDir] = useState("");
@@ -333,7 +335,7 @@ function App() {
   const [glowThickness, setGlowThickness] = useState(4);
   const [glowTolerance, setGlowTolerance] = useState(6);
   const [glowRainbow, setGlowRainbow] = useState(false);
-  const [glowCompositeLayers, setGlowCompositeLayers] = useState(false);
+  const [glowCompositeLayers, setGlowCompositeLayers] = useState(true);
 
   const [geodeButtonsInputDir, setGeodeButtonsInputDir] = useState("");
   const [geodeButtonsOutputDir, setGeodeButtonsOutputDir] = useState("");
@@ -398,6 +400,12 @@ function App() {
           setUpscalerGameVersion(response.upscaler.gameVersion);
         }
         setUpscalerSheetConcurrency(1);
+        if (typeof response.upscaler?.glowThickness === "number") {
+          setUpscalerGlowThickness(response.upscaler.glowThickness);
+        }
+        if (typeof response.upscaler?.glowTolerance === "number") {
+          setUpscalerGlowTolerance(response.upscaler.glowTolerance);
+        }
         setMergerSheetConcurrency(
           response.merger.sheetConcurrency || concurrency,
         );
@@ -721,6 +729,8 @@ function App() {
           convertToLatest: upscalerConvertToLatest,
           gameVersion: upscalerGameVersion,
           sheetConcurrency: upscalerSheetConcurrency,
+          glowThickness: Math.min(128, Math.max(1, upscalerGlowThickness)),
+          glowTolerance: Math.min(255, Math.max(0, upscalerGlowTolerance)),
         },
       };
     }
@@ -1254,11 +1264,15 @@ function App() {
             convertToLatest={upscalerConvertToLatest}
             gameVersion={upscalerGameVersion}
             versionOptions={CONVERT_VERSION_OPTIONS}
+            glowThickness={upscalerGlowThickness}
+            glowTolerance={upscalerGlowTolerance}
             onInputDirChange={setUpscalerInputDir}
             onOutputDirChange={setUpscalerOutputDir}
             onTargetGraphicsChange={setUpscalerTargetGraphics}
             onConvertToLatestChange={setUpscalerConvertToLatest}
             onGameVersionChange={setUpscalerGameVersion}
+            onGlowThicknessChange={setUpscalerGlowThickness}
+            onGlowToleranceChange={setUpscalerGlowTolerance}
             pickFolder={pickFolder}
           />
         );

@@ -14,9 +14,10 @@ use sha2::{Digest, Sha256};
 use crate::core::contracts::UpscalerTargetGraphics;
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    find_current_sheet_for_input, resolve_current_source_dir, GameFilesLayout,
+    locate_current_sheet_pair, resolve_current_source_dir, GameFilesLayout,
 };
 use crate::core::merger::trim_transparent_rgba;
+use crate::core::plist::normalize_plist_frames_to_format3;
 use crate::core::porter::{port_source_tier_from_stem, PortSourceGraphicsTier};
 use crate::core::safe_fs::ensure_no_parent_dir_components;
 
@@ -682,15 +683,17 @@ pub fn save_index(layout: &GameFilesLayout, file: &SpriteIndexFile) -> Result<()
 
 fn with_index_mut<R>(
     layout: &GameFilesLayout,
-    f: impl FnOnce(&mut SpriteIndexFile) -> Result<R, AppError>,
+    f: impl FnOnce(&mut SpriteIndexFile) -> Result<(R, bool), AppError>,
 ) -> Result<R, AppError> {
     let _guard = index_lock()
         .lock()
         .map_err(|_| AppError::InvalidOperation("sprite index lock poisoned"))?;
     let mut file = load_index(layout)?;
-    let result = f(&mut file)?;
-    file.version = INDEX_VERSION;
-    save_index(layout, &file)?;
+    let (result, dirty) = f(&mut file)?;
+    if dirty {
+        file.version = INDEX_VERSION;
+        save_index(layout, &file)?;
+    }
     Ok(result)
 }
 
@@ -806,12 +809,13 @@ fn read_sheet_frames(
     plist_path: &Path,
     png_path: &Path,
 ) -> Result<(Value, RgbaImage, Dictionary), AppError> {
-    let plist_root = Value::from_file(plist_path).map_err(|err| {
+    let mut plist_root = Value::from_file(plist_path).map_err(|err| {
         AppError::ParseError(format!(
             "failed to read plist `{}`: {err}",
             plist_path.to_string_lossy()
         ))
     })?;
+    normalize_plist_frames_to_format3(&mut plist_root);
     let atlas = image::open(png_path)
         .map_err(|err| {
             AppError::IoError(format!("failed to open `{}`: {err}", png_path.display()))
@@ -873,9 +877,8 @@ fn index_sheet_pair_inner(
                 && existing.content_hash_version == CONTENT_HASH_VERSION
                 && existing.sprite_count > 0;
             if up_to_date {
-                return Ok(0);
+                return Ok((0, false));
             }
-            // Drop stale sprite entries pointing at this sheet.
             file.sprites.retain(|_, meta| meta.sheet_key != key);
         }
 
@@ -892,7 +895,6 @@ fn index_sheet_pair_inner(
             let hash = hash_trimmed_rgba(&raw);
             if let Some(existing) = file.sprites.get(&hash) {
                 if existing.sheet_key != key || existing.sprite_name != *sprite_name {
-                    // Collision: keep first entry.
                     continue;
                 }
             }
@@ -922,7 +924,105 @@ fn index_sheet_pair_inner(
                 sprite_count: added as u32,
             },
         );
-        Ok(added)
+        Ok((added, true))
+    })
+}
+
+/// Index many sheets with one JSON load/save. Used for 2.0 GS02 → modern `icons/{id}` probing.
+pub fn index_sheet_pairs_batch(
+    layout: &GameFilesLayout,
+    sheets: &[(PathBuf, String, PathBuf, PathBuf)],
+) -> Result<usize, AppError> {
+    if sheets.is_empty() {
+        return Ok(0);
+    }
+    let prepared: Vec<(String, String, String, PortSourceGraphicsTier, String, PathBuf, PathBuf, PathBuf, String)> =
+        {
+            let mut out = Vec::with_capacity(sheets.len());
+            for (relative_dir, stem, plist_path, png_path) in sheets {
+                ensure_no_parent_dir_components(relative_dir)?;
+                if !plist_path.is_file() || !png_path.is_file() {
+                    continue;
+                }
+                let plist_sha = sha256_file(plist_path)?;
+                let png_sha = sha256_file(png_path)?;
+                out.push((
+                    sheet_key(relative_dir, stem),
+                    plist_sha,
+                    png_sha,
+                    port_source_tier_from_stem(stem),
+                    base_stem_from_stem(stem),
+                    relative_dir.clone(),
+                    plist_path.clone(),
+                    png_path.clone(),
+                    stem.clone(),
+                ));
+            }
+            out
+        };
+
+    with_index_mut(layout, |file| {
+        let mut added_total = 0usize;
+        let mut dirty = false;
+        for (key, plist_sha, png_sha, tier, base, relative_dir, plist_path, png_path, stem) in
+            &prepared
+        {
+            if let Some(existing) = file.indexed_sheets.get(key) {
+                let up_to_date = existing.plist_sha256 == *plist_sha
+                    && existing.png_sha256 == *png_sha
+                    && existing.content_hash_version == CONTENT_HASH_VERSION
+                    && existing.sprite_count > 0;
+                if up_to_date {
+                    continue;
+                }
+                file.sprites.retain(|_, meta| &meta.sheet_key != key);
+            }
+
+            let (_root, atlas, frames) = read_sheet_frames(plist_path, png_path)?;
+            let mut added = 0usize;
+            for (sprite_name, frame_val) in frames.iter() {
+                let Some(frame_dict) = frame_val.as_dictionary() else {
+                    continue;
+                };
+                let Ok(raw) = extract_frame_rgba_raw(&atlas, frame_dict) else {
+                    continue;
+                };
+                let trimmed = trim_transparent_rgba(&raw);
+                let hash = hash_trimmed_rgba(&raw);
+                if let Some(existing) = file.sprites.get(&hash) {
+                    if existing.sheet_key != *key || existing.sprite_name != *sprite_name {
+                        continue;
+                    }
+                }
+                file.sprites.insert(
+                    hash,
+                    IndexedSpriteMeta {
+                        sheet_key: key.clone(),
+                        sprite_name: sprite_name.clone(),
+                        tier: tier_label(*tier).to_string(),
+                        width: trimmed.width(),
+                        height: trimmed.height(),
+                    },
+                );
+                added += 1;
+            }
+            file.indexed_sheets.insert(
+                key.clone(),
+                IndexedSheetMeta {
+                    plist_sha256: plist_sha.clone(),
+                    png_sha256: png_sha.clone(),
+                    relative_dir: relative_dir_string(relative_dir),
+                    stem: stem.clone(),
+                    base_stem: base.clone(),
+                    tier: tier_label(*tier).to_string(),
+                    content_hash_version: CONTENT_HASH_VERSION,
+                    sprite_count: added as u32,
+                },
+            );
+            added_total = added_total.saturating_add(added);
+            dirty = true;
+        }
+        Ok((added_total, dirty))
     })
 }
 
@@ -1112,7 +1212,7 @@ pub fn resolve_target_sheet_paths(
     target_tier: PortSourceGraphicsTier,
 ) -> Result<(PathBuf, PathBuf, String), AppError> {
     let target_stem = stem_for_tier(&hit.base_stem, target_tier);
-    if let Some(pair) = find_current_sheet_for_input(layout, &hit.relative_dir, &target_stem)? {
+    if let Some(pair) = locate_current_sheet_pair(layout, &hit.relative_dir, &target_stem)? {
         if pair.plist_path.is_file() && pair.png_path.is_file() {
             return Ok((pair.plist_path, pair.png_path, target_stem));
         }
@@ -1345,7 +1445,7 @@ pub fn same_tier_vanilla_frames(
     for rel in candidate_relative_dirs(hint) {
         // Prefer the exact pack stem (same tier) before other tier variants.
         for stem in [hint.stem.clone(), stem_for_tier(&pack_base, pack_tier)] {
-            let Some(pair) = find_current_sheet_for_input(layout, &rel, &stem)? else {
+            let Some(pair) = locate_current_sheet_pair(layout, &rel, &stem)? else {
                 continue;
             };
             if !pair.plist_path.is_file() || !pair.png_path.is_file() {
@@ -1387,7 +1487,7 @@ pub fn same_tier_vanilla_batch(
 }
 
 /// Probe likely Resources locations for this sheet and index any that exist.
-/// Uses [`find_current_sheet_for_input`] so paths match the rest of the app.
+/// Uses [`locate_current_sheet_pair`] so paths match the rest of the app.
 pub fn probe_and_index_likely_sheets(
     layout: &GameFilesLayout,
     hint: &SheetProbeHint,
@@ -1403,7 +1503,7 @@ pub fn probe_and_index_likely_sheets(
 
     for rel in candidate_relative_dirs(hint) {
         for stem in candidate_stems(hint) {
-            let Some(pair) = find_current_sheet_for_input(layout, &rel, &stem)? else {
+            let Some(pair) = locate_current_sheet_pair(layout, &rel, &stem)? else {
                 continue;
             };
             if !pair.plist_path.is_file() || !pair.png_path.is_file() {
@@ -1424,7 +1524,7 @@ pub fn probe_and_index_likely_sheets(
     }
 
     // Also try the hint's exact relative_dir + stem as discovered on the pack.
-    if let Some(pair) = find_current_sheet_for_input(layout, &hint.relative_dir, &hint.stem)? {
+    if let Some(pair) = locate_current_sheet_pair(layout, &hint.relative_dir, &hint.stem)? {
         let key = sheet_key(&hint.relative_dir, &hint.stem);
         if seen_keys.insert(key) {
             indexed = indexed.saturating_add(index_sheet_pair(
@@ -1481,7 +1581,7 @@ pub fn regenerate_indexed_sheets(layout: &GameFilesLayout) -> Result<usize, AppE
                 file.indexed_sheets.remove(key);
                 file.sprites.retain(|_, meta| &meta.sheet_key != key);
             }
-            Ok(())
+            Ok(((), true))
         })?;
     }
 

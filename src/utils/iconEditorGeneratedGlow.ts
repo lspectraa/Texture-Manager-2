@@ -37,7 +37,7 @@ export type GlowGenJob = {
 export const DEFAULT_GLOW_GEN_SETTINGS: GlowGenSettings = {
   enabled: false,
   thickness: 4,
-  compositeLayers: false,
+  compositeLayers: true,
 };
 
 export function glowGenKeyForComponent(args: {

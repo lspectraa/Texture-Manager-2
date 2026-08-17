@@ -32,12 +32,17 @@ const tools = {
     targetHd: "HD",
     concurrentGamesheets: "Sheets at once",
     range1To4: "One sheet at a time so your computer stays responsive.",
-    convertToLatest: "Also update for the newest game after upscaling",
-    convertSection: "Update After Upscale",
-    convertSectionDescription: "Optional: add missing sprites from the newest game.",
+    convertToLatest: "Also add missing sprites from the newest game",
+    convertSection: "Newest Game Sprites",
+    convertSectionDescription: "Optional: copy missing sprites from the newest game into the upscaled sheets.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "New sprites copied from the game are not sharpened. Check color-keyed icons when it finishes.",
+      "New sprites are copied from the game after your pack sprites are upscaled, then everything is saved once. They are not sharpened. Check color-keyed icons when it finishes.",
+    glowLineThickness: "Glow line thickness",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "Glow alpha threshold",
+    glowAlphaThresholdHint:
+      "0–255. Pixels below this opacity are ignored when tracing the outline.",
   },
   merger: {
     options: "Merge Options",

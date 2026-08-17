@@ -14,7 +14,10 @@ use crate::core::errors::AppError;
 use crate::core::glow_composite::icon_stem_from_frame_name;
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::merger::merge_plist_from_memory;
-use crate::core::plist::frame_matches_icon_plist_format;
+use crate::core::plist::{
+    denormalize_plist_if_format2, frame_matches_icon_plist_format,
+    normalize_plist_frames_to_format3,
+};
 use crate::core::safe_fs::{
     ensure_existing_user_file, ensure_readable_image_file, ensure_user_absolute_path,
     is_safe_path_segment, join_under_parent, png_file_to_data_url, save_png_data_url,
@@ -1180,6 +1183,7 @@ fn load_icon_editor_plist(plist_path: &Path) -> Result<Value, AppError> {
     ensure_existing_user_file(plist_path)?;
     let mut plist_root = Value::from_file(plist_path)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    normalize_plist_frames_to_format3(&mut plist_root);
     strip_incompatible_icon_editor_frames(&mut plist_root)?;
     Ok(plist_root)
 }
@@ -1282,6 +1286,7 @@ fn write_plist_atomically(path: &Path, value: &Value) -> Result<(), AppError> {
     if strip_incompatible_icon_editor_frames(&mut output).is_err() {
         output = value.clone();
     }
+    denormalize_plist_if_format2(&mut output);
 
     output
         .to_file_xml(&temp_path)

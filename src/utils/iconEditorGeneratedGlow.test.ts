@@ -40,11 +40,11 @@ describe("glowGenKeyForComponent", () => {
 });
 
 describe("resolveGlowGenSettings", () => {
-  it("defaults to 4px glow without compositing when unset", () => {
+  it("defaults to 4px glow with compositing when unset", () => {
     expect(resolveGlowGenSettings({}, "icon")).toEqual({
       enabled: false,
       thickness: 4,
-      compositeLayers: false,
+      compositeLayers: true,
     });
   });
 });

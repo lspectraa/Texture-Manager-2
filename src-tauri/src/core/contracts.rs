@@ -62,8 +62,8 @@ pub struct ConvertToNewVersionOptions {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum UpscalerModel {
-    /// Real-ESRGAN AnimeVideo v3 — used automatically for icon sprites,
-    /// including glow layers and bird/UFO capsules.
+    /// Real-ESRGAN AnimeVideo v3 — used automatically for icon sprites
+    /// (not glow; glow is generated with Glow Maker) and bird/UFO capsules.
     RealesrganAnime,
     /// Waifu2x CUNet — user/default model for non-icon sprites.
     Waifu2x,
@@ -91,12 +91,20 @@ pub enum UpscalerCacheMatchMode {
     LooseSimilarity,
 }
 
+pub fn default_upscaler_glow_thickness() -> u32 {
+    4
+}
+
+pub fn default_upscaler_glow_tolerance() -> u8 {
+    32
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct UpscalerOptions {
     pub model: UpscalerModel,
     pub target_graphics: UpscalerTargetGraphics,
-    /// When true, run Convert to Latest on the Upscaled/ tree after upscaling.
+    /// When true, copy missing latest-game frames and split legacy icons while saving once.
     pub convert_to_latest: bool,
     /// Previous game version for convert (required when `convert_to_latest`).
     pub game_version: String,
@@ -105,12 +113,22 @@ pub struct UpscalerOptions {
     /// Sprite-cache matching strategy against vanilla game files.
     #[serde(default)]
     pub cache_match_mode: UpscalerCacheMatchMode,
+    /// Glow Maker outline thickness in pixels when generating icon glow.
+    #[serde(default = "default_upscaler_glow_thickness")]
+    pub glow_thickness: u32,
+    /// Minimum alpha (0–255) used as the Glow Maker outline seed.
+    #[serde(default = "default_upscaler_glow_tolerance")]
+    pub glow_tolerance: u8,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RandomizerOptions {
     pub seed: Option<String>,
+}
+
+pub fn default_glow_composite_layers() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -120,6 +138,7 @@ pub struct GlowMakerOptions {
     pub tolerance: u8,
     pub dimensions: Option<DimensionOverride>,
     pub rainbow_glow: bool,
+    #[serde(default = "default_glow_composite_layers")]
     pub composite_layers: bool,
 }
 
@@ -253,6 +272,8 @@ pub fn phase_defaults() -> PhaseDefaults {
             game_version: String::new(),
             sheet_concurrency: 1,
             cache_match_mode: UpscalerCacheMatchMode::LooseSimilarity,
+            glow_thickness: default_upscaler_glow_thickness(),
+            glow_tolerance: default_upscaler_glow_tolerance(),
         },
     }
 }
