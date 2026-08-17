@@ -16,7 +16,9 @@ use crate::core::geode_buttons::{
     resolve_geode_buttons_default_input_dir, resolve_geode_buttons_default_sheet,
     resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
 };
-use crate::core::glow_preview::{glow_maker_preview_data_url, random_uhd_icon_preview_data_url};
+use crate::core::glow_preview::{
+    generate_icon_glow_data_url, glow_maker_preview_data_url, random_uhd_icon_preview_data_url,
+};
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
     icon_editor_copy_sheet as icon_editor_copy_sheet_core,
@@ -748,6 +750,19 @@ async fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<Str
 }
 
 #[tauri::command]
+async fn generate_icon_glow_cmd(
+    png_data_url: String,
+    thickness: u32,
+    color: Option<String>,
+) -> Result<String, String> {
+    run_blocking(move || {
+        generate_icon_glow_data_url(png_data_url.as_str(), thickness, color.as_deref())
+            .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn glow_maker_preview_cmd(
     options: GlowMakerOptions,
     refresh: Option<bool>,
@@ -852,6 +867,7 @@ pub fn run() {
             geode_buttons_autoselect_plist_cmd,
             geode_buttons_default_input_dir_cmd,
             geode_buttons_template_preview_data_url_cmd,
+            generate_icon_glow_cmd,
             glow_maker_preview_cmd,
             particle_editor_preview_icon_cmd,
             particle_editor_sheet_frame_cmd,

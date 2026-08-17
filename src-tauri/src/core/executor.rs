@@ -25,6 +25,7 @@ use crate::core::game_files::{
 };
 use crate::core::geode_buttons::run_geode_buttons;
 use crate::core::glow_maker::execute_glow_maker as run_glow_maker;
+use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::merger::{direct_plist_files, merge_one_plist_file, merge_plist_from_memory};
 use crate::core::plist::count_frames_in_plist;
 use crate::core::porter::{
@@ -524,7 +525,8 @@ fn save_standalone_png_to_ported(
             imageops::resize(&img, nw, nh, FilterType::Triangle)
         }
     };
-    crate::core::image_io::save_rgba_png_fast(&dest_png, &out)?;
+    let cleaned = clear_orthogonally_isolated_pixels(&out);
+    crate::core::image_io::save_rgba_png_fast(&dest_png, &cleaned)?;
     Ok(())
 }
 

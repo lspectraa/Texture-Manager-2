@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -78,6 +78,9 @@ where
         }
     }
 
+    let extracted: HashSet<String> = sprites.keys().cloned().collect();
+    frames.retain(|name, _| extracted.contains(name));
+
     Ok(SplitMemoryResult {
         plist_root,
         sprites,
@@ -136,6 +139,9 @@ where
             }
         }
     }
+
+    let extracted: HashSet<String> = pending.iter().map(|(_, _, name)| name.clone()).collect();
+    frames.retain(|name, _| extracted.contains(name));
 
     let write_results: Vec<(String, Result<(), AppError>)> = pending
         .into_par_iter()

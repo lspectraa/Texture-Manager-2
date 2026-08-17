@@ -68,7 +68,7 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
                 OperationOptions::GlowMaker(with_glow_phase_three_defaults(existing))
             }
             None => OperationOptions::GlowMaker(GlowMakerOptions {
-                thickness: 3,
+                thickness: 4,
                 tolerance: 6,
                 dimensions: None,
                 rainbow_glow: false,

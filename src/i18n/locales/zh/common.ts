@@ -28,7 +28,7 @@ const common = {
     closeAria: "关闭关于对话框",
     copyright: "© {{year}} {{holder}}。",
     description:
-      "专为 Geometry Dash 贴图工作流打造——用一套专注的桌面工具拆分、合并、移植和编辑 gamesheet。",
+      "面向 Geometry Dash 贴图包的桌面应用——编辑图标、拆分和合并图集，还有更多功能。",
     licenseHeading: "许可证",
     licenseName: "GNU GPLv3（或更高版本）",
     licenseSummary:
@@ -38,7 +38,7 @@ const common = {
     thirdPartyHeading: "第三方放大模型",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "本应用内含推理程序与模型权重。它们仍适用各自的 MIT 与 BSD-3-Clause 许可；完整声明随应用一并提供。",
+      "本应用包含额外的放大工具。它们保留各自的许可，完整声明随应用提供。",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT。原作：nagadomi；ncnn-Vulkan 移植：nihui。",
     thirdPartyRealesrgan:

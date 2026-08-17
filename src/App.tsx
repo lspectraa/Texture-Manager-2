@@ -330,7 +330,7 @@ function App() {
 
   const [glowInputDir, setGlowInputDir] = useState("");
   const [glowOutputDir, setGlowOutputDir] = useState("");
-  const [glowThickness, setGlowThickness] = useState(3);
+  const [glowThickness, setGlowThickness] = useState(4);
   const [glowTolerance, setGlowTolerance] = useState(6);
   const [glowRainbow, setGlowRainbow] = useState(false);
   const [glowCompositeLayers, setGlowCompositeLayers] = useState(false);

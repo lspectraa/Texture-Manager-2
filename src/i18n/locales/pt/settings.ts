@@ -1,7 +1,6 @@
 const settings = {
   title: "Configurações",
-  description:
-    "Preferências globais de aparência, detecção da instalação e padrões das ferramentas.",
+  description: "Mude a aparência do app, encontre o Geometry Dash e defina os padrões das ferramentas.",
   statusAria: "Status das configurações",
   themeChip: "Tema {{theme}}",
   concurrentChip: "{{count}} simultâneos",

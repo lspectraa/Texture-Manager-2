@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -9,6 +9,7 @@ use plist::{Dictionary, Value};
 
 use crate::core::contracts::{DimensionOverride, MergerOptions};
 use crate::core::errors::AppError;
+use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::image_io::save_rgba_png_fast;
 use crate::core::report::{ReportIssue, ReportLevel};
 use crate::core::safe_fs::{is_safe_path_segment, path_from_slashes};
@@ -111,7 +112,7 @@ where
 
         let sprite = image::open(&sprite_path)
             .map_err(|err| AppError::ParseError(format!("failed to open sprite: {err}")))?;
-        let mut rgba = sprite.to_rgba8();
+        let mut rgba = clear_orthogonally_isolated_pixels(&sprite.to_rgba8());
 
         const LOCKED_ALPHA_TRIM: bool = true;
         if LOCKED_ALPHA_TRIM {
@@ -265,6 +266,7 @@ where
             });
             continue;
         };
+        rgba = clear_orthogonally_isolated_pixels(&rgba);
 
         const LOCKED_ALPHA_TRIM: bool = true;
         if LOCKED_ALPHA_TRIM {
@@ -328,6 +330,12 @@ where
             }
         }
     }
+
+    let placed: HashSet<String> = placements
+        .iter()
+        .map(|placement| placement.name.clone())
+        .collect();
+    frames.retain(|name, _| placed.contains(name));
 
     if !root_dict.contains_key("metadata") {
         root_dict.insert("metadata".to_string(), Value::Dictionary(Dictionary::new()));

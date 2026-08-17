@@ -64,7 +64,7 @@ const iconEditor = {
   frames: {
     panelAria: "Association des frames aux rôles",
     title: "Frames",
-    subtitle: "Assignez des frames aux couches",
+    subtitle: "Choisissez quel sprite va sur chaque couche",
     layerFrame: "Frame de la couche",
     none: "Aucun",
     importAria: "Importer le frame {{role}}",
@@ -78,7 +78,7 @@ const iconEditor = {
   plist: {
     panelAria: "Propriétés plist du frame",
     title: "Plist",
-    subtitle: "Propriétés et offsets du frame",
+    subtitle: "Position et taille du sprite sélectionné",
     expandPanelAria: "Déplier le panneau plist",
     collapsePanelAria: "Replier le panneau plist",
     showPanel: "Afficher le plist",
@@ -112,6 +112,17 @@ const iconEditor = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "Glow généré",
+    enable: "Générer le glow de ce composant",
+    enableHint: "Créer le glow avec le Créateur de glow au lieu du sprite de la feuille.",
+    thickness: "Épaisseur",
+    composite: "Composer les couches",
+    compositeHint: "Inclure le secondaire et l’extra pour créer le glow.",
+    generating: "Génération…",
+    needsPrimary: "Ajoutez d’abord un sprite primaire pour ce composant.",
+    offsetLockedHint: "Le Créateur de glow définit ce décalage à partir du composant. Il ne peut pas être modifié.",
   },
   dialogs: {
     selectPlistSheet: "Sélectionner une sheet plist",

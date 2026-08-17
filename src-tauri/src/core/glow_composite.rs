@@ -251,5 +251,6 @@ mod tests {
             icon_stem_from_frame_name("player_12_extra_001.png"),
             Some("player_12".to_string())
         );
+        assert_eq!(icon_stem_from_frame_name("Viper_WaterMark.png"), None);
     }
 }

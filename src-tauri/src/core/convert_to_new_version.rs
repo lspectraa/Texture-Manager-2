@@ -19,6 +19,7 @@ use crate::core::game_files::{
     find_current_sheet_for_input, normalize_legacy_version, resolve_cached_split_sprite,
     sheet_uses_external_plist, GameFilesLayout,
 };
+use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::plist::count_frames_in_plist;
 use crate::core::porter::flattened_bundle_output_dir;
@@ -767,7 +768,8 @@ where
 
     if let Some(sprite) = split.sprites.get("fireBoost_001.png") {
         let fireboost_path = converted_dir.join("fireBoost_001.png");
-        crate::core::image_io::save_rgba_png_fast(&fireboost_path, sprite)?;
+        let cleaned = clear_orthogonally_isolated_pixels(sprite);
+        crate::core::image_io::save_rgba_png_fast(&fireboost_path, &cleaned)?;
         issues.push(ReportIssue {
             level: ReportLevel::Info,
             message: "exported standalone fireBoost_001.png to converted output root".to_string(),

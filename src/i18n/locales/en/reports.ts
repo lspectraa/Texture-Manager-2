@@ -35,7 +35,7 @@ const reports = {
   },
   empty: {
     title: "No operation has run yet",
-    hint: "Run a tool to see results, timing, and issues here.",
+    hint: "Run a tool to see results and any problems here.",
   },
   summary: {
     processed: "Processed",

@@ -2,8 +2,7 @@ import type { AppLocaleResources } from "../../types";
 
 const settings: AppLocaleResources["settings"] = {
   title: "Configuración",
-  description:
-    "Preferencias globales de apariencia, detección de instalaciones y valores predeterminados de las herramientas.",
+  description: "Cambia el aspecto de la app, encuentra Geometry Dash y define los ajustes de las herramientas.",
   statusAria: "Estado de la configuración",
   themeChip: "Tema {{theme}}",
   concurrentChip: "{{count}} simultáneos",
@@ -16,7 +15,7 @@ const settings: AppLocaleResources["settings"] = {
   theme: "Tema",
   language: {
     title: "Idioma",
-    subtitle: "Elige el idioma que se usará en toda la aplicación",
+    subtitle: "Idioma de la app",
     label: "Idioma",
     aria: "Idioma",
   },
@@ -26,41 +25,37 @@ const settings: AppLocaleResources["settings"] = {
     random: "Aleatorio",
     defaultMeta: "Predeterminado",
     opacity: "Opacidad del fondo",
-    noneFound:
-      "Aún no se encontraron imágenes game_bg_* de Geometry Dash; establece una ruta de instalación de GD válida para detectarlas.",
+    noneFound: "Aún no hay fondos del juego. Elige tu carpeta de Geometry Dash para cargarlos.",
     custom: {
       label: "Fondos personalizados",
       aria: "Fondos personalizados de la aplicación",
       add: "Añadir imagen",
       addTitle: "Elige una imagen de fondo",
       imageFilter: "Imágenes",
-      empty:
-        "Añade tus propias imágenes: se convierten a escala de grises y se guardan en caché localmente.",
+      empty: "Añade tus propias imágenes. Se guardan aquí en escala de grises.",
       removeAria: "Eliminar {{name}}",
     },
   },
   performance: {
     title: "Rendimiento",
-    subtitle:
-      "Cantidad predeterminada de gamesheets simultáneos para las herramientas",
-    concurrentGamesheets: "Gamesheets simultáneos predeterminados",
+    subtitle: "Cuántas hojas trabajan las herramientas a la vez",
+    concurrentGamesheets: "Hojas a la vez",
     rangeHint: "1–64",
   },
   cache: {
     title: "Caché y datos",
-    subtitle: "Raíz local de archivos del juego y caché de división",
-    gameFilesRoot: "Raíz de archivos del juego",
+    subtitle: "Dónde se guardan los archivos del juego en caché",
+    gameFilesRoot: "Carpeta de archivos del juego",
     splitCache: "Caché de división",
     openCacheFolder: "Abrir carpeta de caché",
     regenerateSpriteIndex: "Regenerar índice de sprites",
     regenerateSpriteIndexHint:
-      "Reconstruye solo las hojas ya listadas en sprite-index.json (no escanea todo Resources).",
+      "Reconstruye la lista de hojas que ya indexaste. No recorre toda la carpeta del juego.",
     resetDefaults: "Restablecer valores predeterminados",
   },
   geometryDash: {
     title: "Geometry Dash",
-    subtitle:
-      "Instalación de Steam usada para las rutas de Resources original y Geode",
+    subtitle: "La carpeta de Geometry Dash usada para archivos del juego y Geode",
     notFound: "No encontrado",
     manualOverride: "Configuración manual",
     autoDetected: "Detectado automáticamente",
@@ -76,8 +71,7 @@ const settings: AppLocaleResources["settings"] = {
   },
   updates: {
     title: "Actualizaciones",
-    subtitle:
-      "Busca en GitHub Releases una versión más reciente de Texture Manager 2",
+    subtitle: "Comprueba si hay una versión más reciente",
     checkForUpdates: "Buscar actualizaciones",
     checking: "Buscando…",
     upToDate: "Tienes la versión más reciente (v{{version}}).",

@@ -6,17 +6,32 @@ const navigation = {
   showPanel: "ナビゲーションを表示",
   hidePanel: "ナビゲーションを隠す",
   home: "ホーム",
-  homeHint: "ランチャー",
+  homeHint: "すべてのツール",
   settings: "設定",
   copyrightAria: "著作権と情報",
   copyrightTitle: "© {{holder}} {{year}}",
   comingSoonBadge: "近日",
   comingSoonTitle: "{{tool}} — 近日公開",
   homeScreen: {
-    eyebrow: "テクスチャ作業のハブ",
+    eyebrow: "テクスチャツール",
     title: "何を作業しますか？",
-    lead:
-      "下からツールを選ぶと、そのワークスペースが開きます。ツールは作業の流れごとにまとめられています。",
+    splash: {
+      general: [
+        "何を作業しますか？",
+        "ツールを選んで始めましょう。",
+        "シート、アイコン、グロウ — 次はどれ？",
+        "今日もパック作業。",
+        "きれいなものを作りましょう。",
+      ],
+      morning: ["おはよう。何から始める？", "新しい一日 — どのツール？"],
+      afternoon: ["午後の作業。何を作る？"],
+      evening: ["夜のスタジオ。何が残ってる？", "もう1枚やってから終わる？"],
+      night: ["夜更かしテクスチャ作業？", "アイコンは待ってくれる…かも。"],
+      monday: ["月曜日。小さな編集から始めよう。"],
+      friday: ["金曜日。週末前にパックを仕上げる？"],
+      weekend: ["週末プロジェクト。", "急がなくていい。楽しいものを選んで。"],
+    },
+    lead: "ツールを選んで始めましょう。やりたいことに合わせてグループ分けされています。",
     toolsReady: "個のツールが利用可能",
     toolsAvailableAria: "{{count}} 個のツールが利用可能",
     comingSoonCount: "+{{count}} 個が近日公開",
@@ -25,65 +40,64 @@ const navigation = {
   sections: {
     design: {
       title: "デザインとエフェクト",
-      subtitle: "アイコンとエフェクトの作業",
+      subtitle: "アイコン、グロウ、ボタン、パーティクル",
     },
     sheets: {
-      title: "シートのパイプライン",
-      subtitle: "シートの分割・結合・リサイズ",
+      title: "ゲームシート",
+      subtitle: "シートの分割、結合、リサイズ、シャープ化",
     },
     batch: {
-      title: "一括ユーティリティ",
-      subtitle: "テクスチャパックの一括変更",
+      title: "パックツール",
+      subtitle: "たくさんのファイルをまとめて変更",
     },
   },
   tools: {
     iconEditor: {
       label: "アイコンエディター",
-      description: "アイコンを編集して変更をリアルタイムで確認できます。",
+      description: "アイコンのパーツ、色、位置を変更します。",
     },
     glowMaker: {
       label: "グロウメーカー",
-      description: "アイコンの周りにグロウ効果を追加します。",
+      description: "アイコンの周りにグロウを付けます。",
     },
     geodeButtons: {
       label: "Geode ボタンを作成",
       shortLabel: "Geode ボタン",
-      description: "手持ちの画像から Geode 風のボタンを作成します。",
+      description: "Geode メニューボタンのゲームシートを作成",
     },
     particleEditor: {
       label: "パーティクルエディター",
-      description: "パーティクルエフェクトを作成・編集します。",
+      description: "パーティクルエフェクトを作って調整します。",
     },
     splitter: {
       label: "スプリッター",
-      description: "テクスチャシートを個別のファイルに分割します。",
+      description: "ゲームシートを個別のスプライトに切り分けます。",
     },
     merger: {
       label: "マージャー",
-      description: "個別のファイルをテクスチャシートにまとめ直します。",
+      description: "スプライトをゲームシートにまとめ直します。",
     },
     porter: {
       label: "ポーター",
-      description: "テクスチャシートを別のサイズにリサイズします。",
+      description: "シートの HD、UHD、低画質バージョンを作ります。",
     },
     upscaler: {
       label: "Upscaler",
-      description:
-        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+      description: "スプライトをより大きくはっきりさせます。最新のゲーム向けに更新することもできます。",
     },
     randomizer: {
       label: "ランダマイザー",
-      description: "再利用できるシードでアイコンをシャッフルします。",
+      description: "アイコンを混ぜます。同じ結果が欲しいときはコードを保存してください。",
     },
     convertToNewVersion: {
       label: "新しいバージョンへ変換",
       shortLabel: "新バージョン",
-      description: "シートを最新のゲームバージョン向けに更新します。",
+      description: "足りないスプライトを足して、パックを最新のゲームで使えるようにします。",
     },
     texturePackInstaller: {
       label: "テクスチャパックインストーラー",
       shortLabel: "パックインストーラー",
-      description: "テクスチャパックをゲームフォルダーにインストールします。",
+      description: "テクスチャパックを Geometry Dash に追加します。",
     },
   },
 } as const;

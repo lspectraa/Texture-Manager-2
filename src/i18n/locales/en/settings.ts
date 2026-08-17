@@ -1,7 +1,6 @@
 const settings = {
   title: "Settings",
-  description:
-    "Global preferences for appearance, install discovery, and tool defaults.",
+  description: "Change how the app looks, find Geometry Dash, and set tool defaults.",
   statusAria: "Settings status",
   themeChip: "{{theme}} theme",
   concurrentChip: "{{count}} concurrent",
@@ -13,7 +12,7 @@ const settings = {
   theme: "Theme",
   language: {
     title: "Language",
-    subtitle: "Choose the language used throughout the app",
+    subtitle: "Language used in the app",
     label: "Language",
     aria: "Language",
   },
@@ -23,39 +22,37 @@ const settings = {
     random: "Random",
     defaultMeta: "Default",
     opacity: "Background opacity",
-    noneFound:
-      "No Geometry Dash game_bg_* images found yet — set a valid GD install path to discover them.",
+    noneFound: "No game backgrounds found yet. Set your Geometry Dash folder to load them.",
     custom: {
       label: "Custom backgrounds",
       aria: "Custom app backgrounds",
       add: "Add image",
       addTitle: "Choose a background image",
       imageFilter: "Images",
-      empty: "Add your own images — they are converted to grayscale and cached locally.",
+      empty: "Add your own images. They’re saved here as grayscale.",
       removeAria: "Remove {{name}}",
     },
   },
   performance: {
     title: "Performance",
-    subtitle: "Default sheet concurrency for tools",
-    concurrentGamesheets: "Default concurrent gamesheets",
+    subtitle: "How many sheets tools work on at once",
+    concurrentGamesheets: "Sheets at once",
     rangeHint: "1–64",
   },
   cache: {
     title: "Cache & data",
-    subtitle: "Local game-files root and split cache",
-    gameFilesRoot: "Game-files root",
+    subtitle: "Where cached game files are stored",
+    gameFilesRoot: "Game files folder",
     splitCache: "Split cache",
     openCacheFolder: "Open cache folder",
     regenerateSpriteIndex: "Regenerate sprite index",
     regenerateSpriteIndexHint:
-      "Rebuilds only sheets already listed in sprite-index.json (does not scan all of Resources).",
+      "Rebuilds the lookup list for sheets you’ve already indexed. It does not scan the whole game folder.",
     resetDefaults: "Reset defaults",
   },
   geometryDash: {
     title: "Geometry Dash",
-    subtitle:
-      "Steam install used for vanilla Resources and Geode paths",
+    subtitle: "The Geometry Dash folder used for game files and Geode",
     notFound: "Not found",
     manualOverride: "Manual override",
     autoDetected: "Auto-detected",
@@ -71,7 +68,7 @@ const settings = {
   },
   updates: {
     title: "Updates",
-    subtitle: "Check GitHub Releases for a newer Texture Manager 2 build",
+    subtitle: "See if a newer version is available",
     checkForUpdates: "Check for updates",
     checking: "Checking…",
     upToDate: "You are on the latest version (v{{version}}).",

@@ -69,7 +69,6 @@ export function UpscalerToolPanel({
       >
         <ToolSelectField
           label={t("upscaler.targetGraphics")}
-          hint={t("upscaler.targetHint")}
           value={targetGraphics}
           options={targetOptions}
           onChange={(value) => onTargetGraphicsChange(value as UpscalerTargetGraphics)}

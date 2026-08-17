@@ -28,7 +28,7 @@ const common = {
     closeAria: "Info-Dialog schließen",
     copyright: "© {{year}} {{holder}}.",
     description:
-      "Für Geometry-Dash-Textur-Workflows gebaut — Gamesheets aufteilen, zusammenführen, portieren und bearbeiten in einem fokussierten Desktop-Toolkit.",
+      "Eine Desktop-App für Geometry-Dash-Texture-Packs — Icons bearbeiten, Sheets teilen und zusammenfügen und mehr.",
     licenseHeading: "Lizenz",
     licenseName: "GNU GPLv3 (oder neuer)",
     licenseSummary:
@@ -38,7 +38,7 @@ const common = {
     thirdPartyHeading: "Drittanbieter-Upscaler",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "Diese App bündelt Inferenz-Binaries und Modellgewichte. Sie behalten ihre MIT- und BSD-3-Clause-Lizenzen; vollständige Hinweise liegen der App bei.",
+      "Diese App enthält zusätzliche Upscale-Werkzeuge. Sie behalten ihre eigenen Lizenzen, und die vollständigen Hinweise liegen der App bei.",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT. Original von nagadomi; ncnn-Vulkan-Port von nihui.",
     thirdPartyRealesrgan:

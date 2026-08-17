@@ -16,7 +16,7 @@ const tools: AppLocaleResources["tools"] = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "Elige qué procesar y cuántas hojas trabajar a la vez.",
     skipIcons: "Skip icons folder",
     performance: "Rendimiento",
     performanceDescription:
@@ -34,27 +34,25 @@ const tools: AppLocaleResources["tools"] = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "Elige salida HD o UHD.",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "Una hoja a la vez para que el ordenador no se ralentice.",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "Opcional: añadir sprites que faltan del juego más reciente.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "Los sprites nuevos copiados del juego no se hacen más nítidos. Revisa los iconos de color al terminar.",
   },
   merger: {
     options: "Opciones de combinación",
     optionsDescription:
       "Ajusta el comportamiento y el rendimiento de la combinación",
-    includeOutsidePlist:
-      "Incluir archivos fuera del plist (opción compatible con la fase 2)",
+    includeOutsidePlist: "También incluir imágenes que no están en el plist",
     concurrentFolders: "Carpetas de combinación simultáneas",
   },
   randomizer: {

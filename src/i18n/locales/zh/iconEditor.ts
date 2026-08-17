@@ -62,7 +62,7 @@ const iconEditor = {
   frames: {
     panelAria: "帧与角色的映射",
     title: "帧",
-    subtitle: "把帧分配给图层",
+    subtitle: "选择每层用哪张精灵图",
     layerFrame: "图层帧",
     none: "无",
     importAria: "导入 {{role}} 帧",
@@ -76,7 +76,7 @@ const iconEditor = {
   plist: {
     panelAria: "帧的 plist 属性",
     title: "Plist",
-    subtitle: "帧属性与偏移",
+    subtitle: "所选精灵图的位置和大小",
     expandPanelAria: "展开 plist 面板",
     collapsePanelAria: "收起 plist 面板",
     showPanel: "显示 plist",
@@ -109,6 +109,17 @@ const iconEditor = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "生成光晕",
+    enable: "为此部件生成光晕",
+    enableHint: "用光晕生成器制作光晕，而不是使用图集中的精灵。",
+    thickness: "宽度",
+    composite: "合成图层",
+    compositeHint: "生成光晕时包含副色和额外图层。",
+    generating: "正在生成…",
+    needsPrimary: "请先为此部件指定主精灵。",
+    offsetLockedHint: "光晕生成器根据部件设置此偏移，无法编辑。",
   },
   dialogs: {
     selectPlistSheet: "选择 plist sheet",

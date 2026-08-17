@@ -4,6 +4,7 @@
  *
  * Usage:
  *   node ./scripts/fetch-upscaler-binaries.mjs
+ *   node ./scripts/fetch-upscaler-binaries.mjs --if-missing
  *   node ./scripts/fetch-upscaler-binaries.mjs --all   # Windows + macOS x64/arm64 when available
  *
  * Add a kind to SHIPPED (and tauri.conf.json externalBin) when bundling another sidecar.
@@ -201,6 +202,27 @@ function writeNotice() {
   cpSync(src, join(binariesDir, "NOTICE"));
 }
 
+function packageReady(kind, platformKey) {
+  const pkg = PACKAGES[kind];
+  const cfg = pkg.platforms[platformKey];
+  if (!pkg || !cfg) {
+    return false;
+  }
+  for (const triple of cfg.triples) {
+    const ext = triple.includes("windows") ? ".exe" : "";
+    if (!existsSync(join(binariesDir, `${pkg.binaryBaseName}-${triple}${ext}`))) {
+      return false;
+    }
+  }
+  if (!existsSync(join(resourcesDir, pkg.modelsDest))) {
+    return false;
+  }
+  if (pkg.copyOpenMpDll && platformKey === "windows" && !existsSync(join(binariesDir, "vcomp140.dll"))) {
+    return false;
+  }
+  return true;
+}
+
 function removeBinariesWithBaseName(baseName) {
   if (!existsSync(binariesDir)) return;
   for (const entry of readdirSync(binariesDir)) {
@@ -238,6 +260,7 @@ function cleanupUnshipped() {
 
 async function main() {
   const all = process.argv.includes("--all");
+  const ifMissing = process.argv.includes("--if-missing");
   mkdirSync(binariesDir, { recursive: true });
   mkdirSync(resourcesDir, { recursive: true });
   cleanupUnshipped();
@@ -245,6 +268,10 @@ async function main() {
   const platforms = all ? ["windows", "macos"] : [hostPlatform()];
   for (const platform of platforms) {
     for (const kind of SHIPPED) {
+      if (ifMissing && packageReady(kind, platform)) {
+        console.log(`Skipping ${kind} (${platform}): already present`);
+        continue;
+      }
       await fetchPackage(kind, platform);
     }
   }

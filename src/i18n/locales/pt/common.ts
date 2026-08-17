@@ -28,7 +28,7 @@ const common = {
     closeAria: "Fechar a janela Sobre",
     copyright: "© {{year}} {{holder}}.",
     description:
-      "Feito para fluxos de trabalho de texturas do Geometry Dash — divida, junte, converta e edite gamesheets com um kit de desktop focado.",
+      "Um app de desktop para texture packs do Geometry Dash — edite ícones, divida e junte sheets, e mais.",
     licenseHeading: "Licença",
     licenseName: "GNU GPLv3 (ou posterior)",
     licenseSummary:
@@ -38,7 +38,7 @@ const common = {
     thirdPartyHeading: "Upscalers de terceiros",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "Este aplicativo inclui binários de inferência e pesos de modelos. Eles mantêm as licenças MIT e BSD-3-Clause; os avisos completos acompanham o aplicativo.",
+      "Este app inclui ferramentas extras de aumento. Elas mantêm as próprias licenças, e os avisos completos vêm com o app.",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT. Original de nagadomi; porta ncnn-Vulkan de nihui.",
     thirdPartyRealesrgan:

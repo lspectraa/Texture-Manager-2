@@ -1,7 +1,6 @@
 const settings = {
   title: "Einstellungen",
-  description:
-    "Globale Einstellungen für Darstellung, Installationserkennung und Werkzeug-Standardwerte.",
+  description: "Ändere das Aussehen der App, finde Geometry Dash und lege Werkzeug-Standards fest.",
   statusAria: "Einstellungsstatus",
   themeChip: "Theme {{theme}}",
   concurrentChip: "{{count}} parallel",
@@ -13,7 +12,7 @@ const settings = {
   theme: "Theme",
   language: {
     title: "Sprache",
-    subtitle: "Wähle die Sprache für die gesamte App",
+    subtitle: "Sprache der App",
     label: "Sprache",
     aria: "Sprache",
   },
@@ -23,39 +22,37 @@ const settings = {
     random: "Zufällig",
     defaultMeta: "Standard",
     opacity: "Hintergrund-Deckkraft",
-    noneFound:
-      "Noch keine game_bg_*-Bilder von Geometry Dash gefunden — setze einen gültigen GD-Installationspfad, um sie zu finden.",
+    noneFound: "Noch keine Spielhintergründe gefunden. Lege deinen Geometry-Dash-Ordner fest, um sie zu laden.",
     custom: {
       label: "Eigene Hintergründe",
       aria: "Eigene App-Hintergründe",
       add: "Bild hinzufügen",
       addTitle: "Hintergrundbild auswählen",
       imageFilter: "Bilder",
-      empty:
-        "Füge eigene Bilder hinzu — sie werden in Graustufen umgewandelt und lokal zwischengespeichert.",
+      empty: "Füge eigene Bilder hinzu. Sie werden hier in Graustufen gespeichert.",
       removeAria: "{{name}} entfernen",
     },
   },
   performance: {
     title: "Leistung",
-    subtitle: "Standard-Parallelität für Sheets in den Werkzeugen",
-    concurrentGamesheets: "Standardmäßig parallele Gamesheets",
+    subtitle: "Wie viele Sheets die Werkzeuge gleichzeitig bearbeiten",
+    concurrentGamesheets: "Sheets gleichzeitig",
     rangeHint: "1–64",
   },
   cache: {
     title: "Cache & Daten",
-    subtitle: "Lokales Spieldatei-Verzeichnis und Split-Cache",
-    gameFilesRoot: "Spieldatei-Verzeichnis",
+    subtitle: "Wo zwischengespeicherte Spieldateien liegen",
+    gameFilesRoot: "Spieldateien-Ordner",
     splitCache: "Split-Cache",
     openCacheFolder: "Cache-Ordner öffnen",
     regenerateSpriteIndex: "Sprite-Index neu erzeugen",
     regenerateSpriteIndexHint:
-      "Erneuert nur bereits in sprite-index.json gelistete Sheets (kein voller Resources-Scan).",
+      "Erneuert die Liste der bereits erfassten Sheets. Der ganze Spielordner wird nicht durchsucht.",
     resetDefaults: "Standardwerte zurücksetzen",
   },
   geometryDash: {
     title: "Geometry Dash",
-    subtitle: "Steam-Installation für die Original-Resources und Geode-Pfade",
+    subtitle: "Der Geometry-Dash-Ordner für Spieldateien und Geode",
     notFound: "Nicht gefunden",
     manualOverride: "Manuelle Überschreibung",
     autoDetected: "Automatisch erkannt",
@@ -71,7 +68,7 @@ const settings = {
   },
   updates: {
     title: "Updates",
-    subtitle: "GitHub Releases nach einem neueren Texture-Manager-2-Build durchsuchen",
+    subtitle: "Prüfen, ob eine neuere Version verfügbar ist",
     checkForUpdates: "Nach Updates suchen",
     checking: "Wird geprüft…",
     upToDate: "Du nutzt die neueste Version (v{{version}}).",

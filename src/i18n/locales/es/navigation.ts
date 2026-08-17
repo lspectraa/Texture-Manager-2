@@ -8,17 +8,32 @@ const navigation: AppLocaleResources["navigation"] = {
   showPanel: "Mostrar navegación",
   hidePanel: "Ocultar navegación",
   home: "Inicio",
-  homeHint: "Lanzador",
+  homeHint: "Todas las herramientas",
   settings: "Configuración",
   copyrightAria: "Derechos de autor y acerca de",
   copyrightTitle: "© {{holder}} {{year}}",
   comingSoonBadge: "Pronto",
   comingSoonTitle: "{{tool}} — próximamente",
   homeScreen: {
-    eyebrow: "Centro de flujos de trabajo de texturas",
+    eyebrow: "Herramientas de texturas",
     title: "¿En qué te gustaría trabajar?",
-    lead:
-      "Elige una herramienta para abrir su espacio de trabajo. Las herramientas están agrupadas por flujo de trabajo para que puedas ir directamente a la tarea que necesitas.",
+    splash: {
+      general: [
+        "¿En qué te gustaría trabajar?",
+        "Elige una herramienta y empieza.",
+        "Hojas, iconos, brillo — ¿qué sigue?",
+        "Otro pack, otro día.",
+        "Vamos a dejar algo bonito.",
+      ],
+      morning: ["Buenos días. ¿Qué va primero?", "Empezamos — ¿qué herramienta?"],
+      afternoon: ["Sesión de tarde. ¿Qué estamos haciendo?"],
+      evening: ["Tarde de estudio. ¿Qué hay en la lista?", "¿Una hoja más antes de terminar?"],
+      night: ["¿Sesión nocturna de texturas?", "Los iconos pueden esperar… o no."],
+      monday: ["Lunes. Empieza con un cambio pequeño."],
+      friday: ["Viernes. ¿Un pack más antes del fin de semana?"],
+      weekend: ["Proyecto de fin de semana.", "Sin prisa — elige algo divertido."],
+    },
+    lead: "Elige una herramienta para empezar. Están agrupadas por lo que quieres hacer.",
     toolsReady: "herramientas listas",
     toolsAvailableAria: "{{count}} herramientas disponibles",
     comingSoonCount: "+{{count}} próximamente",
@@ -27,65 +42,64 @@ const navigation: AppLocaleResources["navigation"] = {
   sections: {
     design: {
       title: "Diseño y efectos",
-      subtitle: "Trabaja con iconos y efectos",
+      subtitle: "Iconos, brillo, botones y partículas",
     },
     sheets: {
-      title: "Flujo de gamesheets",
-      subtitle: "Divide, combina y redimensiona gamesheets",
+      title: "Gamesheets",
+      subtitle: "Divide, combina, redimensiona y mejora las hojas",
     },
     batch: {
-      title: "Utilidades por lotes",
-      subtitle: "Cambios masivos en paquetes de texturas",
+      title: "Herramientas de packs",
+      subtitle: "Cambia muchos archivos a la vez",
     },
   },
   tools: {
     iconEditor: {
       label: "Editor de iconos",
-      description: "Edita iconos y ve los cambios en tiempo real.",
+      description: "Cambia las partes, colores y posición de un icono.",
     },
     glowMaker: {
       label: "Creador de brillo",
-      description: "Agrega efectos de brillo alrededor de tus iconos.",
+      description: "Añade un brillo alrededor de tus iconos.",
     },
     geodeButtons: {
       label: "Crear botones de Geode",
       shortLabel: "Botones de Geode",
-      description: "Crea botones con estilo Geode a partir de tus imágenes.",
+      description: "Crear el gamesheet de botones de menú de Geode",
     },
     particleEditor: {
       label: "Editor de partículas",
-      description: "Crea y edita efectos de partículas.",
+      description: "Crea y ajusta efectos de partículas.",
     },
     splitter: {
       label: "Divisor",
-      description: "Divide las hojas de texturas en archivos separados.",
+      description: "Corta un gamesheet en sprites individuales.",
     },
     merger: {
       label: "Combinador",
-      description: "Vuelve a combinar archivos separados en hojas de texturas.",
+      description: "Junta los sprites otra vez en un gamesheet.",
     },
     porter: {
       label: "Adaptador",
-      description: "Redimensiona hojas de texturas para distintos tamaños.",
+      description: "Crea versiones HD, UHD o de baja calidad de una hoja.",
     },
     upscaler: {
       label: "Upscaler",
-      description:
-        "AI-upscale sprites to HD or UHD, then optionally convert to the latest game version.",
+      description: "Haz los sprites más nítidos y grandes. También puedes actualizarlos al juego más reciente.",
     },
     randomizer: {
       label: "Aleatorizador",
-      description: "Mezcla iconos con una semilla que puedes reutilizar.",
+      description: "Mezcla iconos. Guarda el código si quieres la misma mezcla después.",
     },
     convertToNewVersion: {
       label: "Convertir a una versión nueva",
       shortLabel: "Versión nueva",
-      description: "Actualiza las hojas para la versión más reciente del juego.",
+      description: "Añade sprites que faltan para que el pack funcione en el juego más reciente.",
     },
     texturePackInstaller: {
       label: "Instalador de paquetes de texturas",
       shortLabel: "Instalador de paquetes",
-      description: "Instala paquetes de texturas en la carpeta del juego.",
+      description: "Añade paquetes de texturas a Geometry Dash.",
     },
   },
 };

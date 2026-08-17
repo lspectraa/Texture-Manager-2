@@ -30,7 +30,7 @@ const common: AppLocaleResources["common"] = {
     closeAria: "Закрыть окно «О программе»",
     copyright: "© {{year}} {{holder}}.",
     description:
-      "Создано для работы с текстурами Geometry Dash — разделяйте, объединяйте, переносите и редактируйте игровые атласы с помощью удобного набора инструментов для компьютера.",
+      "Программа для текстур-паков Geometry Dash — редактируйте иконки, разделяйте и собирайте листы и не только.",
     licenseHeading: "Лицензия",
     licenseName: "GNU GPLv3 (или более поздняя)",
     licenseSummary:
@@ -40,7 +40,7 @@ const common: AppLocaleResources["common"] = {
     thirdPartyHeading: "Сторонние апскейлеры",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "В приложение включены сторонние бинарные файлы и веса моделей. Они сохраняют лицензии MIT и BSD-3-Clause; полные уведомления поставляются вместе с программой.",
+      "В программе есть дополнительные инструменты увеличения. У них свои лицензии, а полные уведомления идут вместе с приложением.",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT. Оригинал: nagadomi; порт ncnn-Vulkan: nihui.",
     thirdPartyRealesrgan:

@@ -64,7 +64,7 @@ const iconEditor = {
   frames: {
     panelAria: "Zuordnung von Frames zu Rollen",
     title: "Frames",
-    subtitle: "Frames den Ebenen zuweisen",
+    subtitle: "Welche Sprite auf welcher Ebene liegt",
     layerFrame: "Ebenen-Frame",
     none: "Keins",
     importAria: "{{role}}-Frame importieren",
@@ -78,7 +78,7 @@ const iconEditor = {
   plist: {
     panelAria: "Plist-Eigenschaften des Frames",
     title: "Plist",
-    subtitle: "Frame-Eigenschaften und Offsets",
+    subtitle: "Position und Größe des gewählten Sprites",
     expandPanelAria: "Plist-Bereich ausklappen",
     collapsePanelAria: "Plist-Bereich einklappen",
     showPanel: "Plist anzeigen",
@@ -111,6 +111,17 @@ const iconEditor = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "Generierter Glow",
+    enable: "Glow für diese Komponente erzeugen",
+    enableHint: "Glow mit dem Glow-Maker erzeugen statt das Sheet-Sprite zu nutzen.",
+    thickness: "Breite",
+    composite: "Ebenen zusammenführen",
+    compositeHint: "Sekundär und Extra beim Erzeugen des Glows einbeziehen.",
+    generating: "Wird erzeugt…",
+    needsPrimary: "Lege zuerst ein Primär-Sprite für diese Komponente fest.",
+    offsetLockedHint: "Der Glow-Maker setzt diesen Offset aus der Komponente. Er lässt sich nicht bearbeiten.",
   },
   dialogs: {
     selectPlistSheet: "Plist-Sheet auswählen",

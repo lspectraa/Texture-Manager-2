@@ -2,8 +2,7 @@ import type { AppLocaleResources } from "../../types";
 
 const settings: AppLocaleResources["settings"] = {
   title: "Настройки",
-  description:
-    "Общие настройки внешнего вида, поиска установленной игры и параметров инструментов по умолчанию.",
+  description: "Измените вид программы, найдите Geometry Dash и задайте настройки инструментов.",
   statusAria: "Состояние настроек",
   themeChip: "Тема: {{theme}}",
   concurrentChip: "Параллельно: {{count}}",
