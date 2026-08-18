@@ -567,6 +567,12 @@ export function ParticleEditorToolPanel() {
   const previewMode: PreviewMode = effectMeta?.previewMode ?? "static";
   const showsIconMovementToggle = previewModeAnimatesIcon(previewMode);
   const showsPreviewIconControls = effectUsesCustomizablePreviewIcon(effectMeta);
+
+  useEffect(() => {
+    if (!previewModeAnimatesIcon(previewMode)) return;
+    setAnimateIconMovement(true);
+    setBackground("gd");
+  }, [previewMode]);
   const hasCustomIcon = Boolean(customIconPlistPath?.trim());
   const customIconPlistPathRef = useRef(customIconPlistPath);
   customIconPlistPathRef.current = customIconPlistPath;

@@ -71,7 +71,7 @@ const tools = {
     generationMode: "Modo de geração",
     generationModeDescription: "Escolha o comportamento de composição e de espectro de cores",
     compositeLayers: "Compor as camadas do ícone antes do brilho (primária + secundária + extra)",
-    rainbowGlow: "Brilho arco-íris (espectro estendido, ciano → roxo → violeta avermelhado)",
+    rainbowGlow: "Brilho arco-íris",
     preview: "Prévia",
     previewDescription:
       "Prévia ao vivo usando um ícone UHD aleatório do seu jogo — atualiza conforme você muda as configurações",

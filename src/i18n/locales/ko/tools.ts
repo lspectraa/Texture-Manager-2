@@ -70,7 +70,7 @@ const tools = {
     generationMode: "생성 모드",
     generationModeDescription: "합성 방식과 색상 스펙트럼 동작을 선택하세요",
     compositeLayers: "글로우 전에 아이콘 레이어 합성(기본 + 보조 + 추가)",
-    rainbowGlow: "무지개 글로우(확장 스펙트럼, 시안 → 보라 → 붉은 보라)",
+    rainbowGlow: "무지개 글로우",
     preview: "미리보기",
     previewDescription:
       "게임에서 무작위로 고른 UHD 아이콘으로 실시간 미리보기 — 설정을 바꾸면 즉시 갱신됩니다",

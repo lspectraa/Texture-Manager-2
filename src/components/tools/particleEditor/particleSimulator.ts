@@ -8,7 +8,8 @@
  *  - Local-space physics; startPos captures emitter world pos at spawn.
  *  - _emitCounter / (1 / emissionRate) accumulator (Cocos2d exact).
  *  - Gravity: tangential = swap(radial) + negate-X; dir += (r+t+g)*yCoordFlipped*dt; pos += dir*dt.
- *  - Radius:  pos.x = -cos(a)*r;  pos.y = -sin(a)*r*yCoordFlipped.
+ *  - Radius:  pos.x = -cos(a)*r;  pos.y = -sin(a)*r (GD cocos2d-x 2.2.3; no yCoordFlipped in mode B).
+  - minRadius 0 in plist = constant orbit (GD particle string “Start rad = end”), not shrink to center.
  *  - Per-particle color/size/rotation deltas (not per-frame t-lerp).
  *  - lifespan = 0 is allowed (landEffect, explodeEffect).
  *  - rotationIsDir applied at spawn + continuously in draw.
@@ -35,6 +36,9 @@ function blendToComposite(src: number, dst: number): GlobalCompositeOperation {
 
 const DEG2RAD = Math.PI / 180;
 
+/** Cocos2d-x kCCParticleStartRadiusEqualToEndRadius */
+const PARTICLE_START_RADIUS_EQUAL_TO_END_RADIUS = -1;
+
 /** Uniform random in [min, max]. */
 function rng(min: number, max: number): number {
   return min + Math.random() * (max - min);
@@ -42,6 +46,32 @@ function rng(min: number, max: number): number {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+/**
+ * Radius-mode dr/dt matching Geometry Dash / Particle Designer plist semantics.
+ *
+ * Cocos2d-x uses -1 as “start radius = end radius”. GD plists (and the in-game
+ * particle string flag “Start rad = end”) treat exported minRadius 0 the same
+ * way — constant orbit — not literal shrink-to-center. Inward motion needs an
+ * explicit positive minRadius below maxRadius.
+ */
+function computeRadiusDelta(
+  configuredMinRadius: number,
+  startRadius: number,
+  sampledEndRadius: number,
+  lifespan: number,
+): number {
+  if (
+    configuredMinRadius === PARTICLE_START_RADIUS_EQUAL_TO_END_RADIUS ||
+    configuredMinRadius === 0
+  ) {
+    return 0;
+  }
+  if (lifespan <= 0) {
+    return 0;
+  }
+  return (sampledEndRadius - startRadius) / lifespan;
 }
 
 export type ParticleTexture = HTMLImageElement | ImageBitmap;
@@ -780,17 +810,14 @@ export class ParticleEmitter {
       const minR =
         Math.max(0, cfg.minRadius + cfg.minRadiusVariance * rng(-1, 1)) * scale;
       p.radius = maxR;
-      p.radiusDelta = (minR - maxR) * invLife;
+      p.radiusDelta = computeRadiusDelta(cfg.minRadius, maxR, minR, lifespan);
       p.orbitSpeed =
         (cfg.rotatePerSecond + cfg.rotatePerSecondVariance * rng(-1, 1)) * DEG2RAD;
       p.orbitAngle = (cfg.angle + cfg.angleVariance * rng(-1, 1)) * DEG2RAD;
 
-      const yFlip = cfg.yCoordFlipped ?? 1;
-      // Cocos2d CCParticleSystem.cpp radius mode initial position:
-      //   pos.x = -cos(angle) * radius
-      //   pos.y = -sin(angle) * radius * yCoordFlipped
+      // Cocos2d-x 2.2.3 CCParticleSystem.cpp radius mode (no yCoordFlipped on Y).
       p.x = -Math.cos(p.orbitAngle) * p.radius;
-      p.y = -Math.sin(p.orbitAngle) * p.radius * yFlip;
+      p.y = -Math.sin(p.orbitAngle) * p.radius;
     }
 
     return p;
@@ -856,12 +883,12 @@ export class ParticleEmitter {
       //   radius   += radiusDelta * dt
       //   angle    += orbitSpeed * dt
       //   pos.x     = -cos(angle) * radius
-      //   pos.y     = -sin(angle) * radius * yCoordFlipped
+      //   pos.y     = -sin(angle) * radius
       //
       p.radius += p.radiusDelta * dt;
       p.orbitAngle += p.orbitSpeed * dt;
       p.x = -Math.cos(p.orbitAngle) * p.radius;
-      p.y = -Math.sin(p.orbitAngle) * p.radius * yFlip;
+      p.y = -Math.sin(p.orbitAngle) * p.radius;
 
       p.rotation += p.deltaRotation * dt;
     }

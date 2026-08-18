@@ -71,7 +71,7 @@ const tools = {
     generationMode: "Erzeugungsmodus",
     generationModeDescription: "Wie Icon-Ebenen kombiniert werden und welche Glow-Farbe.",
     compositeLayers: "Icon-Ebenen vor dem Glow zusammenführen (primär + sekundär + extra)",
-    rainbowGlow: "Regenbogen-Glow (erweitertes Spektrum, Cyan → Violett → Rotviolett)",
+    rainbowGlow: "Regenbogen-Glow",
     preview: "Vorschau",
     previewDescription:
       "Live-Vorschau mit einem zufälligen UHD-Icon aus deinem Spiel — aktualisiert sich mit deinen Einstellungen",

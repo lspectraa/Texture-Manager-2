@@ -22,6 +22,7 @@ use crate::core::glow_preview::{
 use crate::core::icon_editor::{
     icon_editor_add_frame as icon_editor_add_frame_core,
     icon_editor_copy_sheet as icon_editor_copy_sheet_core,
+    icon_editor_create_sheet as icon_editor_create_sheet_core,
     icon_editor_extract_frames as icon_editor_extract_frames_core,
     icon_editor_import_frame as icon_editor_import_frame_core,
     icon_editor_png_data_url as icon_editor_png_data_url_core,
@@ -494,9 +495,27 @@ async fn icon_editor_swap_rename_sheet(
 }
 
 #[tauri::command]
+async fn icon_editor_create_sheet(
+    plist_path: String,
+    updates: Vec<IconEditorFrameUpdate>,
+    frame_texture_updates: Option<Vec<IconEditorFrameTextureUpdate>>,
+) -> Result<IconEditorRenameResult, String> {
+    run_blocking(move || {
+        let texture_updates = frame_texture_updates.unwrap_or_default();
+        icon_editor_create_sheet_core(
+            std::path::Path::new(&plist_path),
+            &updates,
+            texture_updates.as_slice(),
+        )
+        .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn icon_editor_copy_sheet(
     plist_path: String,
-    new_stem: String,
+    dest_plist_path: String,
     updates: Vec<IconEditorFrameUpdate>,
     removed_frame_names: Option<Vec<String>>,
     frame_texture_updates: Option<Vec<IconEditorFrameTextureUpdate>>,
@@ -506,7 +525,7 @@ async fn icon_editor_copy_sheet(
         let texture_updates = frame_texture_updates.unwrap_or_default();
         icon_editor_copy_sheet_core(
             std::path::Path::new(&plist_path),
-            new_stem.as_str(),
+            std::path::Path::new(&dest_plist_path),
             &updates,
             removed.as_slice(),
             texture_updates.as_slice(),
@@ -873,6 +892,7 @@ pub fn run() {
             particle_editor_sheet_frame_cmd,
             icon_editor_sheet_info,
             icon_editor_save_plist,
+            icon_editor_create_sheet,
             icon_editor_import_frame,
             icon_editor_rotate_frame,
             icon_editor_add_frame,

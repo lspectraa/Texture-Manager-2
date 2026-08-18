@@ -53,6 +53,7 @@ import {
   IconEditorSheetInfo,
   IconEditorSize,
   copyIconEditorSheet,
+  createIconEditorSheet,
   isIconEditorRenameTargetConflict,
   renameIconEditorSheet,
   saveIconEditorPlist,
@@ -579,6 +580,25 @@ function inferStemFromFrames(frames: IconEditorFrameInfo[]): string | null {
     }
   }
   return null;
+}
+
+function stripGraphicsTierSuffix(stem: string): string {
+  if (stem.toLowerCase().endsWith("-uhd")) {
+    return stem.slice(0, -4);
+  }
+  if (stem.toLowerCase().endsWith("-hd")) {
+    return stem.slice(0, -3);
+  }
+  return stem;
+}
+
+function ensurePlistSavePath(path: string): string {
+  const trimmed = path.trim();
+  return /\.plist$/i.test(trimmed) ? trimmed : `${trimmed}.plist`;
+}
+
+function sameSheetPath(left: string, right: string): boolean {
+  return left.replace(/\\/g, "/").toLowerCase() === right.replace(/\\/g, "/").toLowerCase();
 }
 
 function resolveFrameNameFromPlist(frames: IconEditorFrameInfo[], canonical: string): string | null {
@@ -1386,17 +1406,15 @@ export function IconEditorToolPanel() {
   const commitEditSnapshot = useCallback(
     (nextPresent: IconEditorEditSnapshot) => {
       const plistPath = activePlistPathRef.current;
-      if (!plistPath) {
-        applyEditSnapshot(nextPresent);
-        return;
-      }
       const present = cloneIconEditorEditSnapshot(nextPresent);
       setEditHistory((previous) => {
         const nextHistory = commitIconEditorHistory(previous, present);
         if (nextHistory === previous) {
           return previous;
         }
-        saveIconEditorHistory(plistPath, nextHistory);
+        if (plistPath) {
+          saveIconEditorHistory(plistPath, nextHistory);
+        }
         return nextHistory;
       });
       applyEditSnapshot(present);
@@ -1409,15 +1427,14 @@ export function IconEditorToolPanel() {
 
   const undoEdits = useCallback(() => {
     const plistPath = activePlistPathRef.current;
-    if (!plistPath) {
-      return;
-    }
     setEditHistory((previous) => {
       const nextHistory = undoIconEditorHistory(previous);
       if (!nextHistory) {
         return previous;
       }
-      saveIconEditorHistory(plistPath, nextHistory);
+      if (plistPath) {
+        saveIconEditorHistory(plistPath, nextHistory);
+      }
       applyEditSnapshot(nextHistory.present);
       return nextHistory;
     });
@@ -1425,15 +1442,14 @@ export function IconEditorToolPanel() {
 
   const redoEdits = useCallback(() => {
     const plistPath = activePlistPathRef.current;
-    if (!plistPath) {
-      return;
-    }
     setEditHistory((previous) => {
       const nextHistory = redoIconEditorHistory(previous);
       if (!nextHistory) {
         return previous;
       }
-      saveIconEditorHistory(plistPath, nextHistory);
+      if (plistPath) {
+        saveIconEditorHistory(plistPath, nextHistory);
+      }
       applyEditSnapshot(nextHistory.present);
       return nextHistory;
     });
@@ -1650,24 +1666,25 @@ export function IconEditorToolPanel() {
   const extraMappingDirty =
     sheetInfo !== null && roleMap.extra.trim() !== extraMappingBaseline.trim();
   const dirty = offsetDirty || extraMappingDirty || textureDirty || generatedGlowDirty;
-  const saveStatusLabel = !sheetInfo
+  const canWriteSheet = Boolean(sheetInfo) || dirty;
+  const saveStatusLabel = !sheetInfo && !dirty
     ? t("saveStatus.save")
     : dirty
       ? t("saveStatus.unsaved")
       : t("saveStatus.saved");
   const saveTooltip = useMemo(() => {
-    if (!sheetInfo) {
-      return t("saveStatus.saveOffsets");
-    }
     if (isBusy) {
       return t("saveStatus.savingChanges");
+    }
+    if (!sheetInfo) {
+      return dirty ? t("saveStatus.saveUnsaved") : t("saveStatus.saveOffsets");
     }
     if (dirty) {
       return t("saveStatus.saveUnsaved");
     }
     return t("saveStatus.allSaved");
   }, [dirty, isBusy, sheetInfo]);
-  const saveStatusClass = !sheetInfo
+  const saveStatusClass = !sheetInfo && !dirty
     ? "tm-icon-editor-viewport-hud-save--idle"
     : dirty
       ? "tm-icon-editor-viewport-hud-save--unsaved"
@@ -1773,53 +1790,93 @@ export function IconEditorToolPanel() {
     await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
   }, [loadSheet, sheetInfo?.plistPath]);
 
+  const collectSheetWritePayload = useCallback(() => {
+    const lockedGlowNames = new Set([
+      ...generatedGlowFrames.map((frame) => frame.frameName),
+      ...glowGenJobsRef.current
+        .filter((job) => job.enabled)
+        .map((job) => job.glowFrameName),
+    ]);
+    const updates = Object.entries(offsetEdits)
+      .filter(([name]) => !lockedGlowNames.has(name))
+      .map(([name, spriteOffset]) => ({
+        name,
+        spriteOffset,
+      }));
+    const removedFrameNames: string[] = [];
+    if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
+      removedFrameNames.push(extraMappingBaseline.trim());
+    }
+    const frameTextureUpdates = [
+      ...buildFrameTextureUpdates(pendingTextureEdits).filter((update) => !lockedGlowNames.has(update.name)),
+      ...generatedGlowFrames.map((frame) => ({
+        name: frame.frameName,
+        pngDataUrl: canvasToPngDataUrl(frame.canvas),
+        spriteSize: frame.spriteSize,
+        spriteSourceSize: frame.spriteSize,
+        spriteOffset:
+          glowMakerOwnedOffset(frame.frameName, glowGenJobsRef.current, generatedGlowFrames) ??
+          frame.spriteOffset,
+        textureRotated: false,
+        isNewFrame: frame.isNewFrame,
+      })),
+    ];
+    return { updates, removedFrameNames, frameTextureUpdates };
+  }, [extraMappingBaseline, generatedGlowFrames, offsetEdits, pendingTextureEdits, roleMap.extra]);
+
+  const pickPlistSavePath = useCallback(
+    async (title: string, defaultFileName: string): Promise<string | null> => {
+      const selected = await save({
+        title,
+        defaultPath: defaultFileName,
+        filters: [{ name: "Plist", extensions: ["plist"] }],
+      });
+      if (typeof selected !== "string" || !selected.trim()) {
+        return null;
+      }
+      return ensurePlistSavePath(selected);
+    },
+    [],
+  );
+
   const saveOffsets = useCallback(async () => {
-    if (!sheetInfo || !dirty) {
+    if (!dirty) {
       return;
+    }
+    if (!isTauriRuntime()) {
+      setToolbarError(t("errors:iconEditor.runtimeUnavailable"));
+      setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
+      return;
+    }
+    let targetPath = sheetInfo?.plistPath ?? null;
+    if (!targetPath) {
+      const selected = await pickPlistSavePath(
+        t("dialogs.savePlistSheet"),
+        `${renameValue.trim() || "player_01-uhd"}.plist`,
+      );
+      if (!selected) {
+        return;
+      }
+      targetPath = selected;
     }
     setIsBusy(true);
     setToolbarError(null);
     setToolbarErrorDetail(null);
     setIsErrorDetailOpen(false);
     try {
-      const lockedGlowNames = new Set([
-        ...generatedGlowFrames.map((frame) => frame.frameName),
-        ...glowGenJobsRef.current
-          .filter((job) => job.enabled)
-          .map((job) => job.glowFrameName),
-      ]);
-      const updates = Object.entries(offsetEdits)
-        .filter(([name]) => !lockedGlowNames.has(name))
-        .map(([name, spriteOffset]) => ({
-          name,
-          spriteOffset,
-        }));
-      const removedFrameNames: string[] = [];
-      if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
-        removedFrameNames.push(extraMappingBaseline.trim());
+      const { updates, removedFrameNames, frameTextureUpdates } = collectSheetWritePayload();
+      if (!sheetInfo) {
+        await createIconEditorSheet(targetPath, updates, frameTextureUpdates);
+      } else {
+        await saveIconEditorPlist(
+          targetPath,
+          updates,
+          removedFrameNames,
+          frameTextureUpdates,
+        );
       }
-      const frameTextureUpdates = [
-        ...buildFrameTextureUpdates(pendingTextureEdits).filter((update) => !lockedGlowNames.has(update.name)),
-        ...generatedGlowFrames.map((frame) => ({
-          name: frame.frameName,
-          pngDataUrl: canvasToPngDataUrl(frame.canvas),
-          spriteSize: frame.spriteSize,
-          spriteSourceSize: frame.spriteSize,
-          spriteOffset:
-            glowMakerOwnedOffset(frame.frameName, glowGenJobsRef.current, generatedGlowFrames) ??
-            frame.spriteOffset,
-          textureRotated: false,
-          isNewFrame: frame.isNewFrame,
-        })),
-      ];
-      await saveIconEditorPlist(
-        sheetInfo.plistPath,
-        updates,
-        removedFrameNames,
-        frameTextureUpdates,
-      );
-      clearIconEditorHistory(sheetInfo.plistPath);
-      await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
+      clearIconEditorHistory(targetPath);
+      await loadSheet(targetPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
         error,
@@ -1830,7 +1887,14 @@ export function IconEditorToolPanel() {
     } finally {
       setIsBusy(false);
     }
-  }, [dirty, extraMappingBaseline, generatedGlowFrames, loadSheet, offsetEdits, pendingTextureEdits, roleMap.extra, sheetInfo]);
+  }, [
+    collectSheetWritePayload,
+    dirty,
+    loadSheet,
+    pickPlistSavePath,
+    renameValue,
+    sheetInfo,
+  ]);
 
   const renameSheet = useCallback(async () => {
     if (!sheetInfo || !renameValue.trim()) {
@@ -1891,11 +1955,28 @@ export function IconEditorToolPanel() {
     () => sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") ?? "",
     [sheetInfo?.plistPath],
   );
-  const canSaveCopy =
-    Boolean(sheetInfo) && renameValue.trim() !== "" && renameValue.trim() !== currentSheetStem;
+  const canSaveCopy = canWriteSheet;
 
   const saveCopy = useCallback(async () => {
-    if (!sheetInfo || !canSaveCopy) {
+    if (!canSaveCopy) {
+      return;
+    }
+    if (!isTauriRuntime()) {
+      setToolbarError(t("errors:iconEditor.runtimeUnavailable"));
+      setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
+      return;
+    }
+    const defaultStem = renameValue.trim() || currentSheetStem || "player_01-uhd";
+    const selected = await pickPlistSavePath(
+      t("dialogs.saveCopyPlistSheet"),
+      `${defaultStem}.plist`,
+    );
+    if (!selected) {
+      return;
+    }
+    const sourcePath = sheetInfo?.plistPath ?? null;
+    if (sourcePath && sameSheetPath(sourcePath, selected)) {
+      await saveOffsets();
       return;
     }
     setIsBusy(true);
@@ -1903,44 +1984,17 @@ export function IconEditorToolPanel() {
     setToolbarErrorDetail(null);
     setIsErrorDetailOpen(false);
     try {
-      const lockedGlowNames = new Set([
-        ...generatedGlowFrames.map((frame) => frame.frameName),
-        ...glowGenJobsRef.current
-          .filter((job) => job.enabled)
-          .map((job) => job.glowFrameName),
-      ]);
-      const updates = Object.entries(offsetEdits)
-        .filter(([name]) => !lockedGlowNames.has(name))
-        .map(([name, spriteOffset]) => ({
-          name,
-          spriteOffset,
-        }));
-      const removedFrameNames: string[] = [];
-      if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
-        removedFrameNames.push(extraMappingBaseline.trim());
-      }
-      const frameTextureUpdates = [
-        ...buildFrameTextureUpdates(pendingTextureEdits).filter((update) => !lockedGlowNames.has(update.name)),
-        ...generatedGlowFrames.map((frame) => ({
-          name: frame.frameName,
-          pngDataUrl: canvasToPngDataUrl(frame.canvas),
-          spriteSize: frame.spriteSize,
-          spriteSourceSize: frame.spriteSize,
-          spriteOffset:
-            glowMakerOwnedOffset(frame.frameName, glowGenJobsRef.current, generatedGlowFrames) ??
-            frame.spriteOffset,
-          textureRotated: false,
-          isNewFrame: frame.isNewFrame,
-        })),
-      ];
-      const copied = await copyIconEditorSheet(
-        sheetInfo.plistPath,
-        renameValue.trim(),
-        updates,
-        removedFrameNames,
-        frameTextureUpdates,
-      );
-      await loadSheet(copied.plistPath, { omitBusy: true });
+      const { updates, removedFrameNames, frameTextureUpdates } = collectSheetWritePayload();
+      const written = sourcePath
+        ? await copyIconEditorSheet(
+            sourcePath,
+            selected,
+            updates,
+            removedFrameNames,
+            frameTextureUpdates,
+          )
+        : await createIconEditorSheet(selected, updates, frameTextureUpdates);
+      await loadSheet(written.plistPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
         error,
@@ -1953,21 +2007,17 @@ export function IconEditorToolPanel() {
     }
   }, [
     canSaveCopy,
-    extraMappingBaseline,
-    generatedGlowFrames,
+    collectSheetWritePayload,
+    currentSheetStem,
     loadSheet,
-    offsetEdits,
+    pickPlistSavePath,
     renameValue,
-    pendingTextureEdits,
-    roleMap.extra,
+    saveOffsets,
     sheetInfo,
   ]);
 
   const importFrame = useCallback(
     async (role: IconLayerRole) => {
-      if (!sheetInfo) {
-        return;
-      }
       if (!isTauriRuntime()) {
         setToolbarError(t("errors:iconEditor.textureImportUnavailable"));
         setToolbarErrorDetail(t("errors:iconEditor.textureImportUnavailable"));
@@ -1976,27 +2026,30 @@ export function IconEditorToolPanel() {
       const selected = await open({
         directory: false,
         multiple: false,
-        title: `Select replacement texture for ${role}`,
+        title: t("dialogs.selectReplacementTexture", { role: t(`roles.${role}`) }),
         filters: [{ name: "PNG", extensions: ["png"] }],
       });
       if (typeof selected !== "string" || !selected.trim()) {
         return;
       }
       const selectedTexturePath = selected.trim();
+      const knownFrames = sheetInfo?.frames ?? Array.from(frameMap.values());
+      const importedBase = selectedTexturePath.split(/[/\\]/).pop() ?? "";
       const stemFromPrimary = roleMap.primary.trim()
         ? parseIconFrameStem(roleMap.primary.trim())
         : null;
-      const stem = stemFromPrimary ?? inferStemFromFrames(sheetInfo.frames);
-      if (!stem) {
-        const message =
-          t("errors:iconEditor.inferStemFailed");
-        setToolbarError(message);
-        setToolbarErrorDetail(message);
-        return;
-      }
-      const isRobotSheet = /^robot_\d+_0[1-4]$/i.test(stem) || sheetInfo.frames.some((frame) => Boolean(parseRobotPartFrame(frame.name)));
+      const stemFromRename = renameValue.trim()
+        ? stripGraphicsTierSuffix(renameValue.trim())
+        : null;
+      const stem =
+        stemFromPrimary ??
+        inferStemFromFrames(knownFrames) ??
+        parseIconFrameStem(importedBase) ??
+        stemFromRename ??
+        "player_01";
+      const isRobotSheet = /^robot_\d+_0[1-4]$/i.test(stem) || knownFrames.some((frame) => Boolean(parseRobotPartFrame(frame.name)));
       const isSpiderSheet =
-        /^spider_\d+_0[1-4]$/i.test(stem) || sheetInfo.frames.some((frame) => Boolean(parseSpiderPartFrame(frame.name)));
+        /^spider_\d+_0[1-4]$/i.test(stem) || knownFrames.some((frame) => Boolean(parseSpiderPartFrame(frame.name)));
       const targetFrameName = isRobotSheet
         ? (() => {
             const robotStemMatch = stem.match(/^(robot_\d+)_0[1-4]$/i);
@@ -2036,7 +2089,7 @@ export function IconEditorToolPanel() {
               return ensurePngExtension(`${spiderStem}_${selectedSpiderPartId}${suffix}`);
             })()
           : buildIconFrameNameForRole(stem, role);
-      const existingPlistName = resolveFrameNameFromPlist(sheetInfo.frames, targetFrameName);
+      const existingPlistName = resolveFrameNameFromPlist(knownFrames, targetFrameName);
       const frameExists = existingPlistName !== null;
       setToolbarError(null);
       setToolbarErrorDetail(null);
@@ -2077,7 +2130,7 @@ export function IconEditorToolPanel() {
         setToolbarErrorDetail(parsed.detail);
       }
     },
-    [buildEditSnapshot, commitEditSnapshot, frameMap, roleMap.primary, selectedRobotPartId, selectedSpiderPartId, sheetInfo],
+    [buildEditSnapshot, commitEditSnapshot, frameMap, renameValue, roleMap.primary, selectedRobotPartId, selectedSpiderPartId, sheetInfo],
   );
 
   useEffect(() => {
@@ -2158,8 +2211,8 @@ export function IconEditorToolPanel() {
 
   const iconStem = useMemo(() => {
     const fromPrimary = roleMap.primary ? parseIconFrameStem(roleMap.primary) : null;
-    return fromPrimary ?? inferStemFromFrames(sheetInfo?.frames ?? []) ?? "";
-  }, [roleMap.primary, sheetInfo?.frames]);
+    return fromPrimary ?? inferStemFromFrames(sheetInfo?.frames ?? Array.from(frameMap.values())) ?? "";
+  }, [frameMap, roleMap.primary, sheetInfo?.frames]);
   /** Bird/UFO capsule art sits ~30 game px higher; UHD sheets use 2× nudge. Applied as screen Y (smaller = up). */
   const isBirdOrUfoIcon = /^(bird|ufo)_\d+$/i.test(iconStem);
   const capsuleStageVerticalNudge = useMemo(() => {
@@ -2682,9 +2735,6 @@ export function IconEditorToolPanel() {
   }, [frameMap, generatedGlowFrames, glowGenJobs, hideGlow, mappedLayers]);
 
   const downloadCurrentIconPng = useCallback(async () => {
-    if (!sheetInfo) {
-      return;
-    }
     if (layers.length === 0) {
       setToolbarError(t("errors:iconEditor.noVisibleLayers"));
       setToolbarErrorDetail(t("errors:iconEditor.noVisibleLayersDetail"));
@@ -2819,7 +2869,7 @@ export function IconEditorToolPanel() {
       const tightlyCropped = cropCanvasByTrimInsets(layerCropped, trim);
       const pngDataUrl = tightlyCropped.toDataURL("image/png");
 
-      const stem = renameValue.trim() || sheetInfo.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
+      const stem = renameValue.trim() || sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
       const defaultFileName = `${stem}-icon.png`;
       if (isTauriRuntime()) {
         const savePath = await save({
@@ -3016,7 +3066,7 @@ export function IconEditorToolPanel() {
 
     const frameOptions: AppSelectOption[] = [
       { value: "", label: t("frames.none") },
-      ...(sheetInfo?.frames ?? [])
+      ...Array.from(frameMap.values())
         .filter((frame) => {
           if (isRobotIcon) {
             const parsed = parseRobotPartFrame(frame.name);
@@ -3101,7 +3151,7 @@ export function IconEditorToolPanel() {
             value={roleValue}
             options={frameOptions}
             onChange={handleRoleFrameChange}
-            disabled={!sheetInfo || isBusy}
+            disabled={isBusy}
             aria-label={`${t(`roles.${role}`)}: ${t("frames.layerFrame")}`}
             portal
           />
@@ -3111,7 +3161,7 @@ export function IconEditorToolPanel() {
             aria-label={t("frames.importAria", { role: t(`roles.${role}`) })}
             title={t("frames.importAria", { role: t(`roles.${role}`) })}
             onClick={() => importFrame(role)}
-            disabled={!sheetInfo || isBusy}
+            disabled={isBusy}
           >
             <Upload size={14} strokeWidth={2} aria-hidden />
           </button>
@@ -3215,7 +3265,7 @@ export function IconEditorToolPanel() {
                   type="button"
                   aria-label={t("toolbar.downloadAria")}
                   onClick={() => downloadCurrentIconPng().catch(() => {})}
-                  disabled={!sheetInfo || isBusy}
+                  disabled={isBusy}
                 >
                   <Download size={15} aria-hidden />
                   {t("toolbar.download")}
@@ -3238,7 +3288,7 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                   aria-label={`${t("toolbar.undo")} (${t("toolbar.undoShortcut")})`}
                   onClick={undoEdits}
-                  disabled={!sheetInfo || isBusy || !canUndoEdits}
+                  disabled={isBusy || !canUndoEdits}
                 >
                   <Undo2 size={15} aria-hidden />
                 </button>
@@ -3252,7 +3302,7 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                   aria-label={`${t("toolbar.redo")} (${t("toolbar.redoShortcut")})`}
                   onClick={redoEdits}
-                  disabled={!sheetInfo || isBusy || !canRedoEdits}
+                  disabled={isBusy || !canRedoEdits}
                 >
                   <Redo2 size={15} aria-hidden />
                 </button>
@@ -3262,18 +3312,18 @@ export function IconEditorToolPanel() {
             <div className="tm-icon-editor-toolbar-group">
               <IconEditorToolbarTip
                 label={saveTooltip}
-                shortcut={sheetInfo && !isBusy ? t("toolbar.saveShortcut") : undefined}
+                shortcut={canWriteSheet && !isBusy ? t("toolbar.saveShortcut") : undefined}
               >
                 <button
                   type="button"
                   className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
                   aria-label={
-                    sheetInfo && !isBusy
+                    canWriteSheet && !isBusy
                       ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
                       : saveTooltip
                   }
                   onClick={() => saveOffsets().catch(() => {})}
-                  disabled={!sheetInfo || isBusy}
+                  disabled={!canWriteSheet || isBusy}
                 >
                   <Save size={15} aria-hidden />
                   {isBusy ? t("saveStatus.saving") : saveStatusLabel}

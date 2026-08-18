@@ -71,7 +71,7 @@ const tools = {
     generationMode: "Mode de génération",
     generationModeDescription: "Choisissez le comportement de composition et de spectre de couleurs",
     compositeLayers: "Composer les couches de l’icône avant le glow (primaire + secondaire + extra)",
-    rainbowGlow: "Glow arc-en-ciel (spectre étendu, cyan → violet → violet rougeâtre)",
+    rainbowGlow: "Glow arc-en-ciel",
     preview: "Aperçu",
     previewDescription:
       "Aperçu en direct avec une icône UHD aléatoire de votre jeu — se met à jour selon vos réglages",

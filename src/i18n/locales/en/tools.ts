@@ -73,7 +73,7 @@ const tools = {
     generationMode: "Generation Mode",
     generationModeDescription: "How icon layers are combined, and the glow color.",
     compositeLayers: "Combine all icon layers before adding glow",
-    rainbowGlow: "Rainbow glow (cyan to purple to pink)",
+    rainbowGlow: "Rainbow glow",
     preview: "Preview",
     previewDescription: "Live preview with a random icon from your game — or pick your own.",
     previewAlt: "Glow maker sample preview",
@@ -279,7 +279,8 @@ const tools = {
       maxRadius: "Max radius",
       maxRadiusHint: "Distance from the emitter where particles start.",
       minRadius: "Min radius",
-      minRadiusHint: "Distance particles shrink toward over their life.",
+      minRadiusHint:
+        "End orbit radius when shrinking inward. 0 in GD plists means constant radius (same as max).",
       rotatePerSecond: "Rotate / sec",
       rotatePerSecondHint: "How fast particles orbit the emitter.",
       startColor: "Start",

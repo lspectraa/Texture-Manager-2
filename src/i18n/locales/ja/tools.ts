@@ -70,7 +70,7 @@ const tools = {
     generationMode: "生成モード",
     generationModeDescription: "合成方法と色スペクトルの挙動を選びます",
     compositeLayers: "グロウの前にアイコンレイヤーを合成（プライマリ + セカンダリ + エクストラ）",
-    rainbowGlow: "レインボーグロウ（拡張スペクトル、シアン → 紫 → 赤紫）",
+    rainbowGlow: "レインボーグロウ",
     preview: "プレビュー",
     previewDescription:
       "ゲーム内のランダムな UHD アイコンでライブプレビュー — 設定を変えると更新されます",

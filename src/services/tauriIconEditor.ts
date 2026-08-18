@@ -80,6 +80,17 @@ export const saveIconEditorPlist = async (
   });
 };
 
+export const createIconEditorSheet = async (
+  plistPath: string,
+  updates: IconEditorFrameUpdate[],
+  frameTextureUpdates?: IconEditorFrameTextureUpdate[],
+): Promise<IconEditorRenameResult> =>
+  invoke<IconEditorRenameResult>("icon_editor_create_sheet", {
+    plistPath,
+    updates,
+    frameTextureUpdates: frameTextureUpdates ?? [],
+  });
+
 export const importIconEditorFrameTexture = async (
   plistPath: string,
   frameName: string,
@@ -146,14 +157,14 @@ export const swapRenameIconEditorSheet = async (
 
 export const copyIconEditorSheet = async (
   plistPath: string,
-  newStem: string,
+  destPlistPath: string,
   updates: IconEditorFrameUpdate[],
   removedFrameNames?: string[],
   frameTextureUpdates?: IconEditorFrameTextureUpdate[],
 ): Promise<IconEditorRenameResult> =>
   invoke<IconEditorRenameResult>("icon_editor_copy_sheet", {
     plistPath,
-    newStem,
+    destPlistPath,
     updates,
     removedFrameNames: removedFrameNames ?? [],
     frameTextureUpdates: frameTextureUpdates ?? [],

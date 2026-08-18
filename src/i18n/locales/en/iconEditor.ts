@@ -25,7 +25,7 @@ const iconEditor = {
     openAria: "Open sheet",
     renameTooltip: "Rename plist and atlas files",
     renameAria: "Rename sheet",
-    saveCopyTooltip: "Save a copy with the new name and current settings",
+    saveCopyTooltip: "Save a copy to a location you choose, with the current settings",
     saveCopyAria: "Save copy",
     downloadTooltip: "Download current icon preview as PNG",
     downloadAria: "Download PNG",
@@ -125,6 +125,8 @@ const iconEditor = {
   dialogs: {
     selectPlistSheet: "Select plist sheet",
     selectReplacementTexture: "Select replacement texture for {{role}}",
+    savePlistSheet: "Save icon sheet",
+    saveCopyPlistSheet: "Save copy of icon sheet",
     saveIconPng: "Save icon PNG",
     renameConflictAria: "Rename conflict",
     nameAlreadyInUse: "Name already in use",

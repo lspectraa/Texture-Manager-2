@@ -69,7 +69,7 @@ const tools = {
     generationMode: "生成模式",
     generationModeDescription: "选择合成方式与色彩光谱行为",
     compositeLayers: "生成光晕前先合成图标图层（主色 + 副色 + 额外）",
-    rainbowGlow: "彩虹光晕（扩展光谱，青 → 紫 → 红紫）",
+    rainbowGlow: "彩虹光晕",
     preview: "预览",
     previewDescription: "使用你游戏中的随机 UHD 图标实时预览——设置更改后会同步更新",
     previewAlt: "光晕生成器示例预览",

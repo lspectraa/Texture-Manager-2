@@ -1,4 +1,4 @@
-export const HOME_SPLASH_INTERVAL_MS = 9000;
+export const HOME_SPLASH_INTERVAL_MS = 20000;
 export const HOME_SPLASH_FADE_MS = 220;
 
 export const HOME_SPLASH_GROUPS = [

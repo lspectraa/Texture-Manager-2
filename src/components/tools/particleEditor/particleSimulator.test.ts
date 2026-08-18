@@ -313,6 +313,61 @@ describe("Radius mode – Cocos2d -cos/-sin position formula", () => {
     const r = Math.sqrt(p.x * p.x + p.y * p.y);
     expectApprox(r, 80, "orbit radius preserved", 0.01);
   });
+
+  it("minRadius=0 (GD plist): orbit radius stays constant", () => {
+    const cfg: ParticleConfig = {
+      ...defaultParticleConfig(),
+      emitterType: 1,
+      angle: 0,
+      angleVariance: 0,
+      maxRadius: 15,
+      maxRadiusVariance: 0,
+      minRadius: 0,
+      minRadiusVariance: 0,
+      rotatePerSecond: 0,
+      rotatePerSecondVariance: 0,
+      particleLifespan: 0.6,
+      particleLifespanVariance: 0,
+      yCoordFlipped: 1,
+      positionType: 0,
+      maxParticles: 5,
+      emissionRate: 5,
+    };
+    const emitter = new ParticleEmitter(cfg);
+    emitter.setEmitterWorldPos(0, 0);
+    const p = emitter.spawnParticle();
+    expectApprox(p.radiusDelta, 0, "radiusDelta with minRadius=0");
+    emitter.stepParticle(p, 0.6);
+    expectApprox(p.radius, 15, "radius unchanged over lifespan");
+    expectApprox(p.x, -15, "still on start orbit");
+  });
+
+  it("minRadius below maxRadius: orbit contracts inward", () => {
+    const cfg: ParticleConfig = {
+      ...defaultParticleConfig(),
+      emitterType: 1,
+      angle: 0,
+      angleVariance: 0,
+      maxRadius: 15,
+      maxRadiusVariance: 0,
+      minRadius: 5,
+      minRadiusVariance: 0,
+      rotatePerSecond: 0,
+      rotatePerSecondVariance: 0,
+      particleLifespan: 0.6,
+      particleLifespanVariance: 0,
+      yCoordFlipped: 1,
+      positionType: 0,
+      maxParticles: 5,
+      emissionRate: 5,
+    };
+    const emitter = new ParticleEmitter(cfg);
+    emitter.setEmitterWorldPos(0, 0);
+    const p = emitter.spawnParticle();
+    expectApprox(p.radiusDelta, (5 - 15) / 0.6, "radiusDelta inward");
+    emitter.stepParticle(p, 0.6);
+    expectApprox(p.radius, 5, "radius at end of life", 0.01);
+  });
 });
 
 // ─── positionType: Free vs. Grouped ──────────────────────────────────────────

@@ -716,6 +716,7 @@ pub(crate) const GAMESHEET04_MOVED_FRAMES: &[&str] = &[
     "GJ_highscoreBtn_001.png",
     "GJ_mapPacksBtn_001.png",
     "GJ_createBtn_001.png",
+    "GJ_savedBtn_001.png",
 ];
 
 pub(crate) fn is_gamesheet04_moved_frame(frame_name: &str) -> bool {
@@ -2943,6 +2944,7 @@ mod tests {
         assert!(is_gamesheet04_moved_frame("GJ_highscoreBtn_001.png"));
         assert!(is_gamesheet04_moved_frame("GJ_mapPacksBtn_001.png"));
         assert!(is_gamesheet04_moved_frame("gj_createbtn_001.png"));
+        assert!(is_gamesheet04_moved_frame("GJ_savedBtn_001.png"));
         assert!(!is_gamesheet04_moved_frame("GJ_playBtn_001.png"));
         assert!(is_gamesheet04_stem("GJ_GameSheet04-uhd"));
         assert!(is_gamesheet04_stem("GJ_GameSheet04"));

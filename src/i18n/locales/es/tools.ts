@@ -82,8 +82,7 @@ const tools: AppLocaleResources["tools"] = {
       "Elige el comportamiento de composición y del espectro de color",
     compositeLayers:
       "Combinar las capas del icono antes del brillo (primaria + secundaria + extra)",
-    rainbowGlow:
-      "Brillo arcoíris (espectro extendido, cian → morado → violeta rojizo)",
+    rainbowGlow: "Brillo arcoíris",
     preview: "Vista previa",
     previewDescription:
       "Vista previa en vivo con un icono UHD aleatorio de tu juego — se actualiza al cambiar los ajustes",
