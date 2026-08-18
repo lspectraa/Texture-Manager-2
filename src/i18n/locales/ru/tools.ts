@@ -47,6 +47,11 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Новые спрайты из игры не увеличиваются. Проверьте цветовые иконки после завершения.",
+    glowLineThickness: "Толщина линии свечения",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "Порог альфы свечения",
+    glowAlphaThresholdHint:
+      "0–255. Пиксели ниже этой непрозрачности игнорируются при обводке контура.",
   },
   merger: {
     options: "Параметры объединения",

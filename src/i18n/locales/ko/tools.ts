@@ -41,6 +41,11 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "게임에서 복사한 새 스프라이트는 선명해지지 않습니다. 끝나면 컬러 키 아이콘을 확인하세요.",
+    glowLineThickness: "글로우 선 두께",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "글로우 알파 기준값",
+    glowAlphaThresholdHint:
+      "0–255. 이 불투명도 미만인 픽셀은 외곽선을 추적할 때 무시됩니다.",
   },
   merger: {
     options: "병합 옵션",

@@ -41,6 +41,11 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Neue Sprites aus dem Spiel werden nicht geschärft. Prüfe farbige Icons danach.",
+    glowLineThickness: "Glow-Linienstärke",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "Glow-Alpha-Schwellenwert",
+    glowAlphaThresholdHint:
+      "0–255. Pixel unter dieser Deckkraft werden beim Nachzeichnen der Kontur ignoriert.",
   },
   merger: {
     options: "Merge-Optionen",

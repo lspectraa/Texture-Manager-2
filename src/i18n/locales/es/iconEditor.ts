@@ -139,6 +139,8 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   dialogs: {
     selectPlistSheet: "Seleccionar hoja plist",
     selectReplacementTexture: "Seleccionar textura de reemplazo para {{role}}",
+    savePlistSheet: "Guardar hoja de icono",
+    saveCopyPlistSheet: "Guardar copia de la hoja de icono",
     saveIconPng: "Guardar PNG del icono",
     renameConflictAria: "Conflicto al cambiar el nombre",
     nameAlreadyInUse: "El nombre ya está en uso",

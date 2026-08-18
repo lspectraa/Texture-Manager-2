@@ -47,6 +47,11 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Los sprites nuevos copiados del juego no se hacen más nítidos. Revisa los iconos de color al terminar.",
+    glowLineThickness: "Grosor de la línea de brillo",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "Umbral alfa del brillo",
+    glowAlphaThresholdHint:
+      "0–255. Los píxeles por debajo de esta opacidad se ignoran al trazar el contorno.",
   },
   merger: {
     options: "Opciones de combinación",

@@ -40,6 +40,11 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "从游戏复制的新精灵图不会变清晰。完成后请检查色键图标。",
+    glowLineThickness: "光晕描边宽度",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "光晕 alpha 阈值",
+    glowAlphaThresholdHint:
+      "0–255。低于此不透明度的像素在描边时会被忽略。",
   },
   merger: {
     options: "合并选项",

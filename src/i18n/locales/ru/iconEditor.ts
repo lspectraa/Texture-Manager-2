@@ -135,6 +135,8 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   dialogs: {
     selectPlistSheet: "Выберите атлас plist",
     selectReplacementTexture: "Выберите заменяющую текстуру для {{role}}",
+    savePlistSheet: "Сохранить атлас иконки",
+    saveCopyPlistSheet: "Сохранить копию атласа иконки",
     saveIconPng: "Сохранить PNG иконки",
     renameConflictAria: "Конфликт переименования",
     nameAlreadyInUse: "Имя уже используется",

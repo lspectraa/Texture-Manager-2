@@ -41,6 +41,11 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "ゲームから追加したスプライトはシャープになりません。終わったらカラーキーのアイコンを確認してください。",
+    glowLineThickness: "グロウの線の太さ",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "グロウのアルファしきい値",
+    glowAlphaThresholdHint:
+      "0–255。この不透明度未満のピクセルは輪郭のトレース時に無視されます。",
   },
   merger: {
     options: "結合オプション",

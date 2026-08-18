@@ -126,6 +126,8 @@ const iconEditor = {
   dialogs: {
     selectPlistSheet: "plist シートを選択",
     selectReplacementTexture: "{{role}} の置き換えテクスチャを選択",
+    savePlistSheet: "アイコンシートを保存",
+    saveCopyPlistSheet: "アイコンシートのコピーを保存",
     saveIconPng: "アイコンの PNG を保存",
     renameConflictAria: "名前の競合",
     nameAlreadyInUse: "すでに使われている名前です",

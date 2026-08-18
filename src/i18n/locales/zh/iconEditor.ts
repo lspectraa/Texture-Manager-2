@@ -124,6 +124,8 @@ const iconEditor = {
   dialogs: {
     selectPlistSheet: "选择 plist sheet",
     selectReplacementTexture: "为 {{role}} 选择替换贴图",
+    savePlistSheet: "保存图标 sheet",
+    saveCopyPlistSheet: "保存图标 sheet 副本",
     saveIconPng: "保存图标 PNG",
     renameConflictAria: "重命名冲突",
     nameAlreadyInUse: "名称已被占用",

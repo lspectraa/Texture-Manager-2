@@ -126,6 +126,8 @@ const iconEditor = {
   dialogs: {
     selectPlistSheet: "Selecionar sheet plist",
     selectReplacementTexture: "Selecionar textura substituta para {{role}}",
+    savePlistSheet: "Salvar sheet do ícone",
+    saveCopyPlistSheet: "Salvar cópia da sheet do ícone",
     saveIconPng: "Salvar PNG do ícone",
     renameConflictAria: "Conflito de renomeação",
     nameAlreadyInUse: "Nome já em uso",

@@ -125,6 +125,8 @@ const iconEditor = {
   dialogs: {
     selectPlistSheet: "plist 시트 선택",
     selectReplacementTexture: "{{role}}에 사용할 교체 텍스처 선택",
+    savePlistSheet: "아이콘 시트 저장",
+    saveCopyPlistSheet: "아이콘 시트 사본 저장",
     saveIconPng: "아이콘 PNG 저장",
     renameConflictAria: "이름 변경 충돌",
     nameAlreadyInUse: "이미 사용 중인 이름",

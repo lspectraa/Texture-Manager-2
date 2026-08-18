@@ -41,6 +41,11 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Sprites novos copiados do jogo não ficam mais nítidos. Confira ícones com chave de cor no fim.",
+    glowLineThickness: "Espessura da linha de brilho",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "Limiar alfa do brilho",
+    glowAlphaThresholdHint:
+      "0–255. Pixels abaixo desta opacidade são ignorados ao traçar o contorno.",
   },
   merger: {
     options: "Opções de combinação",

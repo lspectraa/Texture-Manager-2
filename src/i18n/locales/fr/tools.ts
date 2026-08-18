@@ -41,6 +41,11 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Les nouveaux sprites copiés du jeu ne sont pas affinés. Vérifiez les icônes à clé de couleur à la fin.",
+    glowLineThickness: "Épaisseur de la ligne de glow",
+    glowLineThicknessHint: "1–128",
+    glowAlphaThreshold: "Seuil alpha du glow",
+    glowAlphaThresholdHint:
+      "0–255. Les pixels en dessous de cette opacité sont ignorés lors du tracé du contour.",
   },
   merger: {
     options: "Options de fusion",
