@@ -30,7 +30,7 @@ const common: AppLocaleResources["common"] = {
     closeAria: "Cerrar el cuadro de diálogo Acerca de",
     copyright: "© {{year}} {{holder}}.",
     description:
-      "Creado para flujos de trabajo de texturas de Geometry Dash: divide, combina, adapta y edita gamesheets con un conjunto de herramientas de escritorio especializado.",
+      "Una app de escritorio para paquetes de texturas de Geometry Dash: edita iconos, divide y combina hojas, y más.",
     licenseHeading: "Licencia",
     licenseName: "GNU GPLv3 (o posterior)",
     licenseSummary:
@@ -40,7 +40,7 @@ const common: AppLocaleResources["common"] = {
     thirdPartyHeading: "Escaladores de terceros",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "Esta aplicación incluye binarios de inferencia y pesos de modelos. Conservan sus licencias MIT y BSD-3-Clause; los avisos completos se entregan con la aplicación.",
+      "Esta app incluye herramientas extra de ampliación. Conservan sus propias licencias, y los avisos completos vienen con la app.",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT. Original de nagadomi; puerto ncnn-Vulkan de nihui.",
     thirdPartyRealesrgan:

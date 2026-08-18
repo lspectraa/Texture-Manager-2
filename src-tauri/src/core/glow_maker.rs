@@ -16,6 +16,7 @@ use crate::core::game_files::{
 };
 use crate::core::glow::{glow_primary_name_for, render_icon_glow_from_primary};
 use crate::core::glow_composite::composite_icon_layers_for_glow;
+use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::merger::merge_plist_from_memory;
 use crate::core::plist::count_frames_in_plist;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
@@ -196,6 +197,9 @@ where
         ));
     })?;
     issues.extend(split.issues);
+    for sprite in split.sprites.values_mut() {
+        *sprite = clear_orthogonally_isolated_pixels(sprite);
+    }
 
     if split.files_processed == 0 {
         issues.push(ReportIssue {

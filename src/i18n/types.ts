@@ -5,7 +5,9 @@ export type LocaleCatalog<T> = {
   [K in keyof T]: T[K] extends string
     ? string
     : T[K] extends ReadonlyArray<infer U>
-      ? ReadonlyArray<LocaleCatalog<U>>
+      ? U extends string
+        ? ReadonlyArray<string>
+        : ReadonlyArray<LocaleCatalog<U>>
       : LocaleCatalog<T[K]>;
 };
 

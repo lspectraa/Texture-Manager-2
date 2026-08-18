@@ -64,7 +64,7 @@ const iconEditor = {
   frames: {
     panelAria: "フレームとロールの割り当て",
     title: "フレーム",
-    subtitle: "レイヤーにフレームを割り当てる",
+    subtitle: "各レイヤーに置くスプライトを選びます",
     layerFrame: "レイヤーのフレーム",
     none: "なし",
     importAria: "{{role}} のフレームを読み込む",
@@ -78,7 +78,7 @@ const iconEditor = {
   plist: {
     panelAria: "フレームの plist プロパティ",
     title: "Plist",
-    subtitle: "フレームのプロパティとオフセット",
+    subtitle: "選んだスプライトの位置とサイズ",
     expandPanelAria: "plist パネルを展開",
     collapsePanelAria: "plist パネルを折りたたむ",
     showPanel: "plist を表示",
@@ -111,6 +111,17 @@ const iconEditor = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "生成グロウ",
+    enable: "このパーツからグロウを生成",
+    enableHint: "シートのスプライトではなく、グロウメーカーでグロウを作ります。",
+    thickness: "幅",
+    composite: "レイヤーを合成",
+    compositeHint: "グロウ作成時にセカンダリとエクストラも含めます。",
+    generating: "生成中…",
+    needsPrimary: "先にこのパーツのプライマリを設定してください。",
+    offsetLockedHint: "オフセットはグロウメーカーがパーツから設定します。編集できません。",
   },
   dialogs: {
     selectPlistSheet: "plist シートを選択",

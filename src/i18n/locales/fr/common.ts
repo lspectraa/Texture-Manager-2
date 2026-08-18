@@ -28,7 +28,7 @@ const common = {
     closeAria: "Fermer la fenêtre À propos",
     copyright: "© {{year}} {{holder}}.",
     description:
-      "Conçu pour les workflows de textures Geometry Dash — découpez, fusionnez, portez et modifiez vos gamesheets avec une boîte à outils de bureau dédiée.",
+      "Une appli de bureau pour les texture packs Geometry Dash — éditez des icônes, découpez et assemblez des sheets, et plus encore.",
     licenseHeading: "Licence",
     licenseName: "GNU GPLv3 (ou ultérieure)",
     licenseSummary:
@@ -38,7 +38,7 @@ const common = {
     thirdPartyHeading: "Suréchantillonneurs tiers",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "Cette application inclut des binaires d’inférence et des poids de modèles. Ils conservent leurs licences MIT et BSD-3-Clause ; les mentions complètes sont fournies avec l’application.",
+      "Cette appli inclut des outils d’agrandissement supplémentaires. Ils gardent leurs propres licences, et les mentions complètes sont fournies avec l’appli.",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT. Original de nagadomi ; portage ncnn-Vulkan par nihui.",
     thirdPartyRealesrgan:

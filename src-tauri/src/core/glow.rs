@@ -292,6 +292,32 @@ fn rainbow_rgb_at(x: u32, width: u32) -> [u8; 3] {
     ]
 }
 
+/// Recolor a white glow image with a solid RGB, preserving alpha.
+pub fn tint_glow_rgb(image: &mut RgbaImage, rgb: [u8; 3]) {
+    if rgb == [255, 255, 255] {
+        return;
+    }
+    for pixel in image.pixels_mut() {
+        if pixel.0[3] == 0 {
+            continue;
+        }
+        pixel.0[0] = rgb[0];
+        pixel.0[1] = rgb[1];
+        pixel.0[2] = rgb[2];
+    }
+}
+
+pub fn parse_hex_rgb(color: &str) -> Option<[u8; 3]> {
+    let trimmed = color.trim().trim_start_matches('#');
+    if trimmed.len() != 6 {
+        return None;
+    }
+    let r = u8::from_str_radix(&trimmed[0..2], 16).ok()?;
+    let g = u8::from_str_radix(&trimmed[2..4], 16).ok()?;
+    let b = u8::from_str_radix(&trimmed[4..6], 16).ok()?;
+    Some([r, g, b])
+}
+
 /// Recolor a white glow image with a horizontal rainbow gradient, preserving alpha.
 fn apply_rainbow_gradient(image: &mut RgbaImage) {
     let width = image.width();
@@ -310,7 +336,7 @@ fn apply_rainbow_gradient(image: &mut RgbaImage) {
 
 #[cfg(test)]
 mod tests {
-    use super::render_icon_glow_from_primary;
+    use super::{parse_hex_rgb, render_icon_glow_from_primary, tint_glow_rgb};
     use crate::core::contracts::GlowMakerOptions;
     use image::{Rgba, RgbaImage};
 
@@ -344,5 +370,21 @@ mod tests {
             0,
             "isolated speck must not bloom into glow"
         );
+    }
+
+    #[test]
+    fn parse_hex_rgb_reads_hash_and_plain() {
+        assert_eq!(parse_hex_rgb("#ff0044"), Some([255, 0, 68]));
+        assert_eq!(parse_hex_rgb("00ff7d"), Some([0, 255, 125]));
+        assert_eq!(parse_hex_rgb("zzz"), None);
+    }
+
+    #[test]
+    fn tint_glow_rgb_recolors_visible_pixels_only() {
+        let mut glow = RgbaImage::from_pixel(2, 1, Rgba([255, 255, 255, 180]));
+        glow.put_pixel(1, 0, Rgba([255, 255, 255, 0]));
+        tint_glow_rgb(&mut glow, [255, 0, 0]);
+        assert_eq!(glow.get_pixel(0, 0).0, [255, 0, 0, 180]);
+        assert_eq!(glow.get_pixel(1, 0).0, [255, 255, 255, 0]);
     }
 }

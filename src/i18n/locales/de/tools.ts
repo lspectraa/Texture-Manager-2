@@ -13,7 +13,7 @@ const tools = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "Wähle, was verarbeitet wird und wie viele Sheets gleichzeitig laufen.",
     skipIcons: "Skip icons folder",
     performance: "Leistung",
     performanceDescription: "Bestimme, wie viele Gamesheets parallel verarbeitet werden",
@@ -28,25 +28,24 @@ const tools = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "Wähle HD- oder UHD-Ausgabe.",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "Nur ein Sheet gleichzeitig, damit der Rechner flüssig bleibt.",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "Optional: fehlende Sprites aus dem neuesten Spiel ergänzen.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "Neue Sprites aus dem Spiel werden nicht geschärft. Prüfe farbige Icons danach.",
   },
   merger: {
     options: "Merge-Optionen",
-    optionsDescription: "Merge-Verhalten und Durchsatz anpassen",
-    includeOutsidePlist: "Dateien außerhalb des Plists einbeziehen (Phase-2-kompatibles Flag)",
+    optionsDescription: "Zusätzliche Dateien und gleichzeitige Ordner wählen.",
+    includeOutsidePlist: "Auch Bilder einbeziehen, die nicht in der Plist stehen",
     concurrentFolders: "Parallele Merge-Ordner",
   },
   randomizer: {
@@ -64,15 +63,15 @@ const tools = {
   },
   glowMaker: {
     parameters: "Glow-Parameter",
-    parametersDescription: "Strichstärke und Alpha-Filterschwellen anpassen",
+    parametersDescription: "Wie dick der Glow ist und welche Pixel als Kontur zählen.",
     thickness: "Glow-Stärke",
     thicknessRange: "1–128",
     outlineAlphaMinimum: "Mindest-Alpha der Kontur",
     alphaRange: "0–255",
     generationMode: "Erzeugungsmodus",
-    generationModeDescription: "Verhalten von Komposition und Farbspektrum wählen",
+    generationModeDescription: "Wie Icon-Ebenen kombiniert werden und welche Glow-Farbe.",
     compositeLayers: "Icon-Ebenen vor dem Glow zusammenführen (primär + sekundär + extra)",
-    rainbowGlow: "Regenbogen-Glow (erweitertes Spektrum, Cyan → Violett → Rotviolett)",
+    rainbowGlow: "Regenbogen-Glow",
     preview: "Vorschau",
     previewDescription:
       "Live-Vorschau mit einem zufälligen UHD-Icon aus deinem Spiel — aktualisiert sich mit deinen Einstellungen",

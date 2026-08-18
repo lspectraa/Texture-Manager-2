@@ -53,6 +53,7 @@ import {
   IconEditorSheetInfo,
   IconEditorSize,
   copyIconEditorSheet,
+  createIconEditorSheet,
   isIconEditorRenameTargetConflict,
   renameIconEditorSheet,
   saveIconEditorPlist,
@@ -72,6 +73,18 @@ import {
   type IconEditorHistoryState,
   type IconEditorSerializedTextureEdit,
 } from "../../services/iconEditorHistory";
+import { useIconEditorGeneratedGlow } from "../../hooks/useIconEditorGeneratedGlow";
+import {
+  compositeGlowSourceLayers,
+  glowGenKeyForComponent,
+  glowMakerOwnedOffset,
+  isGlowMakerOwnedFrame,
+  resolveGlowGenSettings,
+  type GeneratedGlowFrame,
+  type GlowGenJob,
+  type GlowGenSettings,
+} from "../../utils/iconEditorGeneratedGlow";
+import { IconEditorGeneratedGlowControls } from "./IconEditorGeneratedGlowControls";
 
 type IconLayerRole = "primary" | "secondary" | "extra" | "glow" | "capsule";
 type TintTarget = "primary" | "secondary" | "glow";
@@ -569,6 +582,25 @@ function inferStemFromFrames(frames: IconEditorFrameInfo[]): string | null {
   return null;
 }
 
+function stripGraphicsTierSuffix(stem: string): string {
+  if (stem.toLowerCase().endsWith("-uhd")) {
+    return stem.slice(0, -4);
+  }
+  if (stem.toLowerCase().endsWith("-hd")) {
+    return stem.slice(0, -3);
+  }
+  return stem;
+}
+
+function ensurePlistSavePath(path: string): string {
+  const trimmed = path.trim();
+  return /\.plist$/i.test(trimmed) ? trimmed : `${trimmed}.plist`;
+}
+
+function sameSheetPath(left: string, right: string): boolean {
+  return left.replace(/\\/g, "/").toLowerCase() === right.replace(/\\/g, "/").toLowerCase();
+}
+
 function resolveFrameNameFromPlist(frames: IconEditorFrameInfo[], canonical: string): string | null {
   const lower = stripPngExtension(canonical).toLowerCase();
   const found = frames.find(
@@ -990,6 +1022,7 @@ type SpriteOffsetAxisControlsProps = {
   axis: "x" | "y";
   value: number;
   frameName: string;
+  disabled?: boolean;
   onBump: (frameName: string, axis: "x" | "y", sign: number, step?: number) => void;
   onSetAxis: (frameName: string, axis: "x" | "y", value: number) => void;
 };
@@ -998,6 +1031,7 @@ function SpriteOffsetAxisControls({
   axis,
   value,
   frameName,
+  disabled = false,
   onBump,
   onSetAxis,
 }: SpriteOffsetAxisControlsProps) {
@@ -1035,7 +1069,11 @@ function SpriteOffsetAxisControls({
   };
 
   return (
-    <div className={`tm-icon-editor-plist-offset-card tm-icon-editor-plist-offset-card-${axis}`}>
+    <div
+      className={`tm-icon-editor-plist-offset-card tm-icon-editor-plist-offset-card-${axis}${
+        disabled ? " tm-icon-editor-plist-offset-card-locked" : ""
+      }`}
+    >
       <span className={`tm-icon-editor-plist-offset-axis tm-icon-editor-plist-offset-axis-${axis}`}>
         {axisLabel}
       </span>
@@ -1046,6 +1084,7 @@ function SpriteOffsetAxisControls({
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-coarse"
             aria-label={t("plist.decreaseOffsetByOne", { axis: axisLabel })}
             title="−1"
+            disabled={disabled}
             onClick={() => onBump(frameName, axis, -1, OFFSET_BUMP_COARSE)}
           >
             <DecreaseIcon size={15} strokeWidth={2.25} aria-hidden />
@@ -1056,6 +1095,7 @@ function SpriteOffsetAxisControls({
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-fine"
             aria-label={t("plist.decreaseOffsetByHalf", { axis: axisLabel })}
             title="−0.5"
+            disabled={disabled}
             onClick={() => onBump(frameName, axis, -1)}
           >
             <DecreaseIcon size={12} strokeWidth={2} aria-hidden />
@@ -1068,7 +1108,13 @@ function SpriteOffsetAxisControls({
           className="tm-icon-editor-plist-offset-value"
           aria-label={t("plist.offsetAxis", { axis: axisLabel })}
           value={draft}
-          onFocus={() => setIsEditing(true)}
+          disabled={disabled}
+          readOnly={disabled}
+          onFocus={() => {
+            if (!disabled) {
+              setIsEditing(true);
+            }
+          }}
           onChange={(event) => setDraft(event.target.value)}
           onBlur={commitDraft}
           onKeyDown={(event) => {
@@ -1089,6 +1135,7 @@ function SpriteOffsetAxisControls({
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-fine"
             aria-label={t("plist.increaseOffsetByHalf", { axis: axisLabel })}
             title="+0.5"
+            disabled={disabled}
             onClick={() => onBump(frameName, axis, 1)}
           >
             <IncreaseIcon size={12} strokeWidth={2} aria-hidden />
@@ -1099,6 +1146,7 @@ function SpriteOffsetAxisControls({
             className="tm-icon-editor-plist-offset-btn tm-icon-editor-plist-offset-btn-coarse"
             aria-label={t("plist.increaseOffsetByOne", { axis: axisLabel })}
             title="+1"
+            disabled={disabled}
             onClick={() => onBump(frameName, axis, 1, OFFSET_BUMP_COARSE)}
           >
             <IncreaseIcon size={15} strokeWidth={2.25} aria-hidden />
@@ -1121,6 +1169,8 @@ export function IconEditorToolPanel() {
   const [pendingTextureEdits, setPendingTextureEdits] = useState<
     Record<string, PendingFrameTextureEdit>
   >({});
+  const [generatedGlowFrames, setGeneratedGlowFrames] = useState<GeneratedGlowFrame[]>([]);
+  const [glowGenByKey, setGlowGenByKey] = useState<Record<string, GlowGenSettings>>({});
   const pendingTextureEditsRef = useRef(pendingTextureEdits);
   pendingTextureEditsRef.current = pendingTextureEdits;
   const [trimByFrameName, setTrimByFrameName] = useState<Record<string, TrimInsets>>({});
@@ -1176,6 +1226,7 @@ export function IconEditorToolPanel() {
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
+  const glowGenJobsRef = useRef<GlowGenJob[]>([]);
   const lastObservedScrollportHeightRef = useRef(0);
   const stageScrollPortRef = useRef<HTMLDivElement | null>(null);
   const focusStageAnchorRafRef = useRef<number | null>(null);
@@ -1209,16 +1260,35 @@ export function IconEditorToolPanel() {
         textureRotated: edit.textureRotated,
       });
     }
+    for (const generated of generatedGlowFrames) {
+      const existing = map.get(generated.frameName);
+      map.set(generated.frameName, {
+        name: generated.frameName,
+        textureRect: existing?.textureRect ?? {
+          x: 0,
+          y: 0,
+          width: generated.spriteSize.width,
+          height: generated.spriteSize.height,
+        },
+        spriteSize: generated.spriteSize,
+        spriteSourceSize: generated.spriteSize,
+        spriteOffset: generated.spriteOffset,
+        textureRotated: false,
+      });
+    }
     return map;
-  }, [pendingTextureEdits, sheetInfo]);
+  }, [generatedGlowFrames, pendingTextureEdits, sheetInfo]);
 
   const effectiveTrimByFrameName = useMemo(() => {
     const out = { ...trimByFrameName };
     for (const [name, edit] of Object.entries(pendingTextureEdits)) {
       out[name] = trimTransparentEdgesFromCanvas(edit.sourceCanvas);
     }
+    for (const generated of generatedGlowFrames) {
+      out[generated.frameName] = trimTransparentEdgesFromCanvas(generated.canvas);
+    }
     return out;
-  }, [pendingTextureEdits, trimByFrameName]);
+  }, [generatedGlowFrames, pendingTextureEdits, trimByFrameName]);
 
   const displayFrameCanvases = useMemo(() => {
     const out = { ...splitFrameCanvases };
@@ -1226,8 +1296,11 @@ export function IconEditorToolPanel() {
       const trim = trimTransparentEdgesFromCanvas(edit.sourceCanvas);
       out[name] = cropCanvasByTrimInsets(edit.sourceCanvas, trim);
     }
+    for (const generated of generatedGlowFrames) {
+      out[generated.frameName] = generated.canvas;
+    }
     return out;
-  }, [pendingTextureEdits, splitFrameCanvases]);
+  }, [generatedGlowFrames, pendingTextureEdits, splitFrameCanvases]);
 
   /** Vertical anchor from floor + primary plist geometry (base offset only; ignores unsaved drag edits). */
   const stageOriginY = useMemo(() => {
@@ -1333,17 +1406,15 @@ export function IconEditorToolPanel() {
   const commitEditSnapshot = useCallback(
     (nextPresent: IconEditorEditSnapshot) => {
       const plistPath = activePlistPathRef.current;
-      if (!plistPath) {
-        applyEditSnapshot(nextPresent);
-        return;
-      }
       const present = cloneIconEditorEditSnapshot(nextPresent);
       setEditHistory((previous) => {
         const nextHistory = commitIconEditorHistory(previous, present);
         if (nextHistory === previous) {
           return previous;
         }
-        saveIconEditorHistory(plistPath, nextHistory);
+        if (plistPath) {
+          saveIconEditorHistory(plistPath, nextHistory);
+        }
         return nextHistory;
       });
       applyEditSnapshot(present);
@@ -1356,15 +1427,14 @@ export function IconEditorToolPanel() {
 
   const undoEdits = useCallback(() => {
     const plistPath = activePlistPathRef.current;
-    if (!plistPath) {
-      return;
-    }
     setEditHistory((previous) => {
       const nextHistory = undoIconEditorHistory(previous);
       if (!nextHistory) {
         return previous;
       }
-      saveIconEditorHistory(plistPath, nextHistory);
+      if (plistPath) {
+        saveIconEditorHistory(plistPath, nextHistory);
+      }
       applyEditSnapshot(nextHistory.present);
       return nextHistory;
     });
@@ -1372,15 +1442,14 @@ export function IconEditorToolPanel() {
 
   const redoEdits = useCallback(() => {
     const plistPath = activePlistPathRef.current;
-    if (!plistPath) {
-      return;
-    }
     setEditHistory((previous) => {
       const nextHistory = redoIconEditorHistory(previous);
       if (!nextHistory) {
         return previous;
       }
-      saveIconEditorHistory(plistPath, nextHistory);
+      if (plistPath) {
+        saveIconEditorHistory(plistPath, nextHistory);
+      }
       applyEditSnapshot(nextHistory.present);
       return nextHistory;
     });
@@ -1388,6 +1457,9 @@ export function IconEditorToolPanel() {
 
   const bumpSpriteOffset = useCallback(
     (frameName: string, axis: "x" | "y", sign: number, step: number = OFFSET_STEP) => {
+      if (isGlowMakerOwnedFrame(frameName, glowGenJobsRef.current, generatedGlowFrames)) {
+        return;
+      }
       const previous = offsetEditsRef.current;
       const current = previous[frameName] ?? resolveDefaultOffset(frameName);
       const delta = sign * step;
@@ -1403,11 +1475,14 @@ export function IconEditorToolPanel() {
         ),
       );
     },
-    [buildEditSnapshot, commitEditSnapshot, resolveDefaultOffset],
+    [buildEditSnapshot, commitEditSnapshot, generatedGlowFrames, resolveDefaultOffset],
   );
 
   const setSpriteOffsetAxis = useCallback(
     (frameName: string, axis: "x" | "y", nextValue: number) => {
+      if (isGlowMakerOwnedFrame(frameName, glowGenJobsRef.current, generatedGlowFrames)) {
+        return;
+      }
       const previous = offsetEditsRef.current;
       const current = previous[frameName] ?? resolveDefaultOffset(frameName);
       const nextPoint =
@@ -1420,7 +1495,7 @@ export function IconEditorToolPanel() {
         ),
       );
     },
-    [buildEditSnapshot, commitEditSnapshot, resolveDefaultOffset],
+    [buildEditSnapshot, commitEditSnapshot, generatedGlowFrames, resolveDefaultOffset],
   );
 
   const backgroundLayerEntries = useMemo(
@@ -1562,6 +1637,14 @@ export function IconEditorToolPanel() {
 
   const getEffectiveOffset = useCallback(
     (frameName: string): IconEditorPoint => {
+      const ownedGlowOffset = glowMakerOwnedOffset(
+        frameName,
+        glowGenJobsRef.current,
+        generatedGlowFrames,
+      );
+      if (ownedGlowOffset) {
+        return ownedGlowOffset;
+      }
       const edited = offsetEdits[frameName];
       if (edited) {
         return edited;
@@ -1574,32 +1657,34 @@ export function IconEditorToolPanel() {
       // Match merge behavior: start from plist spriteOffset and add trim-derived reduction adjustment.
       return mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
     },
-    [effectiveTrimByFrameName, frameMap, offsetEdits],
+    [effectiveTrimByFrameName, frameMap, generatedGlowFrames, offsetEdits],
   );
 
   const offsetDirty = Object.keys(offsetEdits).length > 0;
   const textureDirty = Object.keys(pendingTextureEdits).length > 0;
+  const generatedGlowDirty = generatedGlowFrames.length > 0;
   const extraMappingDirty =
     sheetInfo !== null && roleMap.extra.trim() !== extraMappingBaseline.trim();
-  const dirty = offsetDirty || extraMappingDirty || textureDirty;
-  const saveStatusLabel = !sheetInfo
+  const dirty = offsetDirty || extraMappingDirty || textureDirty || generatedGlowDirty;
+  const canWriteSheet = Boolean(sheetInfo) || dirty;
+  const saveStatusLabel = !sheetInfo && !dirty
     ? t("saveStatus.save")
     : dirty
       ? t("saveStatus.unsaved")
       : t("saveStatus.saved");
   const saveTooltip = useMemo(() => {
-    if (!sheetInfo) {
-      return t("saveStatus.saveOffsets");
-    }
     if (isBusy) {
       return t("saveStatus.savingChanges");
+    }
+    if (!sheetInfo) {
+      return dirty ? t("saveStatus.saveUnsaved") : t("saveStatus.saveOffsets");
     }
     if (dirty) {
       return t("saveStatus.saveUnsaved");
     }
     return t("saveStatus.allSaved");
   }, [dirty, isBusy, sheetInfo]);
-  const saveStatusClass = !sheetInfo
+  const saveStatusClass = !sheetInfo && !dirty
     ? "tm-icon-editor-viewport-hud-save--idle"
     : dirty
       ? "tm-icon-editor-viewport-hud-save--unsaved"
@@ -1705,32 +1790,93 @@ export function IconEditorToolPanel() {
     await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
   }, [loadSheet, sheetInfo?.plistPath]);
 
+  const collectSheetWritePayload = useCallback(() => {
+    const lockedGlowNames = new Set([
+      ...generatedGlowFrames.map((frame) => frame.frameName),
+      ...glowGenJobsRef.current
+        .filter((job) => job.enabled)
+        .map((job) => job.glowFrameName),
+    ]);
+    const updates = Object.entries(offsetEdits)
+      .filter(([name]) => !lockedGlowNames.has(name))
+      .map(([name, spriteOffset]) => ({
+        name,
+        spriteOffset,
+      }));
+    const removedFrameNames: string[] = [];
+    if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
+      removedFrameNames.push(extraMappingBaseline.trim());
+    }
+    const frameTextureUpdates = [
+      ...buildFrameTextureUpdates(pendingTextureEdits).filter((update) => !lockedGlowNames.has(update.name)),
+      ...generatedGlowFrames.map((frame) => ({
+        name: frame.frameName,
+        pngDataUrl: canvasToPngDataUrl(frame.canvas),
+        spriteSize: frame.spriteSize,
+        spriteSourceSize: frame.spriteSize,
+        spriteOffset:
+          glowMakerOwnedOffset(frame.frameName, glowGenJobsRef.current, generatedGlowFrames) ??
+          frame.spriteOffset,
+        textureRotated: false,
+        isNewFrame: frame.isNewFrame,
+      })),
+    ];
+    return { updates, removedFrameNames, frameTextureUpdates };
+  }, [extraMappingBaseline, generatedGlowFrames, offsetEdits, pendingTextureEdits, roleMap.extra]);
+
+  const pickPlistSavePath = useCallback(
+    async (title: string, defaultFileName: string): Promise<string | null> => {
+      const selected = await save({
+        title,
+        defaultPath: defaultFileName,
+        filters: [{ name: "Plist", extensions: ["plist"] }],
+      });
+      if (typeof selected !== "string" || !selected.trim()) {
+        return null;
+      }
+      return ensurePlistSavePath(selected);
+    },
+    [],
+  );
+
   const saveOffsets = useCallback(async () => {
-    if (!sheetInfo || !dirty) {
+    if (!dirty) {
       return;
+    }
+    if (!isTauriRuntime()) {
+      setToolbarError(t("errors:iconEditor.runtimeUnavailable"));
+      setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
+      return;
+    }
+    let targetPath = sheetInfo?.plistPath ?? null;
+    if (!targetPath) {
+      const selected = await pickPlistSavePath(
+        t("dialogs.savePlistSheet"),
+        `${renameValue.trim() || "player_01-uhd"}.plist`,
+      );
+      if (!selected) {
+        return;
+      }
+      targetPath = selected;
     }
     setIsBusy(true);
     setToolbarError(null);
     setToolbarErrorDetail(null);
     setIsErrorDetailOpen(false);
     try {
-      const updates = Object.entries(offsetEdits).map(([name, spriteOffset]) => ({
-        name,
-        spriteOffset,
-      }));
-      const removedFrameNames: string[] = [];
-      if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
-        removedFrameNames.push(extraMappingBaseline.trim());
+      const { updates, removedFrameNames, frameTextureUpdates } = collectSheetWritePayload();
+      if (!sheetInfo) {
+        await createIconEditorSheet(targetPath, updates, frameTextureUpdates);
+      } else {
+        await saveIconEditorPlist(
+          targetPath,
+          updates,
+          removedFrameNames,
+          frameTextureUpdates,
+        );
       }
-      const frameTextureUpdates = buildFrameTextureUpdates(pendingTextureEdits);
-      await saveIconEditorPlist(
-        sheetInfo.plistPath,
-        updates,
-        removedFrameNames,
-        frameTextureUpdates,
-      );
-      clearIconEditorHistory(sheetInfo.plistPath);
-      await loadSheet(sheetInfo.plistPath, { omitBusy: true, resetHistory: true });
+      clearIconEditorHistory(targetPath);
+      await loadSheet(targetPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
         error,
@@ -1741,7 +1887,14 @@ export function IconEditorToolPanel() {
     } finally {
       setIsBusy(false);
     }
-  }, [dirty, extraMappingBaseline, loadSheet, offsetEdits, pendingTextureEdits, roleMap.extra, sheetInfo]);
+  }, [
+    collectSheetWritePayload,
+    dirty,
+    loadSheet,
+    pickPlistSavePath,
+    renameValue,
+    sheetInfo,
+  ]);
 
   const renameSheet = useCallback(async () => {
     if (!sheetInfo || !renameValue.trim()) {
@@ -1802,11 +1955,28 @@ export function IconEditorToolPanel() {
     () => sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") ?? "",
     [sheetInfo?.plistPath],
   );
-  const canSaveCopy =
-    Boolean(sheetInfo) && renameValue.trim() !== "" && renameValue.trim() !== currentSheetStem;
+  const canSaveCopy = canWriteSheet;
 
   const saveCopy = useCallback(async () => {
-    if (!sheetInfo || !canSaveCopy) {
+    if (!canSaveCopy) {
+      return;
+    }
+    if (!isTauriRuntime()) {
+      setToolbarError(t("errors:iconEditor.runtimeUnavailable"));
+      setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
+      return;
+    }
+    const defaultStem = renameValue.trim() || currentSheetStem || "player_01-uhd";
+    const selected = await pickPlistSavePath(
+      t("dialogs.saveCopyPlistSheet"),
+      `${defaultStem}.plist`,
+    );
+    if (!selected) {
+      return;
+    }
+    const sourcePath = sheetInfo?.plistPath ?? null;
+    if (sourcePath && sameSheetPath(sourcePath, selected)) {
+      await saveOffsets();
       return;
     }
     setIsBusy(true);
@@ -1814,23 +1984,17 @@ export function IconEditorToolPanel() {
     setToolbarErrorDetail(null);
     setIsErrorDetailOpen(false);
     try {
-      const updates = Object.entries(offsetEdits).map(([name, spriteOffset]) => ({
-        name,
-        spriteOffset,
-      }));
-      const removedFrameNames: string[] = [];
-      if (roleMap.extra.trim() === "" && extraMappingBaseline.trim() !== "") {
-        removedFrameNames.push(extraMappingBaseline.trim());
-      }
-      const frameTextureUpdates = buildFrameTextureUpdates(pendingTextureEdits);
-      const copied = await copyIconEditorSheet(
-        sheetInfo.plistPath,
-        renameValue.trim(),
-        updates,
-        removedFrameNames,
-        frameTextureUpdates,
-      );
-      await loadSheet(copied.plistPath, { omitBusy: true });
+      const { updates, removedFrameNames, frameTextureUpdates } = collectSheetWritePayload();
+      const written = sourcePath
+        ? await copyIconEditorSheet(
+            sourcePath,
+            selected,
+            updates,
+            removedFrameNames,
+            frameTextureUpdates,
+          )
+        : await createIconEditorSheet(selected, updates, frameTextureUpdates);
+      await loadSheet(written.plistPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
         error,
@@ -1843,20 +2007,17 @@ export function IconEditorToolPanel() {
     }
   }, [
     canSaveCopy,
-    extraMappingBaseline,
+    collectSheetWritePayload,
+    currentSheetStem,
     loadSheet,
-    offsetEdits,
+    pickPlistSavePath,
     renameValue,
-    pendingTextureEdits,
-    roleMap.extra,
+    saveOffsets,
     sheetInfo,
   ]);
 
   const importFrame = useCallback(
     async (role: IconLayerRole) => {
-      if (!sheetInfo) {
-        return;
-      }
       if (!isTauriRuntime()) {
         setToolbarError(t("errors:iconEditor.textureImportUnavailable"));
         setToolbarErrorDetail(t("errors:iconEditor.textureImportUnavailable"));
@@ -1865,27 +2026,30 @@ export function IconEditorToolPanel() {
       const selected = await open({
         directory: false,
         multiple: false,
-        title: `Select replacement texture for ${role}`,
+        title: t("dialogs.selectReplacementTexture", { role: t(`roles.${role}`) }),
         filters: [{ name: "PNG", extensions: ["png"] }],
       });
       if (typeof selected !== "string" || !selected.trim()) {
         return;
       }
       const selectedTexturePath = selected.trim();
+      const knownFrames = sheetInfo?.frames ?? Array.from(frameMap.values());
+      const importedBase = selectedTexturePath.split(/[/\\]/).pop() ?? "";
       const stemFromPrimary = roleMap.primary.trim()
         ? parseIconFrameStem(roleMap.primary.trim())
         : null;
-      const stem = stemFromPrimary ?? inferStemFromFrames(sheetInfo.frames);
-      if (!stem) {
-        const message =
-          t("errors:iconEditor.inferStemFailed");
-        setToolbarError(message);
-        setToolbarErrorDetail(message);
-        return;
-      }
-      const isRobotSheet = /^robot_\d+_0[1-4]$/i.test(stem) || sheetInfo.frames.some((frame) => Boolean(parseRobotPartFrame(frame.name)));
+      const stemFromRename = renameValue.trim()
+        ? stripGraphicsTierSuffix(renameValue.trim())
+        : null;
+      const stem =
+        stemFromPrimary ??
+        inferStemFromFrames(knownFrames) ??
+        parseIconFrameStem(importedBase) ??
+        stemFromRename ??
+        "player_01";
+      const isRobotSheet = /^robot_\d+_0[1-4]$/i.test(stem) || knownFrames.some((frame) => Boolean(parseRobotPartFrame(frame.name)));
       const isSpiderSheet =
-        /^spider_\d+_0[1-4]$/i.test(stem) || sheetInfo.frames.some((frame) => Boolean(parseSpiderPartFrame(frame.name)));
+        /^spider_\d+_0[1-4]$/i.test(stem) || knownFrames.some((frame) => Boolean(parseSpiderPartFrame(frame.name)));
       const targetFrameName = isRobotSheet
         ? (() => {
             const robotStemMatch = stem.match(/^(robot_\d+)_0[1-4]$/i);
@@ -1925,7 +2089,7 @@ export function IconEditorToolPanel() {
               return ensurePngExtension(`${spiderStem}_${selectedSpiderPartId}${suffix}`);
             })()
           : buildIconFrameNameForRole(stem, role);
-      const existingPlistName = resolveFrameNameFromPlist(sheetInfo.frames, targetFrameName);
+      const existingPlistName = resolveFrameNameFromPlist(knownFrames, targetFrameName);
       const frameExists = existingPlistName !== null;
       setToolbarError(null);
       setToolbarErrorDetail(null);
@@ -1966,7 +2130,7 @@ export function IconEditorToolPanel() {
         setToolbarErrorDetail(parsed.detail);
       }
     },
-    [buildEditSnapshot, commitEditSnapshot, frameMap, roleMap.primary, selectedRobotPartId, selectedSpiderPartId, sheetInfo],
+    [buildEditSnapshot, commitEditSnapshot, frameMap, renameValue, roleMap.primary, selectedRobotPartId, selectedSpiderPartId, sheetInfo],
   );
 
   useEffect(() => {
@@ -2047,8 +2211,8 @@ export function IconEditorToolPanel() {
 
   const iconStem = useMemo(() => {
     const fromPrimary = roleMap.primary ? parseIconFrameStem(roleMap.primary) : null;
-    return fromPrimary ?? inferStemFromFrames(sheetInfo?.frames ?? []) ?? "";
-  }, [roleMap.primary, sheetInfo?.frames]);
+    return fromPrimary ?? inferStemFromFrames(sheetInfo?.frames ?? Array.from(frameMap.values())) ?? "";
+  }, [frameMap, roleMap.primary, sheetInfo?.frames]);
   /** Bird/UFO capsule art sits ~30 game px higher; UHD sheets use 2× nudge. Applied as screen Y (smaller = up). */
   const isBirdOrUfoIcon = /^(bird|ufo)_\d+$/i.test(iconStem);
   const capsuleStageVerticalNudge = useMemo(() => {
@@ -2065,6 +2229,177 @@ export function IconEditorToolPanel() {
     /^robot_\d+_0[1-4]$/i.test(iconStem) || (sheetInfo?.frames ?? []).some((frame) => Boolean(parseRobotPartFrame(frame.name)));
   const isSpiderIcon =
     /^spider_\d+_\d+$/i.test(iconStem) || (sheetInfo?.frames ?? []).some((frame) => Boolean(parseSpiderPartFrame(frame.name)));
+
+  const activeGlowGenKey = glowGenKeyForComponent({
+    isRobot: isRobotIcon,
+    isSpider: isSpiderIcon,
+    robotPartId: selectedRobotPartId,
+    spiderPartId: selectedSpiderPartId,
+  });
+  const activeGlowGen = resolveGlowGenSettings(glowGenByKey, activeGlowGenKey);
+
+  const glowGenJobs = useMemo((): GlowGenJob[] => {
+    const sourceCanvasFor = (frameName: string): HTMLCanvasElement | null => {
+      if (!frameName) {
+        return null;
+      }
+      return pendingTextureEdits[frameName]?.sourceCanvas ?? splitFrameCanvases[frameName] ?? null;
+    };
+    const offsetFor = (frameName: string): IconEditorPoint => {
+      if (!frameName) {
+        return { x: 0, y: 0 };
+      }
+      return (
+        pendingTextureEdits[frameName]?.spriteOffset ??
+        frameMap.get(frameName)?.spriteOffset ?? { x: 0, y: 0 }
+      );
+    };
+    const frameExists = (frameName: string): boolean => {
+      if (!frameName) {
+        return false;
+      }
+      return Boolean(
+        sheetInfo?.frames.some((frame) => frame.name === frameName) || pendingTextureEdits[frameName],
+      );
+    };
+    const sourceTokenFor = (frameName: string, canvas: HTMLCanvasElement | null): string => {
+      if (!frameName || !canvas) {
+        return "none";
+      }
+      const edited = pendingTextureEdits[frameName] ? "edit" : "split";
+      return `${frameName}:${edited}:${canvas.width}x${canvas.height}`;
+    };
+    const jobFor = (
+      key: string,
+      partId: RobotPartId | null,
+      primaryName: string,
+      secondaryName: string,
+      extraName: string,
+      glowName: string,
+      fallbackGlowName: string,
+    ): GlowGenJob => {
+      const settings = resolveGlowGenSettings(glowGenByKey, key);
+      const resolvedGlowName = glowName || fallbackGlowName;
+      const primaryCanvas = sourceCanvasFor(primaryName);
+      const primaryOffset = offsetFor(primaryName);
+      let sourceCanvas = primaryCanvas;
+      let sourceToken = sourceTokenFor(primaryName, primaryCanvas);
+      if (settings.compositeLayers && primaryCanvas) {
+        const layers = [
+          { name: secondaryName, canvas: sourceCanvasFor(secondaryName) },
+          { name: primaryName, canvas: primaryCanvas },
+          { name: extraName, canvas: sourceCanvasFor(extraName) },
+        ].flatMap((layer) =>
+          layer.canvas
+            ? [{ canvas: layer.canvas, offset: offsetFor(layer.name) }]
+            : [],
+        );
+        sourceCanvas = compositeGlowSourceLayers(layers, primaryOffset) ?? primaryCanvas;
+        sourceToken = layers
+          .map((layer) => `${layer.offset.x},${layer.offset.y}:${layer.canvas.width}x${layer.canvas.height}`)
+          .join("+");
+      }
+      return {
+        key,
+        enabled: settings.enabled,
+        thickness: settings.thickness,
+        compositeLayers: settings.compositeLayers,
+        sourceCanvas,
+        sourceToken,
+        glowFrameName: resolvedGlowName,
+        glowOffset: primaryName ? getEffectiveOffset(primaryName) : primaryOffset,
+        isNewFrame: !frameExists(resolvedGlowName),
+        partId,
+      };
+    };
+
+    if (isRobotIcon) {
+      return ROBOT_PART_DRAW_ORDER.map((partId) => {
+        const primaryName = robotPartRoleMap[partId].primary ?? "";
+        const parsed = primaryName ? parseRobotPartFrame(primaryName) : null;
+        const fallback = parsed
+          ? ensurePngExtension(`${parsed.robotStem}_${partId}_glow_001`)
+          : "";
+        return jobFor(
+          `robot:${partId}`,
+          partId,
+          primaryName,
+          robotPartRoleMap[partId].secondary ?? "",
+          partId === "01" ? roleMap.extra : "",
+          robotPartRoleMap[partId].glow ?? "",
+          fallback,
+        );
+      }).filter((job) => job.glowFrameName.length > 0);
+    }
+    if (isSpiderIcon) {
+      return SPIDER_PART_DRAW_ORDER.map((partId) => {
+        const primaryName = spiderPartRoleMap[partId].primary ?? "";
+        const parsed = primaryName ? parseSpiderPartFrame(primaryName) : null;
+        const fallback = parsed
+          ? ensurePngExtension(`${parsed.spiderStem}_${partId}_glow_001`)
+          : "";
+        return jobFor(
+          `spider:${partId}`,
+          partId,
+          primaryName,
+          spiderPartRoleMap[partId].secondary ?? "",
+          partId === "01" ? roleMap.extra : "",
+          spiderPartRoleMap[partId].glow ?? "",
+          fallback,
+        );
+      }).filter((job) => job.glowFrameName.length > 0);
+    }
+    const fallbackGlow = iconStem ? buildIconFrameNameForRole(iconStem, "glow") : "";
+    return [
+      jobFor(
+        "icon",
+        null,
+        roleMap.primary,
+        roleMap.secondary,
+        roleMap.extra,
+        roleMap.glow,
+        fallbackGlow,
+      ),
+    ].filter((job) => job.glowFrameName.length > 0);
+  }, [
+    frameMap,
+    getEffectiveOffset,
+    glowGenByKey,
+    iconStem,
+    isRobotIcon,
+    isSpiderIcon,
+    pendingTextureEdits,
+    robotPartRoleMap,
+    roleMap.extra,
+    roleMap.glow,
+    roleMap.primary,
+    roleMap.secondary,
+    sheetInfo?.frames,
+    spiderPartRoleMap,
+    splitFrameCanvases,
+  ]);
+  glowGenJobsRef.current = glowGenJobs;
+
+  const updateGlowGenSettings = useCallback((key: string, patch: Partial<GlowGenSettings>) => {
+    setGlowGenByKey((previous) => {
+      const current = resolveGlowGenSettings(previous, key);
+      return {
+        ...previous,
+        [key]: {
+          enabled: patch.enabled ?? current.enabled,
+          thickness: patch.thickness ?? current.thickness,
+          compositeLayers: patch.compositeLayers ?? current.compositeLayers,
+        },
+      };
+    });
+  }, []);
+
+  const { isGenerating: isGeneratingGlow, error: generatedGlowError } = useIconEditorGeneratedGlow({
+    jobs: glowGenJobs,
+    plistPath: sheetInfo?.plistPath ?? null,
+    onFramesChange: setGeneratedGlowFrames,
+  });
+
   const robotInspectorFrameName =
     isRobotIcon && selectedRobotPartId === "01" && inspectorRole === "extra"
       ? roleMap.extra
@@ -2085,8 +2420,13 @@ export function IconEditorToolPanel() {
         ? [...BASE_ROLES, ...BIRD_CAPSULE_ROLES]
         : BASE_ROLES;
   const layerRoles = isBirdOrUfoIcon ? BIRD_LAYER_ROLES : BASE_LAYER_ROLES;
+  const generatedInspectorFrameName =
+    inspectorRole === "glow"
+      ? generatedGlowFrames.find((frame) => frame.key === activeGlowGenKey)?.frameName
+      : undefined;
   const effectiveInspectorFrameName =
     inspectorFrameOverride ??
+    generatedInspectorFrameName ??
     (isRobotIcon ? robotInspectorFrameName : isSpiderIcon ? spiderInspectorFrameName : inspectorFrameName);
   const inspectorFrame = effectiveInspectorFrameName ? frameMap.get(effectiveInspectorFrameName) ?? null : null;
   const inspectorTrim: TrimInsets | null = effectiveInspectorFrameName
@@ -2097,6 +2437,17 @@ export function IconEditorToolPanel() {
   const inspectorEffectiveOffset = effectiveInspectorFrameName
     ? getEffectiveOffset(effectiveInspectorFrameName)
     : null;
+  const glowOffsetLocked =
+    inspectorRole === "glow" &&
+    (activeGlowGen.enabled ||
+      Boolean(
+        effectiveInspectorFrameName &&
+          isGlowMakerOwnedFrame(effectiveInspectorFrameName, glowGenJobs, generatedGlowFrames),
+      ));
+  const layerOffsetLockedClass = (frameName: string): string =>
+    isGlowMakerOwnedFrame(frameName, glowGenJobs, generatedGlowFrames)
+      ? " tm-icon-editor-layer-offset-locked"
+      : "";
 
   const rotateFrame = useCallback(
     (direction: IconEditorRotateDirection) => {
@@ -2104,6 +2455,9 @@ export function IconEditorToolPanel() {
         return;
       }
       const frameName = effectiveInspectorFrameName;
+      if (isGlowMakerOwnedFrame(frameName, glowGenJobs, generatedGlowFrames)) {
+        return;
+      }
       const frame = frameMap.get(frameName);
       if (!frame) {
         return;
@@ -2140,7 +2494,15 @@ export function IconEditorToolPanel() {
         buildEditSnapshot(nextOffsets, roleMapExtraRef.current, nextPending),
       );
     },
-    [buildEditSnapshot, commitEditSnapshot, effectiveInspectorFrameName, frameMap, fullFrameCanvases],
+    [
+      buildEditSnapshot,
+      commitEditSnapshot,
+      effectiveInspectorFrameName,
+      frameMap,
+      fullFrameCanvases,
+      generatedGlowFrames,
+      glowGenJobs,
+    ],
   );
 
   useEffect(() => {
@@ -2151,6 +2513,8 @@ export function IconEditorToolPanel() {
 
   useEffect(() => {
     setInspectorFrameOverride(null);
+    setGlowGenByKey({});
+    setGeneratedGlowFrames([]);
   }, [sheetInfo?.plistPath]);
 
   useEffect(() => {
@@ -2171,7 +2535,7 @@ export function IconEditorToolPanel() {
     }
   }, [inspectorRole]);
 
-  const layers = useMemo(() => {
+  const mappedLayers = useMemo(() => {
     if (isRobotIcon) {
       const roleOrderPerPart: TintTarget[] = ["glow", "secondary", "primary"];
       const robotLayers: Array<{
@@ -2315,10 +2679,62 @@ export function IconEditorToolPanel() {
     tintByTarget,
   ]);
 
-  const downloadCurrentIconPng = useCallback(async () => {
-    if (!sheetInfo) {
-      return;
+  const layers = useMemo(() => {
+    if (hideGlow || generatedGlowFrames.length === 0) {
+      return mappedLayers;
     }
+    const next = mappedLayers.map((layer) => {
+      if (layer.role !== "glow") {
+        return layer;
+      }
+      const generated = generatedGlowFrames.find((frame) =>
+        frame.partId ? frame.partId === layer.robotPartId : frame.frameName === layer.frameName || frame.key === "icon",
+      );
+      if (!generated) {
+        return layer;
+      }
+      const frame = frameMap.get(generated.frameName);
+      if (!frame) {
+        return layer;
+      }
+      return {
+        ...layer,
+        frameName: generated.frameName,
+        frame,
+        offset:
+          glowMakerOwnedOffset(generated.frameName, glowGenJobs, generatedGlowFrames) ??
+          generated.spriteOffset,
+        tint: null,
+      };
+    });
+    for (const generated of generatedGlowFrames) {
+      const alreadyPresent = next.some(
+        (layer) =>
+          layer.role === "glow" &&
+          (generated.partId ? layer.robotPartId === generated.partId : layer.frameName === generated.frameName),
+      );
+      if (alreadyPresent) {
+        continue;
+      }
+      const frame = frameMap.get(generated.frameName);
+      if (!frame) {
+        continue;
+      }
+      next.unshift({
+        role: "glow",
+        frameName: generated.frameName,
+        frame,
+        offset:
+          glowMakerOwnedOffset(generated.frameName, glowGenJobs, generatedGlowFrames) ??
+          generated.spriteOffset,
+        tint: null,
+        robotPartId: generated.partId,
+      });
+    }
+    return next;
+  }, [frameMap, generatedGlowFrames, glowGenJobs, hideGlow, mappedLayers]);
+
+  const downloadCurrentIconPng = useCallback(async () => {
     if (layers.length === 0) {
       setToolbarError(t("errors:iconEditor.noVisibleLayers"));
       setToolbarErrorDetail(t("errors:iconEditor.noVisibleLayersDetail"));
@@ -2453,7 +2869,7 @@ export function IconEditorToolPanel() {
       const tightlyCropped = cropCanvasByTrimInsets(layerCropped, trim);
       const pngDataUrl = tightlyCropped.toDataURL("image/png");
 
-      const stem = renameValue.trim() || sheetInfo.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
+      const stem = renameValue.trim() || sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
       const defaultFileName = `${stem}-icon.png`;
       if (isTauriRuntime()) {
         const savePath = await save({
@@ -2511,6 +2927,9 @@ export function IconEditorToolPanel() {
     const frameName = roleMap[role];
     const dragFrameName = layerFrameName || frameName;
     if (!dragFrameName) {
+      return;
+    }
+    if (isGlowMakerOwnedFrame(dragFrameName, glowGenJobs, generatedGlowFrames)) {
       return;
     }
     const startOffset = getEffectiveOffset(dragFrameName);
@@ -2647,7 +3066,7 @@ export function IconEditorToolPanel() {
 
     const frameOptions: AppSelectOption[] = [
       { value: "", label: t("frames.none") },
-      ...(sheetInfo?.frames ?? [])
+      ...Array.from(frameMap.values())
         .filter((frame) => {
           if (isRobotIcon) {
             const parsed = parseRobotPartFrame(frame.name);
@@ -2732,7 +3151,7 @@ export function IconEditorToolPanel() {
             value={roleValue}
             options={frameOptions}
             onChange={handleRoleFrameChange}
-            disabled={!sheetInfo || isBusy}
+            disabled={isBusy}
             aria-label={`${t(`roles.${role}`)}: ${t("frames.layerFrame")}`}
             portal
           />
@@ -2742,7 +3161,7 @@ export function IconEditorToolPanel() {
             aria-label={t("frames.importAria", { role: t(`roles.${role}`) })}
             title={t("frames.importAria", { role: t(`roles.${role}`) })}
             onClick={() => importFrame(role)}
-            disabled={!sheetInfo || isBusy}
+            disabled={isBusy}
           >
             <Upload size={14} strokeWidth={2} aria-hidden />
           </button>
@@ -2846,7 +3265,7 @@ export function IconEditorToolPanel() {
                   type="button"
                   aria-label={t("toolbar.downloadAria")}
                   onClick={() => downloadCurrentIconPng().catch(() => {})}
-                  disabled={!sheetInfo || isBusy}
+                  disabled={isBusy}
                 >
                   <Download size={15} aria-hidden />
                   {t("toolbar.download")}
@@ -2869,7 +3288,7 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                   aria-label={`${t("toolbar.undo")} (${t("toolbar.undoShortcut")})`}
                   onClick={undoEdits}
-                  disabled={!sheetInfo || isBusy || !canUndoEdits}
+                  disabled={isBusy || !canUndoEdits}
                 >
                   <Undo2 size={15} aria-hidden />
                 </button>
@@ -2883,7 +3302,7 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                   aria-label={`${t("toolbar.redo")} (${t("toolbar.redoShortcut")})`}
                   onClick={redoEdits}
-                  disabled={!sheetInfo || isBusy || !canRedoEdits}
+                  disabled={isBusy || !canRedoEdits}
                 >
                   <Redo2 size={15} aria-hidden />
                 </button>
@@ -2893,18 +3312,18 @@ export function IconEditorToolPanel() {
             <div className="tm-icon-editor-toolbar-group">
               <IconEditorToolbarTip
                 label={saveTooltip}
-                shortcut={sheetInfo && !isBusy ? t("toolbar.saveShortcut") : undefined}
+                shortcut={canWriteSheet && !isBusy ? t("toolbar.saveShortcut") : undefined}
               >
                 <button
                   type="button"
                   className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
                   aria-label={
-                    sheetInfo && !isBusy
+                    canWriteSheet && !isBusy
                       ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
                       : saveTooltip
                   }
                   onClick={() => saveOffsets().catch(() => {})}
-                  disabled={!sheetInfo || isBusy}
+                  disabled={!canWriteSheet || isBusy}
                 >
                   <Save size={15} aria-hidden />
                   {isBusy ? t("saveStatus.saving") : saveStatusLabel}
@@ -3216,7 +3635,7 @@ export function IconEditorToolPanel() {
                               <div
                                 className={`tm-icon-editor-layer tm-icon-editor-layer-glow ${
                                   inspectorRole === "glow" ? "tm-icon-editor-layer-selected" : ""
-                                }`}
+                                }${layerOffsetLockedClass(glowLayer.frameName)}`}
                                 data-frame-name={glowLayer.frameName}
                                 data-part-id={partId}
                                 style={{
@@ -3491,7 +3910,7 @@ export function IconEditorToolPanel() {
                               <div
                                 className={`tm-icon-editor-layer tm-icon-editor-layer-glow ${
                                   inspectorRole === "glow" ? "tm-icon-editor-layer-selected" : ""
-                                }`}
+                                }${layerOffsetLockedClass(glowLayer.frameName)}`}
                                 data-frame-name={glowLayer.frameName}
                                 data-part-id={partId}
                                 style={{
@@ -3743,7 +4162,7 @@ export function IconEditorToolPanel() {
                           key={`${layer.role}-${layer.frameName}`}
                           className={`tm-icon-editor-layer tm-icon-editor-layer-${layer.role} ${
                             inspectorRole === layer.role ? "tm-icon-editor-layer-selected" : ""
-                          }`}
+                          }${layer.role === "glow" ? layerOffsetLockedClass(layer.frameName) : ""}`}
                           data-frame-name={layer.frameName}
                           data-part-id=""
                           style={{
@@ -3962,7 +4381,28 @@ export function IconEditorToolPanel() {
                 ))}
               </div>
               <div className="tm-icon-editor-plist-scroll">
-                {!effectiveInspectorFrameName ? (
+                {inspectorRole === "glow" ? (
+                  <IconEditorGeneratedGlowControls
+                    settings={activeGlowGen}
+                    hasPrimary={
+                      isRobotIcon
+                        ? Boolean(robotPartRoleMap[selectedRobotPartId].primary)
+                        : isSpiderIcon
+                          ? Boolean(spiderPartRoleMap[selectedSpiderPartId].primary)
+                          : Boolean(roleMap.primary)
+                    }
+                    isGenerating={isGeneratingGlow}
+                    error={generatedGlowError}
+                    onEnabledChange={(enabled) => updateGlowGenSettings(activeGlowGenKey, { enabled })}
+                    onThicknessChange={(thickness) =>
+                      updateGlowGenSettings(activeGlowGenKey, { thickness })
+                    }
+                    onCompositeChange={(compositeLayers) =>
+                      updateGlowGenSettings(activeGlowGenKey, { compositeLayers })
+                    }
+                  />
+                ) : null}
+                {!effectiveInspectorFrameName && !(inspectorRole === "glow" && activeGlowGen.enabled) ? (
                   <div className="tm-icon-editor-panel-empty">
                     <FileCode2 size={20} strokeWidth={1.75} aria-hidden />
                     <p className="tm-icon-editor-panel-empty-title">
@@ -4001,7 +4441,7 @@ export function IconEditorToolPanel() {
                             aria-label={t("plist.rotateCounterClockwiseAria")}
                             title={t("plist.rotateCounterClockwiseTooltip")}
                             onClick={() => rotateFrame("counterClockwise")}
-                            disabled={isBusy}
+                            disabled={isBusy || glowOffsetLocked}
                           >
                             <RotateCcw size={15} strokeWidth={2} aria-hidden />
                           </button>
@@ -4011,7 +4451,7 @@ export function IconEditorToolPanel() {
                             aria-label={t("plist.rotateClockwiseAria")}
                             title={t("plist.rotateClockwiseTooltip")}
                             onClick={() => rotateFrame("clockwise")}
-                            disabled={isBusy}
+                            disabled={isBusy || glowOffsetLocked}
                           >
                             <RotateCw size={15} strokeWidth={2} aria-hidden />
                           </button>
@@ -4060,6 +4500,7 @@ export function IconEditorToolPanel() {
                           axis="x"
                           value={inspectorEffectiveOffset.x}
                           frameName={effectiveInspectorFrameName}
+                          disabled={glowOffsetLocked}
                           onBump={bumpSpriteOffset}
                           onSetAxis={setSpriteOffsetAxis}
                         />
@@ -4067,10 +4508,16 @@ export function IconEditorToolPanel() {
                           axis="y"
                           value={inspectorEffectiveOffset.y}
                           frameName={effectiveInspectorFrameName}
+                          disabled={glowOffsetLocked}
                           onBump={bumpSpriteOffset}
                           onSetAxis={setSpriteOffsetAxis}
                         />
                       </div>
+                      {glowOffsetLocked ? (
+                        <p className="tm-icon-editor-generated-glow-hint">
+                          {t("generatedGlow.offsetLockedHint")}
+                        </p>
+                      ) : null}
                       <dl className="tm-icon-editor-plist-kv-list">
                         <div className="tm-icon-editor-plist-row">
                           <dt>{t("plist.mergedOffset")}</dt>

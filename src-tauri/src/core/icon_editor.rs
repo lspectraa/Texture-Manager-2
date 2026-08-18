@@ -11,8 +11,13 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::contracts::MergerOptions;
 use crate::core::errors::AppError;
+use crate::core::glow_composite::icon_stem_from_frame_name;
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::merger::merge_plist_from_memory;
+use crate::core::plist::{
+    denormalize_plist_if_format2, frame_matches_icon_plist_format,
+    normalize_plist_frames_to_format3,
+};
 use crate::core::safe_fs::{
     ensure_existing_user_file, ensure_readable_image_file, ensure_user_absolute_path,
     is_safe_path_segment, join_under_parent, png_file_to_data_url, save_png_data_url,
@@ -96,9 +101,7 @@ pub struct IconEditorExtractedFrame {
 }
 
 pub fn icon_editor_sheet_info(plist_path: &Path) -> Result<IconEditorSheetInfo, AppError> {
-    ensure_existing_user_file(plist_path)?;
-    let plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -168,9 +171,15 @@ pub fn icon_editor_save_plist(
     removed_frame_names: &[String],
     frame_texture_updates: &[IconEditorFrameTextureUpdate],
 ) -> Result<(), AppError> {
-    ensure_existing_user_file(plist_path)?;
-    let mut plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    if !plist_path.exists() {
+        icon_editor_create_sheet(
+            plist_path,
+            updates,
+            frame_texture_updates,
+        )?;
+        return Ok(());
+    }
+    let mut plist_root = load_icon_editor_plist(plist_path)?;
 
     if !removed_frame_names.is_empty() {
         let root_dict_mut = plist_root
@@ -318,15 +327,104 @@ pub fn icon_editor_save_plist(
     write_plist_atomically(plist_path, &plist_root)
 }
 
+/// Create a new icon gamesheet at `plist_path` from in-memory frame textures.
+pub fn icon_editor_create_sheet(
+    plist_path: &Path,
+    updates: &[IconEditorFrameUpdate],
+    frame_texture_updates: &[IconEditorFrameTextureUpdate],
+) -> Result<IconEditorRenameResult, AppError> {
+    ensure_user_absolute_path(plist_path)?;
+    if frame_texture_updates.is_empty() {
+        return Err(AppError::InvalidOperation(
+            "cannot create an icon sheet without any sprite textures",
+        ));
+    }
+    let stem = plist_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or(AppError::InvalidPath("plist file name is invalid"))?;
+    let atlas_file_name = format!("{stem}.png");
+    let atlas_path = plist_path.with_file_name(&atlas_file_name);
+
+    let mut plist_root = empty_icon_editor_plist(&atlas_file_name);
+    let mut sprites: BTreeMap<String, RgbaImage> = BTreeMap::new();
+    let mut trim_by_name: BTreeMap<String, TrimInsets> = BTreeMap::new();
+
+    {
+        let root_dict_mut = plist_root
+            .as_dictionary_mut()
+            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+        let frames_mut = frames_dictionary_mut(root_dict_mut)?;
+        let mut new_frame_updates = Vec::with_capacity(frame_texture_updates.len());
+        for update in frame_texture_updates {
+            new_frame_updates.push(IconEditorFrameTextureUpdate {
+                name: update.name.clone(),
+                png_data_url: update.png_data_url.clone(),
+                sprite_size: update.sprite_size,
+                sprite_source_size: update.sprite_source_size,
+                sprite_offset: update.sprite_offset.clone(),
+                texture_rotated: update.texture_rotated,
+                is_new_frame: true,
+            });
+        }
+        apply_frame_texture_updates(
+            frames_mut,
+            &mut sprites,
+            &mut trim_by_name,
+            &new_frame_updates,
+        )?;
+        for update in updates {
+            let Some(frame_dict) = frames_mut
+                .get_mut(&update.name)
+                .and_then(Value::as_dictionary_mut)
+            else {
+                continue;
+            };
+            let trim = trim_by_name.get(&update.name).cloned().unwrap_or(TrimInsets {
+                left: 0,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            });
+            let pre_merge_offset = IconEditorPoint {
+                x: update.sprite_offset.x - (trim.left as f32 / 2.0) + (trim.right as f32 / 2.0),
+                y: update.sprite_offset.y + (trim.top as f32 / 2.0) - (trim.bottom as f32 / 2.0),
+            };
+            frame_dict.insert(
+                "spriteOffset".to_string(),
+                Value::String(format_pair_f32(&pre_merge_offset)),
+            );
+        }
+    }
+
+    let texture_rotated_snapshot = {
+        let root_dict = plist_root
+            .as_dictionary()
+            .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+        let frames = frames_dictionary(root_dict)?;
+        snapshot_texture_rotated_flags(frames)
+    };
+    finalize_merged_atlas_preserving_texture_rotated(
+        plist_path,
+        &mut plist_root,
+        &sprites,
+        &texture_rotated_snapshot,
+    )?;
+    write_plist_atomically(plist_path, &plist_root)?;
+
+    Ok(IconEditorRenameResult {
+        plist_path: plist_path.to_string_lossy().to_string(),
+        atlas_path: atlas_path.to_string_lossy().to_string(),
+    })
+}
+
 pub fn icon_editor_import_frame(
     plist_path: &Path,
     frame_name: &str,
     texture_path: &Path,
 ) -> Result<(), AppError> {
-    ensure_existing_user_file(plist_path)?;
     ensure_readable_image_file(texture_path)?;
-    let mut plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let mut plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -372,10 +470,8 @@ pub fn icon_editor_rotate_frame(
     frame_name: &str,
     direction: &str,
 ) -> Result<(), AppError> {
-    ensure_existing_user_file(plist_path)?;
     let direction = parse_rotate_direction(direction)?;
-    let mut plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let mut plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -453,11 +549,9 @@ pub fn icon_editor_add_frame(
     if frame_name.trim().is_empty() {
         return Err(AppError::InvalidOperation("new frame name cannot be empty"));
     }
-    ensure_existing_user_file(plist_path)?;
     ensure_readable_image_file(texture_path)?;
 
-    let mut plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let mut plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -516,9 +610,7 @@ pub fn icon_editor_add_frame(
 pub fn icon_editor_extract_frames(
     plist_path: &Path,
 ) -> Result<Vec<IconEditorExtractedFrame>, AppError> {
-    ensure_existing_user_file(plist_path)?;
-    let plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -578,9 +670,7 @@ pub fn icon_editor_extract_frames(
 pub(crate) fn icon_editor_load_sheet_sprites(
     plist_path: &Path,
 ) -> Result<(Value, BTreeMap<String, RgbaImage>), AppError> {
-    ensure_existing_user_file(plist_path)?;
-    let plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -592,8 +682,9 @@ pub(crate) fn icon_editor_load_sheet_sprites(
 pub(crate) fn icon_editor_load_sheet_sprites_from_atlas(
     plist_path: &Path,
     atlas_path: &Path,
-    plist_root: Value,
+    mut plist_root: Value,
 ) -> Result<(Value, BTreeMap<String, RgbaImage>), AppError> {
+    strip_incompatible_icon_editor_frames(&mut plist_root)?;
     ensure_existing_user_file(plist_path)?;
     if !atlas_path.is_file() {
         return Err(AppError::InvalidPath(
@@ -798,8 +889,7 @@ fn finalize_sheet_stem_in_plist(
         return Ok(());
     }
 
-    let mut plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let mut plist_root = load_icon_editor_plist(plist_path)?;
     let atlas_path = {
         let root_dict = plist_root
             .as_dictionary()
@@ -930,19 +1020,24 @@ pub fn icon_editor_swap_rename_sheet(
 
 pub fn icon_editor_copy_sheet(
     plist_path: &Path,
-    new_stem: &str,
+    dest_plist_path: &Path,
     updates: &[IconEditorFrameUpdate],
     removed_frame_names: &[String],
     frame_texture_updates: &[IconEditorFrameTextureUpdate],
 ) -> Result<IconEditorRenameResult, AppError> {
     ensure_existing_user_file(plist_path)?;
+    ensure_user_absolute_path(dest_plist_path)?;
+    if plist_path == dest_plist_path {
+        return Err(AppError::InvalidOperation(
+            "copy destination must differ from the current sheet",
+        ));
+    }
+    let new_stem = dest_plist_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or(AppError::InvalidPath("destination plist file name is invalid"))?;
     if new_stem.trim().is_empty() {
         return Err(AppError::InvalidOperation("new sheet name cannot be empty"));
-    }
-    if new_stem.contains('/') || new_stem.contains('\\') {
-        return Err(AppError::InvalidOperation(
-            "new sheet name cannot contain separators",
-        ));
     }
 
     let old_stem = plist_path
@@ -950,14 +1045,8 @@ pub fn icon_editor_copy_sheet(
         .and_then(|value| value.to_str())
         .ok_or(AppError::InvalidPath("plist file name is invalid"))?
         .to_string();
-    if old_stem == new_stem {
-        return Err(AppError::InvalidOperation(
-            "copy name must differ from the current sheet name",
-        ));
-    }
 
-    let mut plist_root = Value::from_file(plist_path)
-        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    let mut plist_root = load_icon_editor_plist(plist_path)?;
 
     if !removed_frame_names.is_empty() {
         let root_dict_mut = plist_root
@@ -1078,22 +1167,8 @@ pub fn icon_editor_copy_sheet(
         new_sprite_stem.as_str(),
     )?;
 
-    let parent_dir = plist_path
-        .parent()
-        .ok_or(AppError::InvalidPath("plist path has no parent directory"))?;
-    let copied_plist_path = parent_dir.join(format!("{new_stem}.plist"));
-    let copied_atlas_path = atlas_path.with_file_name(format!("{new_stem}.png"));
-
-    if copied_plist_path.exists() {
-        return Err(AppError::InvalidOperation(
-            "target plist name already exists in destination directory",
-        ));
-    }
-    if copied_atlas_path.exists() {
-        return Err(AppError::InvalidOperation(
-            "target png name already exists in destination directory",
-        ));
-    }
+    let copied_plist_path = dest_plist_path.to_path_buf();
+    let copied_atlas_path = dest_plist_path.with_file_name(format!("{new_stem}.png"));
 
     let root_dict_mut = plist_root
         .as_dictionary_mut()
@@ -1189,6 +1264,47 @@ fn find_frame_key(frames: &Dictionary, name: &str) -> Option<String> {
         .cloned()
 }
 
+fn load_icon_editor_plist(plist_path: &Path) -> Result<Value, AppError> {
+    ensure_existing_user_file(plist_path)?;
+    let mut plist_root = Value::from_file(plist_path)
+        .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    normalize_plist_frames_to_format3(&mut plist_root);
+    strip_incompatible_icon_editor_frames(&mut plist_root)?;
+    Ok(plist_root)
+}
+
+fn keep_icon_editor_frame(name: &str, value: &Value, sheet_has_icon_named_frames: bool) -> bool {
+    if !frame_matches_icon_plist_format(value) {
+        return false;
+    }
+    if sheet_has_icon_named_frames {
+        return icon_stem_from_frame_name(name).is_some();
+    }
+    true
+}
+
+fn strip_incompatible_icon_editor_frames(plist_root: &mut Value) -> Result<Vec<String>, AppError> {
+    let root_dict = plist_root
+        .as_dictionary_mut()
+        .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
+    let frames = frames_dictionary_mut(root_dict)?;
+    let sheet_has_icon_named_frames = frames
+        .keys()
+        .any(|name| icon_stem_from_frame_name(name).is_some());
+    let mut removed = Vec::new();
+    let names: Vec<String> = frames.keys().cloned().collect();
+    for name in names {
+        let keep = frames
+            .get(&name)
+            .is_some_and(|value| keep_icon_editor_frame(&name, value, sheet_has_icon_named_frames));
+        if !keep {
+            frames.remove(&name);
+            removed.push(name);
+        }
+    }
+    Ok(removed)
+}
+
 fn frames_dictionary(root_dict: &Dictionary) -> Result<&Dictionary, AppError> {
     root_dict
         .get("frames")
@@ -1205,6 +1321,29 @@ fn frames_dictionary_mut(root_dict: &mut Dictionary) -> Result<&mut Dictionary, 
         .ok_or_else(|| {
             AppError::ParseError("plist missing top-level `frames` dictionary".to_string())
         })
+}
+
+fn empty_icon_editor_plist(atlas_file_name: &str) -> Value {
+    let mut metadata = Dictionary::new();
+    metadata.insert("format".to_string(), Value::from(3i64));
+    metadata.insert(
+        "pixelFormat".to_string(),
+        Value::String("RGBA8888".to_string()),
+    );
+    metadata.insert("premultiplyAlpha".to_string(), Value::Boolean(false));
+    metadata.insert(
+        "textureFileName".to_string(),
+        Value::String(atlas_file_name.to_string()),
+    );
+    metadata.insert(
+        "realTextureFileName".to_string(),
+        Value::String(atlas_file_name.to_string()),
+    );
+
+    let mut root = Dictionary::new();
+    root.insert("frames".to_string(), Value::Dictionary(Dictionary::new()));
+    root.insert("metadata".to_string(), Value::Dictionary(metadata));
+    Value::Dictionary(root)
 }
 
 fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathBuf, AppError> {
@@ -1251,7 +1390,13 @@ fn write_plist_atomically(path: &Path, value: &Value) -> Result<(), AppError> {
         .ok_or(AppError::InvalidPath("invalid plist file name"))?;
     let temp_path = path.with_file_name(format!("{file_name}.tmp"));
 
-    value
+    let mut output = value.clone();
+    if strip_incompatible_icon_editor_frames(&mut output).is_err() {
+        output = value.clone();
+    }
+    denormalize_plist_if_format2(&mut output);
+
+    output
         .to_file_xml(&temp_path)
         .map_err(|err| AppError::IoError(err.to_string()))?;
     fs::rename(temp_path, path)?;
@@ -1953,4 +2098,180 @@ fn strip_graphics_tier_suffix(stem: &str) -> String {
         return value.to_string();
     }
     stem.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        icon_editor_create_sheet, icon_editor_save_plist, icon_editor_sheet_info,
+        IconEditorFrameTextureUpdate, IconEditorPoint, IconEditorSize,
+    };
+    use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+    use base64::Engine as _;
+    use image::{ImageFormat, Rgba, RgbaImage};
+    use plist::Value;
+    use std::fs;
+    use std::io::Cursor;
+
+    fn write_mixed_icon_sheet(dir: &std::path::Path) -> std::path::PathBuf {
+        let plist_path = dir.join("player_01-uhd.plist");
+        let png_path = dir.join("player_01-uhd.png");
+        let mut atlas = RgbaImage::from_pixel(64, 64, Rgba([0, 0, 0, 0]));
+        for y in 0..12 {
+            for x in 0..12 {
+                atlas.put_pixel(x, y, Rgba([40, 180, 255, 255]));
+            }
+        }
+        for y in 1..20 {
+            for x in 1..20 {
+                atlas.put_pixel(x + 20, y, Rgba([255, 0, 80, 255]));
+            }
+        }
+        atlas.save(&png_path).expect("atlas png");
+        fs::write(
+            &plist_path,
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>frames</key>
+  <dict>
+    <key>player_01_001.png</key>
+    <dict>
+      <key>aliases</key>
+      <array/>
+      <key>spriteOffset</key>
+      <string>{0,0}</string>
+      <key>spriteSize</key>
+      <string>{12,12}</string>
+      <key>spriteSourceSize</key>
+      <string>{12,12}</string>
+      <key>textureRect</key>
+      <string>{{0,0},{12,12}}</string>
+      <key>textureRotated</key>
+      <false/>
+    </dict>
+    <key>Viper_WaterMark.png</key>
+    <dict>
+      <key>aliases</key>
+      <array/>
+      <key>spriteOffset</key>
+      <string></string>
+      <key>spriteSize</key>
+      <string>{342,166}</string>
+      <key>spriteSourceSize</key>
+      <string></string>
+      <key>textureRect</key>
+      <string>{{1,1},{342,166}}</string>
+      <key>textureRotated</key>
+      <false/>
+    </dict>
+  </dict>
+  <key>metadata</key>
+  <dict>
+    <key>textureFileName</key>
+    <string>player_01-uhd.png</string>
+  </dict>
+</dict></plist>"#,
+        )
+        .expect("plist");
+        plist_path
+    }
+
+    #[test]
+    fn sheet_info_skips_incompatible_watermark_frame() {
+        let dir = std::env::temp_dir().join(format!(
+            "tm-icon-editor-watermark-info-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("temp dir");
+        let plist_path = write_mixed_icon_sheet(&dir);
+
+        let info = icon_editor_sheet_info(&plist_path).expect("sheet info");
+        let names: Vec<&str> = info
+            .frames
+            .iter()
+            .map(|frame| frame.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["player_01_001.png"]);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_removes_incompatible_watermark_from_output_plist() {
+        let dir = std::env::temp_dir().join(format!(
+            "tm-icon-editor-watermark-save-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("temp dir");
+        let plist_path = write_mixed_icon_sheet(&dir);
+
+        icon_editor_save_plist(&plist_path, &[], &[], &[]).expect("save");
+
+        let written = Value::from_file(&plist_path).expect("reload");
+        let frames = written
+            .as_dictionary()
+            .and_then(|dict| dict.get("frames"))
+            .and_then(Value::as_dictionary)
+            .expect("frames");
+        assert!(frames.contains_key("player_01_001.png"));
+        assert!(!frames.contains_key("Viper_WaterMark.png"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn png_data_url(image: &RgbaImage) -> String {
+        let mut bytes = Vec::new();
+        image
+            .write_to(&mut Cursor::new(&mut bytes), ImageFormat::Png)
+            .expect("encode png");
+        format!("data:image/png;base64,{}", BASE64_STANDARD.encode(bytes))
+    }
+
+    #[test]
+    fn creates_sheet_from_texture_updates_without_existing_plist() {
+        let dir = std::env::temp_dir().join(format!(
+            "tm-icon-editor-create-{}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("temp dir");
+        let plist_path = dir.join("ship_23-uhd.plist");
+        let mut sprite = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 0]));
+        for y in 1..7 {
+            for x in 1..7 {
+                sprite.put_pixel(x, y, Rgba([20, 200, 80, 255]));
+            }
+        }
+        let created = icon_editor_create_sheet(
+            &plist_path,
+            &[],
+            &[IconEditorFrameTextureUpdate {
+                name: "ship_23_001.png".to_string(),
+                png_data_url: png_data_url(&sprite),
+                sprite_size: IconEditorSize {
+                    width: 8,
+                    height: 8,
+                },
+                sprite_source_size: IconEditorSize {
+                    width: 8,
+                    height: 8,
+                },
+                sprite_offset: IconEditorPoint { x: 0.0, y: 0.0 },
+                texture_rotated: false,
+                is_new_frame: true,
+            }],
+        )
+        .expect("create sheet");
+
+        assert!(std::path::Path::new(&created.plist_path).is_file());
+        assert!(std::path::Path::new(&created.atlas_path).is_file());
+        let info = icon_editor_sheet_info(&plist_path).expect("sheet info");
+        assert_eq!(info.frames.len(), 1);
+        assert_eq!(info.frames[0].name, "ship_23_001.png");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

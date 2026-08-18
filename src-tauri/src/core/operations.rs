@@ -68,11 +68,11 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
                 OperationOptions::GlowMaker(with_glow_phase_three_defaults(existing))
             }
             None => OperationOptions::GlowMaker(GlowMakerOptions {
-                thickness: 3,
+                thickness: 4,
                 tolerance: 6,
                 dimensions: None,
                 rainbow_glow: false,
-                composite_layers: false,
+                composite_layers: true,
             }),
             Some(_) => return Err(AppError::InvalidOperation("glow maker options mismatch")),
         },
@@ -170,6 +170,8 @@ fn with_upscaler_defaults(existing: UpscalerOptions) -> Result<UpscalerOptions, 
         game_version,
         sheet_concurrency: existing.sheet_concurrency.clamp(1, 1),
         cache_match_mode: existing.cache_match_mode,
+        glow_thickness: existing.glow_thickness.clamp(1, 128),
+        glow_tolerance: existing.glow_tolerance,
     })
 }
 
@@ -297,6 +299,8 @@ mod tests {
                 game_version: String::new(),
                 sheet_concurrency: 99,
                 cache_match_mode: Default::default(),
+                glow_thickness: 4,
+                glow_tolerance: 32,
             })),
         };
         let plan = build_operation_plan(ok).expect("plan should be built");
@@ -319,6 +323,8 @@ mod tests {
                 game_version: String::new(),
                 sheet_concurrency: 1,
                 cache_match_mode: Default::default(),
+                glow_thickness: 4,
+                glow_tolerance: 32,
             })),
         };
         let plan = build_operation_plan(forced_default).expect("plan should be built");
@@ -340,6 +346,8 @@ mod tests {
                 game_version: "  ".to_string(),
                 sheet_concurrency: 1,
                 cache_match_mode: Default::default(),
+                glow_thickness: 4,
+                glow_tolerance: 32,
             })),
         };
         assert!(build_operation_plan(missing_version).is_err());

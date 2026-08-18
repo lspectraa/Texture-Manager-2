@@ -21,7 +21,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri",
+    "tauri": "node ./scripts/fetch-upscaler-binaries.mjs --if-missing && tauri",
     "check:env": "powershell -ExecutionPolicy Bypass -File ./scripts/check-prereqs.ps1",
     "phase0:verify": "npm run check:env && npm run build",
     "sync:version": "node ./scripts/sync-version.mjs",

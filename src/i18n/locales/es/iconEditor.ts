@@ -69,7 +69,7 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   frames: {
     panelAria: "Asignación de roles de fotogramas",
     title: "Fotogramas",
-    subtitle: "Asigna fotogramas a las capas",
+    subtitle: "Elige qué sprite va en cada capa",
     layerFrame: "Fotograma de la capa",
     none: "Ninguno",
     importAria: "Importar fotograma {{role}}",
@@ -83,7 +83,7 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   plist: {
     panelAria: "Propiedades plist del fotograma",
     title: "Plist",
-    subtitle: "Propiedades y desplazamientos del fotograma",
+    subtitle: "Posición y tamaño del sprite seleccionado",
     expandPanelAria: "Expandir el panel plist",
     collapsePanelAria: "Contraer el panel plist",
     showPanel: "Mostrar plist",
@@ -124,6 +124,17 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "Brillo generado",
+    enable: "Generar brillo de este componente",
+    enableHint: "Crear el brillo con el Creador de brillo en lugar del sprite de la hoja.",
+    thickness: "Grosor",
+    composite: "Combinar capas",
+    compositeHint: "Incluir secundaria y extra al crear el brillo.",
+    generating: "Generando…",
+    needsPrimary: "Añade primero un sprite primario para este componente.",
+    offsetLockedHint: "El Creador de brillo fija este desplazamiento desde el componente. No se puede editar.",
   },
   dialogs: {
     selectPlistSheet: "Seleccionar hoja plist",

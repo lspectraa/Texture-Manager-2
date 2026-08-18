@@ -15,7 +15,7 @@ use crate::core::contracts::{phase_defaults, GlowMakerOptions};
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::game_files::GameFilesLayout;
-use crate::core::glow::render_icon_glow_from_primary;
+use crate::core::glow::{parse_hex_rgb, render_icon_glow_from_primary, tint_glow_rgb};
 use crate::core::glow_composite::{
     composite_icon_layers_for_glow, icon_stem_from_frame_name, sprite_offset_for_frame,
     trimmed_sprite_anchor,
@@ -562,6 +562,40 @@ fn compose_glow_under_icon(glow: &RgbaImage, icon: &RgbaImage) -> RgbaImage {
     out
 }
 
+fn decode_png_data_url(png_data_url: &str) -> Result<RgbaImage, AppError> {
+    let encoded = png_data_url
+        .split_once(',')
+        .map(|(_, data)| data)
+        .ok_or_else(|| AppError::ParseError("invalid png data url".to_string()))?;
+    let bytes = BASE64_STANDARD
+        .decode(encoded)
+        .map_err(|err| AppError::ParseError(format!("failed to decode png data: {err}")))?;
+    image::load_from_memory(&bytes)
+        .map_err(|err| AppError::ParseError(format!("failed to decode png image: {err}")))
+        .map(|image| image.to_rgba8())
+}
+
+/// Generate a glow PNG data URL from a primary sprite using Glow Maker.
+pub fn generate_icon_glow_data_url(
+    png_data_url: &str,
+    thickness: u32,
+    color: Option<&str>,
+) -> Result<String, AppError> {
+    let primary = decode_png_data_url(png_data_url)?;
+    let options = GlowMakerOptions {
+        thickness: thickness.clamp(1, 128),
+        tolerance: 6,
+        dimensions: None,
+        rainbow_glow: false,
+        composite_layers: false,
+    };
+    let mut glow = render_icon_glow_from_primary(&primary, &options);
+    if let Some(rgb) = color.and_then(parse_hex_rgb) {
+        tint_glow_rgb(&mut glow, rgb);
+    }
+    rgba_to_png_data_url(&glow)
+}
+
 fn rgba_to_png_data_url(img: &RgbaImage) -> Result<String, AppError> {
     let mut bytes = Vec::new();
     {
@@ -1029,5 +1063,19 @@ mod tests {
         assert!(sample.primary.pixels().any(|p| p.0 == [255, 80, 40, 255]));
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn generate_icon_glow_data_url_pads_and_tints() {
+        let source = tiny_primary();
+        let source_url = rgba_to_png_data_url(&source).expect("encode source");
+        let glow_url =
+            generate_icon_glow_data_url(&source_url, 2, Some("#ff0000")).expect("generate");
+        let glow = decode_png_data_url(&glow_url).expect("decode glow");
+        assert_eq!(glow.width(), source.width() + 4);
+        assert_eq!(glow.height(), source.height() + 4);
+        let center = glow.get_pixel(glow.width() / 2, glow.height() / 2).0;
+        assert_eq!([center[0], center[1], center[2]], [255, 0, 0]);
+        assert!(center[3] > 0);
     }
 }

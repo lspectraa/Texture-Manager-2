@@ -5,7 +5,7 @@ const onboarding = {
     geometryDash: "Confirm Geometry Dash",
   },
   languageAria: "Language",
-  languageHint: "More languages will appear here as translations are added.",
+  languageHint: "You can change this later in Settings.",
   progressAria: "Setup progress",
   stepAria: "Step {{number}}: {{id}}",
   pickYourStyle: "Pick your style",
@@ -20,8 +20,7 @@ const onboarding = {
     redetect: "Re-detect",
     notFoundWarning:
       "Geometry Dash was not found. You can finish setup now and set the install path later in Settings.",
-    looksGood:
-      "Looks good — this path will be used for game files and tools.",
+    looksGood: "Looks good — tools will use this folder for game files.",
   },
 } as const;
 

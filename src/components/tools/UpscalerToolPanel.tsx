@@ -5,6 +5,7 @@ import { type UpscalerTargetGraphics } from "../../domain/operations";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
+  ToolNumberField,
   ToolPage,
   ToolPageHeader,
   ToolPathsSection,
@@ -19,11 +20,15 @@ type UpscalerToolPanelProps = {
   convertToLatest: boolean;
   gameVersion: string;
   versionOptions: string[];
+  glowThickness: number;
+  glowTolerance: number;
   onInputDirChange: (value: string) => void;
   onOutputDirChange: (value: string) => void;
   onTargetGraphicsChange: (value: UpscalerTargetGraphics) => void;
   onConvertToLatestChange: (value: boolean) => void;
   onGameVersionChange: (value: string) => void;
+  onGlowThicknessChange: (value: number) => void;
+  onGlowToleranceChange: (value: number) => void;
   pickFolder: PickFolderFn;
 };
 
@@ -34,11 +39,15 @@ export function UpscalerToolPanel({
   convertToLatest,
   gameVersion,
   versionOptions,
+  glowThickness,
+  glowTolerance,
   onInputDirChange,
   onOutputDirChange,
   onTargetGraphicsChange,
   onConvertToLatestChange,
   onGameVersionChange,
+  onGlowThicknessChange,
+  onGlowToleranceChange,
   pickFolder,
 }: UpscalerToolPanelProps) {
   const { t } = useTranslation("tools");
@@ -69,10 +78,25 @@ export function UpscalerToolPanel({
       >
         <ToolSelectField
           label={t("upscaler.targetGraphics")}
-          hint={t("upscaler.targetHint")}
           value={targetGraphics}
           options={targetOptions}
           onChange={(value) => onTargetGraphicsChange(value as UpscalerTargetGraphics)}
+        />
+        <ToolNumberField
+          label={t("upscaler.glowLineThickness")}
+          hint={t("upscaler.glowLineThicknessHint")}
+          value={glowThickness}
+          min={1}
+          max={128}
+          onChange={onGlowThicknessChange}
+        />
+        <ToolNumberField
+          label={t("upscaler.glowAlphaThreshold")}
+          hint={t("upscaler.glowAlphaThresholdHint")}
+          value={glowTolerance}
+          min={0}
+          max={255}
+          onChange={onGlowToleranceChange}
         />
       </ToolSection>
       <ToolSection

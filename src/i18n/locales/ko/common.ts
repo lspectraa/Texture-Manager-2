@@ -28,7 +28,7 @@ const common = {
     closeAria: "정보 대화 상자 닫기",
     copyright: "© {{year}} {{holder}}.",
     description:
-      "Geometry Dash 텍스처 작업을 위해 만들어졌습니다 — 집중형 데스크톱 도구로 게임시트를 분할, 병합, 포팅, 편집하세요.",
+      "Geometry Dash 텍스처 팩을 위한 데스크톱 앱입니다. 아이콘을 고치고, 시트를 나누고 합치는 일을 할 수 있습니다.",
     licenseHeading: "라이선스",
     licenseName: "GNU GPLv3 (또는 그 이후)",
     licenseSummary:
@@ -38,7 +38,7 @@ const common = {
     thirdPartyHeading: "서드파티 업스케일러",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "이 앱에는 추론 바이너리와 모델 가중치가 포함됩니다. MIT 및 BSD-3-Clause 라이선스는 그대로 유지되며, 전체 고지는 앱과 함께 제공됩니다.",
+      "이 앱에는 추가 업스케일 도구가 들어 있습니다. 자체 라이선스를 유지하며, 전체 고지는 앱과 함께 제공됩니다.",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT. 원작: nagadomi. ncnn-Vulkan 포트: nihui.",
     thirdPartyRealesrgan:

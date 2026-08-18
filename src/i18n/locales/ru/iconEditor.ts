@@ -67,7 +67,7 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   frames: {
     panelAria: "Сопоставление ролей кадров",
     title: "Кадры",
-    subtitle: "Назначьте кадры слоям",
+    subtitle: "Какой спрайт на каком слое",
     layerFrame: "Кадр слоя",
     none: "Нет",
     importAria: "Импортировать кадр {{role}}",
@@ -81,7 +81,7 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   plist: {
     panelAria: "Свойства кадра plist",
     title: "Plist",
-    subtitle: "Свойства и смещения кадра",
+    subtitle: "Положение и размер выбранного спрайта",
     expandPanelAria: "Развернуть панель plist",
     collapsePanelAria: "Свернуть панель plist",
     showPanel: "Показать plist",
@@ -120,6 +120,17 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "Сгенерированное свечение",
+    enable: "Создать свечение для этого компонента",
+    enableHint: "Построить свечение через Glow Maker вместо спрайта из атласа.",
+    thickness: "Толщина",
+    composite: "Смешать слои",
+    compositeHint: "Включать вторичный и extra при создании свечения.",
+    generating: "Создание…",
+    needsPrimary: "Сначала назначьте основной спрайт для этого компонента.",
+    offsetLockedHint: "Glow Maker задаёт это смещение по компоненту. Его нельзя изменить.",
   },
   dialogs: {
     selectPlistSheet: "Выберите атлас plist",

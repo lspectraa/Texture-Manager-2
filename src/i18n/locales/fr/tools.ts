@@ -13,7 +13,7 @@ const tools = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "Choisissez quoi traiter et combien de sheets travailler en même temps.",
     skipIcons: "Skip icons folder",
     performance: "Performance",
     performanceDescription: "Contrôlez le nombre de gamesheets traités en parallèle",
@@ -28,25 +28,24 @@ const tools = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "Choisissez une sortie HD ou UHD.",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "Une sheet à la fois pour que l’ordinateur reste fluide.",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "Optionnel : ajouter les sprites manquants du jeu le plus récent.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "Les nouveaux sprites copiés du jeu ne sont pas affinés. Vérifiez les icônes à clé de couleur à la fin.",
   },
   merger: {
     options: "Options de fusion",
     optionsDescription: "Ajustez le comportement et le débit de la fusion",
-    includeOutsidePlist: "Inclure les fichiers hors plist (indicateur compatible phase 2)",
+    includeOutsidePlist: "Inclure aussi les images absentes du plist",
     concurrentFolders: "Dossiers de fusion simultanés",
   },
   randomizer: {
@@ -72,7 +71,7 @@ const tools = {
     generationMode: "Mode de génération",
     generationModeDescription: "Choisissez le comportement de composition et de spectre de couleurs",
     compositeLayers: "Composer les couches de l’icône avant le glow (primaire + secondaire + extra)",
-    rainbowGlow: "Glow arc-en-ciel (spectre étendu, cyan → violet → violet rougeâtre)",
+    rainbowGlow: "Glow arc-en-ciel",
     preview: "Aperçu",
     previewDescription:
       "Aperçu en direct avec une icône UHD aléatoire de votre jeu — se met à jour selon vos réglages",

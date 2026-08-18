@@ -63,7 +63,7 @@ const iconEditor = {
   frames: {
     panelAria: "프레임 역할 매핑",
     title: "프레임",
-    subtitle: "레이어에 프레임 할당",
+    subtitle: "각 레이어에 어떤 스프라이트를 둘지 고릅니다",
     layerFrame: "레이어 프레임",
     none: "없음",
     importAria: "{{role}} 프레임 가져오기",
@@ -77,7 +77,7 @@ const iconEditor = {
   plist: {
     panelAria: "프레임 plist 속성",
     title: "Plist",
-    subtitle: "프레임 속성과 오프셋",
+    subtitle: "선택한 스프라이트의 위치와 크기",
     expandPanelAria: "plist 패널 펼치기",
     collapsePanelAria: "plist 패널 접기",
     showPanel: "plist 표시",
@@ -110,6 +110,17 @@ const iconEditor = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "생성된 글로우",
+    enable: "이 구성 요소에서 글로우 생성",
+    enableHint: "시트 스프라이트 대신 글로우 메이커로 글로우를 만듭니다.",
+    thickness: "두께",
+    composite: "레이어 합성",
+    compositeHint: "글로우를 만들 때 세컨더리와 엑스트라를 포함합니다.",
+    generating: "생성 중…",
+    needsPrimary: "먼저 이 구성 요소의 프라이머리를 지정하세요.",
+    offsetLockedHint: "글로우 메이커가 구성 요소를 기준으로 이 오프셋을 설정합니다. 편집할 수 없습니다.",
   },
   dialogs: {
     selectPlistSheet: "plist 시트 선택",

@@ -13,7 +13,7 @@ const tools = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "무엇을 처리할지, 한 번에 몇 장을 다룰지 고르세요.",
     skipIcons: "Skip icons folder",
     performance: "성능",
     performanceDescription: "동시에 처리할 게임시트 수를 조절합니다",
@@ -28,25 +28,24 @@ const tools = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "HD 또는 UHD 출력을 고르세요.",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "컴퓨터가 느려지지 않도록 한 번에 한 장만 처리합니다.",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "선택: 최신 게임에서 빠진 스프라이트를 추가합니다.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "게임에서 복사한 새 스프라이트는 선명해지지 않습니다. 끝나면 컬러 키 아이콘을 확인하세요.",
   },
   merger: {
     options: "병합 옵션",
     optionsDescription: "병합 동작과 처리량을 조정합니다",
-    includeOutsidePlist: "plist 외부 파일 포함(2단계 호환 플래그)",
+    includeOutsidePlist: "plist에 없는 이미지도 포함",
     concurrentFolders: "동시 병합 폴더 수",
   },
   randomizer: {
@@ -71,7 +70,7 @@ const tools = {
     generationMode: "생성 모드",
     generationModeDescription: "합성 방식과 색상 스펙트럼 동작을 선택하세요",
     compositeLayers: "글로우 전에 아이콘 레이어 합성(기본 + 보조 + 추가)",
-    rainbowGlow: "무지개 글로우(확장 스펙트럼, 시안 → 보라 → 붉은 보라)",
+    rainbowGlow: "무지개 글로우",
     preview: "미리보기",
     previewDescription:
       "게임에서 무작위로 고른 UHD 아이콘으로 실시간 미리보기 — 설정을 바꾸면 즉시 갱신됩니다",

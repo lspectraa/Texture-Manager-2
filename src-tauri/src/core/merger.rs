@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -9,7 +9,9 @@ use plist::{Dictionary, Value};
 
 use crate::core::contracts::{DimensionOverride, MergerOptions};
 use crate::core::errors::AppError;
+use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::image_io::save_rgba_png_fast;
+use crate::core::plist::{denormalize_plist_if_format2, normalize_plist_frames_to_format3};
 use crate::core::report::{ReportIssue, ReportLevel};
 use crate::core::safe_fs::{is_safe_path_segment, path_from_slashes};
 
@@ -64,6 +66,7 @@ where
 {
     let mut plist_root = Value::from_file(plist_file)
         .map_err(|err| AppError::ParseError(format!("failed to parse plist: {err}")))?;
+    normalize_plist_frames_to_format3(&mut plist_root);
 
     let root_dict = plist_root.as_dictionary_mut().ok_or(AppError::ParseError(
         "plist root must be a dictionary".to_string(),
@@ -111,7 +114,7 @@ where
 
         let sprite = image::open(&sprite_path)
             .map_err(|err| AppError::ParseError(format!("failed to open sprite: {err}")))?;
-        let mut rgba = sprite.to_rgba8();
+        let mut rgba = clear_orthogonally_isolated_pixels(&sprite.to_rgba8());
 
         const LOCKED_ALPHA_TRIM: bool = true;
         if LOCKED_ALPHA_TRIM {
@@ -191,6 +194,7 @@ where
             format!("{{{},{} }}", packed_width.max(1), packed_height.max(1)).replace(" ", ""),
         ),
     );
+    denormalize_plist_if_format2(&mut plist_root);
 
     fs::create_dir_all(destination_dir)?;
     let output_base_name = plist_file
@@ -265,6 +269,7 @@ where
             });
             continue;
         };
+        rgba = clear_orthogonally_isolated_pixels(&rgba);
 
         const LOCKED_ALPHA_TRIM: bool = true;
         if LOCKED_ALPHA_TRIM {
@@ -329,6 +334,12 @@ where
         }
     }
 
+    let placed: HashSet<String> = placements
+        .iter()
+        .map(|placement| placement.name.clone())
+        .collect();
+    frames.retain(|name, _| placed.contains(name));
+
     if !root_dict.contains_key("metadata") {
         root_dict.insert("metadata".to_string(), Value::Dictionary(Dictionary::new()));
     }
@@ -344,6 +355,7 @@ where
             format!("{{{},{} }}", packed_width.max(1), packed_height.max(1)).replace(" ", ""),
         ),
     );
+    denormalize_plist_if_format2(plist_root);
 
     Ok((
         atlas,

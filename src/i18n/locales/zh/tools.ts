@@ -12,7 +12,7 @@ const tools = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "选择要处理的内容，以及一次处理多少张图集。",
     skipIcons: "Skip icons folder",
     performance: "性能",
     performanceDescription: "控制并行处理的 gamesheet 数量",
@@ -27,25 +27,24 @@ const tools = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "选择 HD 或 UHD 输出。",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "一次只处理一张，以免电脑变卡。",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "可选：从最新游戏补上缺少的精灵图。",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "从游戏复制的新精灵图不会变清晰。完成后请检查色键图标。",
   },
   merger: {
     options: "合并选项",
     optionsDescription: "调整合并行为与吞吐量",
-    includeOutsidePlist: "包含 plist 之外的文件（兼容第 2 阶段的开关）",
+    includeOutsidePlist: "也包含未写在 plist 里的图片",
     concurrentFolders: "并发合并文件夹数",
   },
   randomizer: {
@@ -70,7 +69,7 @@ const tools = {
     generationMode: "生成模式",
     generationModeDescription: "选择合成方式与色彩光谱行为",
     compositeLayers: "生成光晕前先合成图标图层（主色 + 副色 + 额外）",
-    rainbowGlow: "彩虹光晕（扩展光谱，青 → 紫 → 红紫）",
+    rainbowGlow: "彩虹光晕",
     preview: "预览",
     previewDescription: "使用你游戏中的随机 UHD 图标实时预览——设置更改后会同步更新",
     previewAlt: "光晕生成器示例预览",

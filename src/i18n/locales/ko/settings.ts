@@ -1,6 +1,6 @@
 const settings = {
   title: "설정",
-  description: "모양, 설치 경로 감지, 도구 기본값에 대한 전역 환경설정입니다.",
+  description: "앱 모양을 바꾸고, Geometry Dash를 찾고, 도구 기본값을 정합니다.",
   statusAria: "설정 상태",
   themeChip: "{{theme}} 테마",
   concurrentChip: "동시 {{count}}개",

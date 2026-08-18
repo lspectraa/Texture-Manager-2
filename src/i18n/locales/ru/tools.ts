@@ -16,7 +16,7 @@ const tools: AppLocaleResources["tools"] = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "Выберите, что обрабатывать и сколько листов делать сразу.",
     skipIcons: "Skip icons folder",
     performance: "Производительность",
     performanceDescription:
@@ -34,27 +34,25 @@ const tools: AppLocaleResources["tools"] = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "Выберите HD или UHD.",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "По одному листу, чтобы компьютер не тормозил.",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "По желанию: добавить недостающие спрайты из новой версии игры.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "Новые спрайты из игры не увеличиваются. Проверьте цветовые иконки после завершения.",
   },
   merger: {
     options: "Параметры объединения",
     optionsDescription:
       "Настройте поведение и производительность объединения",
-    includeOutsidePlist:
-      "Включать файлы вне plist (флаг совместимости с фазой 2)",
+    includeOutsidePlist: "Также включать изображения, которых нет в plist",
     concurrentFolders: "Одновременно объединяемых папок",
   },
   randomizer: {
@@ -84,8 +82,7 @@ const tools: AppLocaleResources["tools"] = {
       "Выберите способ наложения и поведение цветового спектра",
     compositeLayers:
       "Объединять слои иконки перед созданием свечения (основной + дополнительный + extra)",
-    rainbowGlow:
-      "Радужное свечение (расширенный спектр, голубой → фиолетовый → красно-фиолетовый)",
+    rainbowGlow: "Радужное свечение",
     preview: "Предпросмотр",
     previewDescription:
       "Живой предпросмотр со случайной UHD-иконкой из игры — обновляется при изменении настроек",

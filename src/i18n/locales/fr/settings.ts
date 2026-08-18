@@ -1,7 +1,6 @@
 const settings = {
   title: "Paramètres",
-  description:
-    "Préférences globales d’apparence, de détection de l’installation et de valeurs par défaut des outils.",
+  description: "Changez l’apparence de l’appli, trouvez Geometry Dash et réglez les outils.",
   statusAria: "État des paramètres",
   themeChip: "Thème {{theme}}",
   concurrentChip: "{{count}} en parallèle",
@@ -13,7 +12,7 @@ const settings = {
   theme: "Thème",
   language: {
     title: "Langue",
-    subtitle: "Choisissez la langue utilisée dans toute l’application",
+    subtitle: "Langue de l’appli",
     label: "Langue",
     aria: "Langue",
   },
@@ -23,39 +22,37 @@ const settings = {
     random: "Aléatoire",
     defaultMeta: "Par défaut",
     opacity: "Opacité de l’arrière-plan",
-    noneFound:
-      "Aucune image game_bg_* de Geometry Dash trouvée — définissez un chemin d’installation valide pour les détecter.",
+    noneFound: "Aucun fond de jeu trouvé. Indiquez votre dossier Geometry Dash pour les charger.",
     custom: {
       label: "Arrière-plans personnalisés",
       aria: "Arrière-plans personnalisés de l’application",
       add: "Ajouter une image",
       addTitle: "Choisir une image d’arrière-plan",
       imageFilter: "Images",
-      empty:
-        "Ajoutez vos propres images — elles sont converties en niveaux de gris et mises en cache localement.",
+      empty: "Ajoutez vos propres images. Elles sont enregistrées ici en niveaux de gris.",
       removeAria: "Supprimer {{name}}",
     },
   },
   performance: {
     title: "Performance",
-    subtitle: "Parallélisme par défaut des sheets pour les outils",
-    concurrentGamesheets: "Gamesheets simultanés par défaut",
+    subtitle: "Combien de sheets les outils traitent en même temps",
+    concurrentGamesheets: "Sheets à la fois",
     rangeHint: "1–64",
   },
   cache: {
     title: "Cache et données",
-    subtitle: "Racine locale des fichiers du jeu et cache de découpe",
-    gameFilesRoot: "Racine des fichiers du jeu",
+    subtitle: "Où sont stockés les fichiers de jeu en cache",
+    gameFilesRoot: "Dossier des fichiers du jeu",
     splitCache: "Cache de découpe",
     openCacheFolder: "Ouvrir le dossier de cache",
     regenerateSpriteIndex: "Régénérer l’index des sprites",
     regenerateSpriteIndexHint:
-      "Ne reconstruit que les feuilles déjà listées dans sprite-index.json (pas de scan complet de Resources).",
+      "Reconstruit la liste des sheets déjà indexées. Ne parcourt pas tout le dossier du jeu.",
     resetDefaults: "Rétablir les valeurs par défaut",
   },
   geometryDash: {
     title: "Geometry Dash",
-    subtitle: "Installation Steam utilisée pour les Resources d’origine et les chemins Geode",
+    subtitle: "Le dossier Geometry Dash utilisé pour les fichiers du jeu et Geode",
     notFound: "Introuvable",
     manualOverride: "Remplacement manuel",
     autoDetected: "Détecté automatiquement",
@@ -71,7 +68,7 @@ const settings = {
   },
   updates: {
     title: "Mises à jour",
-    subtitle: "Rechercher une version plus récente de Texture Manager 2 sur GitHub Releases",
+    subtitle: "Voir si une version plus récente est disponible",
     checkForUpdates: "Rechercher des mises à jour",
     checking: "Vérification…",
     upToDate: "Vous utilisez la dernière version (v{{version}}).",

@@ -1,6 +1,6 @@
 const settings = {
   title: "設定",
-  description: "外観、インストールの検出、ツールの既定値に関する全体設定です。",
+  description: "アプリの見た目、Geometry Dash の場所、ツールの初期設定を変えます。",
   statusAria: "設定の状態",
   themeChip: "{{theme}} テーマ",
   concurrentChip: "同時 {{count}} 件",
@@ -12,7 +12,7 @@ const settings = {
   theme: "テーマ",
   language: {
     title: "言語",
-    subtitle: "アプリ全体で使用する言語を選択します",
+    subtitle: "アプリの言語",
     label: "言語",
     aria: "言語",
   },
@@ -22,39 +22,37 @@ const settings = {
     random: "ランダム",
     defaultMeta: "既定",
     opacity: "背景の不透明度",
-    noneFound:
-      "Geometry Dash の game_bg_* 画像がまだ見つかりません。有効な GD インストールパスを設定してください。",
+    noneFound: "ゲームの背景がまだありません。Geometry Dash のフォルダーを指定すると読み込めます。",
     custom: {
       label: "カスタム背景",
       aria: "カスタムアプリ背景",
       add: "画像を追加",
       addTitle: "背景画像を選択",
       imageFilter: "画像",
-      empty:
-        "独自の画像を追加できます。グレースケールに変換され、ローカルにキャッシュされます。",
+      empty: "自分の画像を追加できます。ここではグレースケールで保存されます。",
       removeAria: "{{name}} を削除",
     },
   },
   performance: {
     title: "パフォーマンス",
-    subtitle: "ツールで使うシートの既定同時処理数",
-    concurrentGamesheets: "既定の同時ゲームシート数",
+    subtitle: "ツールが一度に扱うシート数",
+    concurrentGamesheets: "一度に扱うシート数",
     rangeHint: "1–64",
   },
   cache: {
     title: "キャッシュとデータ",
-    subtitle: "ローカルのゲームファイルルートと分割キャッシュ",
-    gameFilesRoot: "ゲームファイルのルート",
+    subtitle: "キャッシュしたゲームファイルの保存場所",
+    gameFilesRoot: "ゲームファイルのフォルダー",
     splitCache: "分割キャッシュ",
     openCacheFolder: "キャッシュフォルダーを開く",
     regenerateSpriteIndex: "スプライト索引を再生成",
     regenerateSpriteIndexHint:
-      "sprite-index.json に既にあるシートだけ再構築します（Resources 全体は走査しません）。",
+      "すでに登録したシートの一覧だけ作り直します。ゲームフォルダー全体は調べません。",
     resetDefaults: "既定値に戻す",
   },
   geometryDash: {
     title: "Geometry Dash",
-    subtitle: "バニラの Resources と Geode のパスに使用する Steam インストール",
+    subtitle: "ゲームファイルと Geode に使う Geometry Dash フォルダー",
     notFound: "見つかりません",
     manualOverride: "手動指定",
     autoDetected: "自動検出",
@@ -70,7 +68,7 @@ const settings = {
   },
   updates: {
     title: "更新",
-    subtitle: "GitHub Releases で新しい Texture Manager 2 のビルドを確認します",
+    subtitle: "新しいバージョンがあるか確認します",
     checkForUpdates: "更新を確認",
     checking: "確認中…",
     upToDate: "最新バージョンを使用しています（v{{version}}）。",

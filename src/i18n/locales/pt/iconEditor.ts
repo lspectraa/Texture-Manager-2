@@ -64,7 +64,7 @@ const iconEditor = {
   frames: {
     panelAria: "Mapeamento de frames por função",
     title: "Frames",
-    subtitle: "Atribua frames às camadas",
+    subtitle: "Escolha qual sprite vai em cada camada",
     layerFrame: "Frame da camada",
     none: "Nenhum",
     importAria: "Importar frame {{role}}",
@@ -78,7 +78,7 @@ const iconEditor = {
   plist: {
     panelAria: "Propriedades do plist do frame",
     title: "Plist",
-    subtitle: "Propriedades e offsets do frame",
+    subtitle: "Posição e tamanho do sprite selecionado",
     expandPanelAria: "Expandir painel do plist",
     collapsePanelAria: "Recolher painel do plist",
     showPanel: "Mostrar plist",
@@ -111,6 +111,17 @@ const iconEditor = {
     spriteSize: "spriteSize",
     spriteSourceSize: "spriteSourceSize",
     textureRect: "textureRect",
+  },
+  generatedGlow: {
+    title: "Brilho gerado",
+    enable: "Gerar brilho deste componente",
+    enableHint: "Criar o brilho com o Criador de brilho em vez do sprite da sheet.",
+    thickness: "Espessura",
+    composite: "Compor camadas",
+    compositeHint: "Incluir secundária e extra ao criar o brilho.",
+    generating: "Gerando…",
+    needsPrimary: "Defina primeiro um sprite primário para este componente.",
+    offsetLockedHint: "O Criador de brilho define este deslocamento a partir do componente. Não pode ser editado.",
   },
   dialogs: {
     selectPlistSheet: "Selecionar sheet plist",

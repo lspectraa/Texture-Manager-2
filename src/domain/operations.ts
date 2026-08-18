@@ -22,6 +22,10 @@ export interface UpscalerOptions {
   gameVersion: string;
   /** Max concurrent gamesheets (1–4). */
   sheetConcurrency: number;
+  /** Glow Maker outline thickness in pixels (1–128). */
+  glowThickness: number;
+  /** Minimum outline alpha 0–255; pixels below this are ignored. */
+  glowTolerance: number;
 }
 
 export type GeodeButtonsVariant =

@@ -13,7 +13,7 @@ const tools = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "何を処理するかと、一度に扱うシート数を選びます。",
     skipIcons: "Skip icons folder",
     performance: "パフォーマンス",
     performanceDescription: "並列で処理するゲームシート数を調整します",
@@ -28,25 +28,24 @@ const tools = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "HD か UHD の出力を選びます。",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "パソコンが重くならないよう、一度に1枚だけ処理します。",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "任意：最新ゲームから足りないスプライトを追加します。",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "ゲームから追加したスプライトはシャープになりません。終わったらカラーキーのアイコンを確認してください。",
   },
   merger: {
     options: "結合オプション",
     optionsDescription: "結合の挙動とスループットを調整します",
-    includeOutsidePlist: "plist 外のファイルも含める（フェーズ 2 互換フラグ）",
+    includeOutsidePlist: "plist に載っていない画像も含める",
     concurrentFolders: "同時結合フォルダー数",
   },
   randomizer: {
@@ -71,7 +70,7 @@ const tools = {
     generationMode: "生成モード",
     generationModeDescription: "合成方法と色スペクトルの挙動を選びます",
     compositeLayers: "グロウの前にアイコンレイヤーを合成（プライマリ + セカンダリ + エクストラ）",
-    rainbowGlow: "レインボーグロウ（拡張スペクトル、シアン → 紫 → 赤紫）",
+    rainbowGlow: "レインボーグロウ",
     preview: "プレビュー",
     previewDescription:
       "ゲーム内のランダムな UHD アイコンでライブプレビュー — 設定を変えると更新されます",

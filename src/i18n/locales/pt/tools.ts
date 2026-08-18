@@ -13,7 +13,7 @@ const tools = {
   splitter: {
     settings: "Split Settings",
     settingsDescription:
-      "Choose what to process and how many gamesheets run in parallel",
+      "Escolha o que processar e quantas sheets trabalhar ao mesmo tempo.",
     skipIcons: "Skip icons folder",
     performance: "Desempenho",
     performanceDescription: "Controle quantos gamesheets são processados em paralelo",
@@ -28,25 +28,24 @@ const tools = {
   upscaler: {
     settings: "Upscale Settings",
     settingsDescription:
-      "Choose target graphics tier",
+      "Escolha saída HD ou UHD.",
     targetGraphics: "Target graphics",
-    targetHint: "Low→HD is 2×, Low→UHD is 4×, HD→UHD is 2×",
     targetUhd: "UHD",
     targetHd: "HD",
     concurrentGamesheets: "Concurrent gamesheets",
-    range1To4: "1–4 (GPU memory limited)",
+    range1To4: "Uma sheet por vez para o computador continuar rápido.",
     convertToLatest: "Also convert to latest version after upscaling",
     convertSection: "Convert After Upscale",
     convertSectionDescription:
-      "Optional: inject missing latest-game frames into the upscaled pack",
+      "Opcional: adicionar sprites que faltam do jogo mais recente.",
     previousGameVersion: "Previous game version",
     convertHint:
-      "Newly injected game frames are not AI-upscaled. Review color-keyed icons after running.",
+      "Sprites novos copiados do jogo não ficam mais nítidos. Confira ícones com chave de cor no fim.",
   },
   merger: {
     options: "Opções de combinação",
     optionsDescription: "Ajuste o comportamento e o desempenho da combinação",
-    includeOutsidePlist: "Incluir arquivos fora do plist (flag compatível com a fase 2)",
+    includeOutsidePlist: "Também incluir imagens que não estão no plist",
     concurrentFolders: "Pastas de combinação simultâneas",
   },
   randomizer: {
@@ -72,7 +71,7 @@ const tools = {
     generationMode: "Modo de geração",
     generationModeDescription: "Escolha o comportamento de composição e de espectro de cores",
     compositeLayers: "Compor as camadas do ícone antes do brilho (primária + secundária + extra)",
-    rainbowGlow: "Brilho arco-íris (espectro estendido, ciano → roxo → violeta avermelhado)",
+    rainbowGlow: "Brilho arco-íris",
     preview: "Prévia",
     previewDescription:
       "Prévia ao vivo usando um ícone UHD aleatório do seu jogo — atualiza conforme você muda as configurações",

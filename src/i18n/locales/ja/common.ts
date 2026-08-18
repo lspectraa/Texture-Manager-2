@@ -28,7 +28,7 @@ const common = {
     closeAria: "情報ダイアログを閉じる",
     copyright: "© {{year}} {{holder}}。",
     description:
-      "Geometry Dash のテクスチャ作業のために作られたツールです。ゲームシートの分割・結合・移植・編集をひとつのデスクトップ環境で行えます。",
+      "Geometry Dash のテクスチャパック向けデスクトップアプリです。アイコンの編集、シートの分割と結合などができます。",
     licenseHeading: "ライセンス",
     licenseName: "GNU GPLv3（以降）",
     licenseSummary:
@@ -38,7 +38,7 @@ const common = {
     thirdPartyHeading: "サードパーティのアップスケーラー",
     thirdPartyName: "Waifu2x, Real-ESRGAN, ncnn",
     thirdPartySummary:
-      "このアプリには推論用バイナリとモデル重みが同梱されています。MIT および BSD-3-Clause のライセンスは元のままです。告知全文はアプリに含まれます。",
+      "このアプリには追加の拡大ツールが含まれます。それぞれのライセンスはそのまま残り、告知全文はアプリに付属します。",
     thirdPartyWaifu2x:
       "Waifu2x CUNet — MIT。オリジナル: nagadomi。ncnn-Vulkan 移植: nihui。",
     thirdPartyRealesrgan:
