@@ -18,9 +18,10 @@ use crate::core::contracts::{
 use crate::core::convert_to_new_version::{
     find_legacy_glow_sheet_pair, icon_sheet_id_from_frame_name, insert_missing_latest_frames,
     is_convert_from_2_0, is_excluded_legacy_icon_id, is_gamesheet04_stem, is_glow_frame_name,
-    is_icon_sprite, is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet,
-    is_legacy_icon_split_version, pack_uses_legacy_combined_icons, sheet_may_hold_legacy_icons,
-    take_gamesheet04_menu_buttons, target_graphics_quality_suffix,
+    is_icon_glow_sprite, is_icon_sprite_for_upscale, is_legacy_combined_icon_sheet,
+    is_legacy_icon_glow_sheet, is_legacy_icon_split_version, pack_uses_legacy_combined_icons,
+    sheet_is_icon_gamesheet, sheet_is_under_icons, sheet_may_hold_legacy_icons,
+    stem_looks_like_icon_id, take_gamesheet04_menu_buttons, target_graphics_quality_suffix,
     write_converted_legacy_icons_from_memory, write_modern_gamesheet04,
 };
 use crate::core::discovery::{discover_standalone_pngs, SheetCandidate};
@@ -72,12 +73,47 @@ pub enum UpscalePlanAction {
 
 /// Icon sprites use Real-ESRGAN AnimeVideo v3 (not glow — Glow Maker).
 /// Everything else keeps the user/default model (Waifu2x).
-fn uses_icon_upscale_pipeline(relative_dir: &Path, frame_name: &str) -> bool {
-    is_icon_sprite(relative_dir, frame_name) && !is_glow_frame_name(frame_name)
+fn uses_icon_upscale_pipeline(relative_dir: &Path, frame_name: &str, sheet_is_icon: bool) -> bool {
+    is_icon_sprite_for_upscale(relative_dir, frame_name, sheet_is_icon)
 }
 
-fn is_icon_glow_frame(relative_dir: &Path, frame_name: &str) -> bool {
-    is_glow_frame_name(frame_name) && is_icon_sprite(relative_dir, frame_name)
+fn is_icon_glow_frame(relative_dir: &Path, frame_name: &str, sheet_is_icon: bool) -> bool {
+    is_icon_glow_sprite(relative_dir, frame_name, sheet_is_icon)
+}
+
+fn standalone_uses_icon_pipeline(rel_dir: &Path, file_name: &str, png_stem: &str) -> bool {
+    if is_icon_sprite_for_upscale(rel_dir, file_name, false) {
+        return true;
+    }
+    if stem_looks_like_icon_id(png_stem) || icon_stem_from_frame_name(file_name).is_some() {
+        return !is_glow_frame_name(file_name);
+    }
+    false
+}
+
+fn sprite_gets_icon_finish(
+    relative_dir: &Path,
+    frame_name: &str,
+    default_model: UpscalerModel,
+    sheet_is_icon: bool,
+) -> bool {
+    ai_model_for_sprite(relative_dir, frame_name, default_model, sheet_is_icon)
+        == UpscalerModel::RealesrganAnime
+}
+
+fn finish_upscaled_sprite_for_sheet(
+    image: &RgbaImage,
+    relative_dir: &Path,
+    frame_name: &str,
+    sheet_is_icon: bool,
+    default_model: UpscalerModel,
+) -> RgbaImage {
+    let is_icon = sprite_gets_icon_finish(relative_dir, frame_name, default_model, sheet_is_icon);
+    finish_ai_upscaled_sprite_layers(
+        image,
+        FinishPolicy::for_upscaled_sprite(is_icon, frame_name),
+    )
+    .composed
 }
 
 fn upscaler_icon_glow_options(opts: &UpscalerOptions) -> GlowMakerOptions {
@@ -96,10 +132,11 @@ fn generate_icon_glows_in_sprites(
     sprites: &mut BTreeMap<String, RgbaImage>,
     extra_primaries: &BTreeMap<String, RgbaImage>,
     options: &GlowMakerOptions,
+    sheet_is_icon: bool,
 ) -> usize {
     let glow_keys: Vec<String> = sprites
         .keys()
-        .filter(|key| is_icon_glow_frame(relative_dir, key))
+        .filter(|key| is_icon_glow_frame(relative_dir, key, sheet_is_icon))
         .cloned()
         .collect();
     if glow_keys.is_empty() {
@@ -162,11 +199,12 @@ fn sheet_upscale_order(pair: &SheetCandidate) -> u8 {
 fn remember_icon_primaries(
     relative_dir: &Path,
     sprites: &BTreeMap<String, RgbaImage>,
+    sheet_is_icon: bool,
     icon_primaries: &Mutex<BTreeMap<String, RgbaImage>>,
 ) {
     let mut cache = icon_primaries.lock().unwrap();
     for (key, image) in sprites {
-        if is_icon_sprite(relative_dir, key) && !is_glow_frame_name(key) {
+        if uses_icon_upscale_pipeline(relative_dir, key, sheet_is_icon) {
             cache.insert(key.clone(), image.clone());
         }
     }
@@ -176,8 +214,9 @@ fn ai_model_for_sprite(
     relative_dir: &Path,
     frame_name: &str,
     default_model: UpscalerModel,
+    sheet_is_icon: bool,
 ) -> UpscalerModel {
-    if uses_icon_upscale_pipeline(relative_dir, frame_name) {
+    if uses_icon_upscale_pipeline(relative_dir, frame_name, sheet_is_icon) {
         UpscalerModel::RealesrganAnime
     } else {
         default_model
@@ -593,6 +632,7 @@ fn finish_batched_extracts(
 fn resolve_sprite_cache_hits(
     sprites: &BTreeMap<String, RgbaImage>,
     pair: &SheetCandidate,
+    plist_root: &Value,
     layout: &GameFilesLayout,
     target: UpscalerTargetGraphics,
     cache_match_mode: UpscalerCacheMatchMode,
@@ -613,6 +653,13 @@ fn resolve_sprite_cache_hits(
     }
 
     let total = sprites.len();
+    let frame_names: Vec<String> = sprites.keys().cloned().collect();
+    let sheet_is_icon = sheet_is_icon_gamesheet(
+        &pair.relative_dir,
+        &pair.stem,
+        &frame_names,
+        Some(plist_root),
+    );
     on_progress.lock().unwrap()(operation_progress(
         format!("{sheet_label} (cache resolve 0/{total})"),
         completed.load(Ordering::Relaxed),
@@ -776,7 +823,7 @@ fn resolve_sprite_cache_hits(
 
     for key in sprites.keys() {
         check_cancel(cancel)?;
-        if is_icon_glow_frame(&pair.relative_dir, key) {
+        if is_icon_glow_frame(&pair.relative_dir, key, sheet_is_icon) {
             continue;
         }
         resolved += 1;
@@ -816,7 +863,7 @@ fn resolve_sprite_cache_hits(
         // today's object GS02. Skip same-sheet vanilla matching so they cache via
         // the icon index (or AI) instead of hanging on a huge loose compare.
         let legacy_icon_frame = sheet_may_hold_legacy_icons(&pair.stem)
-            && uses_icon_upscale_pipeline(&pair.relative_dir, key);
+            && uses_icon_upscale_pipeline(&pair.relative_dir, key, sheet_is_icon);
 
         // 2) Exact hash against the loaded same-tier vanilla sheet (any frame name).
         if !legacy_icon_frame {
@@ -947,6 +994,7 @@ fn upscale_sprites_map(
     sheet_label: &str,
     layout: &GameFilesLayout,
     pair: &SheetCandidate,
+    plist_root: &Value,
     target: UpscalerTargetGraphics,
     cache_match_mode: UpscalerCacheMatchMode,
     rename_kind: &str,
@@ -956,16 +1004,25 @@ fn upscale_sprites_map(
     plists_total: u32,
     on_progress: &Arc<Mutex<dyn FnMut(OperationProgress) + Send>>,
     cancel: &AtomicBool,
-) -> Result<(Vec<CacheHitReplacement>, usize, Vec<ReportIssue>), AppError> {
+) -> Result<(Vec<CacheHitReplacement>, usize, usize, Vec<ReportIssue>), AppError> {
     check_cancel(cancel)?;
     if sprites.is_empty() {
-        return Ok((Vec::new(), 0, Vec::new()));
+        return Ok((Vec::new(), 0, 0, Vec::new()));
     }
+
+    let frame_names: Vec<String> = sprites.keys().cloned().collect();
+    let sheet_is_icon = sheet_is_icon_gamesheet(
+        &pair.relative_dir,
+        &pair.stem,
+        &frame_names,
+        Some(plist_root),
+    );
 
     // Phase 1 — resolve all cache hits before any AI.
     let (hits, mut miss_keys, mut notes) = resolve_sprite_cache_hits(
         sprites,
         pair,
+        plist_root,
         layout,
         target,
         cache_match_mode,
@@ -981,13 +1038,13 @@ fn upscale_sprites_map(
 
     // Only AI sprites that are still in the working map and were not cache-replaced.
     miss_keys.retain(|key| sprites.contains_key(key));
-    miss_keys.retain(|key| !is_icon_glow_frame(&pair.relative_dir, key));
+    miss_keys.retain(|key| !is_icon_glow_frame(&pair.relative_dir, key, sheet_is_icon));
     // Any split sprite not covered by a hit or miss must AI — except icon glow (Glow Maker).
     {
         let hit_keys: HashSet<String> = hits.iter().map(|h| h.key.clone()).collect();
         let miss_set: HashSet<String> = miss_keys.iter().cloned().collect();
         for key in sprites.keys() {
-            if is_icon_glow_frame(&pair.relative_dir, key) {
+            if is_icon_glow_frame(&pair.relative_dir, key, sheet_is_icon) {
                 continue;
             }
             if !hit_keys.contains(key) && !miss_set.contains(key) {
@@ -996,9 +1053,16 @@ fn upscale_sprites_map(
         }
     }
 
-    // Apply higher-quality game-file sprites into the pack map (replaces low-res).
+    // Apply higher-quality game-file sprites; icon frames still run the sharpen + contour finish pass.
     for hit in &hits {
-        sprites.insert(hit.key.clone(), hit.extracted.image.clone());
+        let finished = finish_upscaled_sprite_for_sheet(
+            &hit.extracted.image,
+            &pair.relative_dir,
+            &hit.key,
+            sheet_is_icon,
+            model,
+        );
+        sprites.insert(hit.key.clone(), finished);
         let n = completed.fetch_add(1, Ordering::Relaxed) + 1;
         on_progress.lock().unwrap()(operation_progress(
             format!("{sheet_label} (cache hit)"),
@@ -1016,7 +1080,7 @@ fn upscale_sprites_map(
             message: format!("`{sheet_label}`: {} from cache, 0 AI upscaled", hits.len()),
             file: Some(format!("{sheet_label}.plist")),
         });
-        return Ok((hits, 0, notes));
+        return Ok((hits, 0, 0, notes));
     }
 
     let images: Vec<RgbaImage> = miss_keys
@@ -1037,7 +1101,9 @@ fn upscale_sprites_map(
     let mut icon_idxs = Vec::new();
     let mut other_idxs = Vec::new();
     for (i, key) in miss_keys.iter().enumerate() {
-        if ai_model_for_sprite(&pair.relative_dir, key, model) == UpscalerModel::RealesrganAnime {
+        if ai_model_for_sprite(&pair.relative_dir, key, model, sheet_is_icon)
+            == UpscalerModel::RealesrganAnime
+        {
             icon_idxs.push(i);
         } else {
             other_idxs.push(i);
@@ -1057,6 +1123,10 @@ fn upscale_sprites_map(
         }
         check_cancel(cancel)?;
         let group_images: Vec<RgbaImage> = group_idxs.iter().map(|&i| images[i].clone()).collect();
+        let model_label = match group_model {
+            UpscalerModel::RealesrganAnime => "AnimeV3",
+            UpscalerModel::Waifu2x => "Waifu2x",
+        };
         let group_dir = batch_dir.join(match group_model {
             UpscalerModel::RealesrganAnime => "realesrgan",
             UpscalerModel::Waifu2x => "waifu2x",
@@ -1074,7 +1144,7 @@ fn upscale_sprites_map(
                 }
                 on_progress.lock().unwrap()(operation_progress(
                     format!(
-                        "{sheet} (AI {}/{progress_total})",
+                        "{sheet} (AI {model_label} {}/{progress_total})",
                         group_base.saturating_add(done)
                     ),
                     completed
@@ -1121,7 +1191,7 @@ fn upscale_sprites_map(
 
     for (key, image) in miss_keys.into_iter().zip(upscaled.into_iter()) {
         check_cancel(cancel)?;
-        let is_icon = uses_icon_upscale_pipeline(&pair.relative_dir, &key);
+        let is_icon = sprite_gets_icon_finish(&pair.relative_dir, &key, model, sheet_is_icon);
         let layers = finish_ai_upscaled_sprite_layers(
             &image,
             FinishPolicy::for_upscaled_sprite(is_icon, &key),
@@ -1137,15 +1207,17 @@ fn upscale_sprites_map(
             plists_total,
         ));
     }
+    let icon_ai = icon_idxs.len();
+    let other_ai = other_idxs.len();
     notes.push(ReportIssue {
         level: ReportLevel::Info,
         message: format!(
-            "`{sheet_label}`: {} from cache, {miss_total} AI upscaled",
+            "`{sheet_label}`: {} from cache, {miss_total} AI upscaled ({icon_ai} AnimeV3 icon, {other_ai} Waifu2x)",
             hits.len()
         ),
         file: Some(format!("{sheet_label}.plist")),
     });
-    Ok((hits, miss_total, notes))
+    Ok((hits, miss_total, icon_ai, notes))
 }
 
 struct UpscaleRun<'a> {
@@ -1189,10 +1261,17 @@ fn emit_generated_icon_glows(
     extra_primaries: &BTreeMap<String, RgbaImage>,
     run: &UpscaleRun<'_>,
 ) -> usize {
+    let frame_names: Vec<String> = split.sprites.keys().cloned().collect();
+    let sheet_is_icon = sheet_is_icon_gamesheet(
+        &pair.relative_dir,
+        &pair.stem,
+        &frame_names,
+        Some(&split.plist_root),
+    );
     let glow_pending = split
         .sprites
         .keys()
-        .filter(|key| is_icon_glow_frame(&pair.relative_dir, key))
+        .filter(|key| is_icon_glow_frame(&pair.relative_dir, key, sheet_is_icon))
         .count();
     let options = upscaler_icon_glow_options(run.opts);
     let glow_n = generate_icon_glows_in_sprites(
@@ -1201,6 +1280,7 @@ fn emit_generated_icon_glows(
         &mut split.sprites,
         extra_primaries,
         &options,
+        sheet_is_icon,
     );
     if glow_pending > 0 {
         let _ = run.completed.fetch_add(glow_pending, Ordering::Relaxed);
@@ -1214,12 +1294,20 @@ fn prepare_sheet_sprites(
     rename_kind: Option<&str>,
     run: &UpscaleRun<'_>,
     extra_primaries: &BTreeMap<String, RgbaImage>,
-) -> Result<(SplitMemoryResult, usize, usize, Vec<ReportIssue>), AppError> {
+) -> Result<(SplitMemoryResult, usize, usize, usize, Vec<ReportIssue>), AppError> {
     let splitter_opts = phase_defaults().splitter;
     let mut split = split_sheet_candidate_memory(pair, &splitter_opts, &mut || {})?;
     let mut issues = split.issues.drain(..).collect::<Vec<_>>();
+    let frame_names: Vec<String> = split.sprites.keys().cloned().collect();
+    let sheet_is_icon = sheet_is_icon_gamesheet(
+        &pair.relative_dir,
+        &pair.stem,
+        &frame_names,
+        Some(&split.plist_root),
+    );
     let mut cache_count = 0usize;
     let mut ai_count = 0usize;
+    let mut icon_ai_count = 0usize;
     let glow_generated;
 
     if let (Some(scale), Some(rename_kind)) = (scale, rename_kind) {
@@ -1228,7 +1316,7 @@ fn prepare_sheet_sprites(
         let output_stem = upscale_rename_identifier(&pair.stem, rename_kind);
         let layers_dir = run.upscaled_dir.join("_layers").join(&output_stem);
         let plists_done = run.plists_done_atomic.load(Ordering::Relaxed);
-        let (cache_hits, ai_n, resolve_notes) = upscale_sprites_map(
+        let (cache_hits, ai_n, icon_ai_n, resolve_notes) = upscale_sprites_map(
             &mut split.sprites,
             run.opts.model.clone(),
             scale,
@@ -1237,6 +1325,7 @@ fn prepare_sheet_sprites(
             &pair.stem,
             run.game_files,
             pair,
+            &split.plist_root,
             run.opts.target_graphics.clone(),
             run.opts.cache_match_mode,
             rename_kind,
@@ -1249,6 +1338,7 @@ fn prepare_sheet_sprites(
         )?;
         cache_count = cache_hits.len();
         ai_count = ai_n;
+        icon_ai_count = icon_ai_n;
         issues.extend(resolve_notes);
 
         scale_plist_geometry(&mut split.plist_root, scale as f32)?;
@@ -1264,6 +1354,7 @@ fn prepare_sheet_sprites(
         remember_icon_primaries(
             &pair.relative_dir,
             &split.sprites,
+            sheet_is_icon,
             run.icon_primaries,
         );
         upscale_rename_plist_and_sprites(
@@ -1286,6 +1377,7 @@ fn prepare_sheet_sprites(
         remember_icon_primaries(
             &pair.relative_dir,
             &split.sprites,
+            sheet_is_icon,
             run.icon_primaries,
         );
     }
@@ -1300,7 +1392,7 @@ fn prepare_sheet_sprites(
             file: Some(format!("{}.plist", pair.stem)),
         });
     }
-    Ok((split, cache_count, ai_count, issues))
+    Ok((split, cache_count, ai_count, icon_ai_count, issues))
 }
 
 fn merge_and_save_sheet(
@@ -1347,11 +1439,11 @@ fn merge_and_save_sheet(
 fn process_one_sheet(
     pair: &SheetCandidate,
     run: &UpscaleRun<'_>,
-) -> Result<(usize, usize, usize, Vec<ReportIssue>), AppError> {
+) -> Result<(usize, usize, usize, usize, Vec<ReportIssue>), AppError> {
     let mut issues = Vec::new();
     if glow_consumed_by_gs02_convert(run.opts, pair, run.all_sheet_pairs) {
         let _ = run.plists_done_atomic.fetch_add(1, Ordering::Relaxed);
-        return Ok((0, 0, 0, issues));
+        return Ok((0, 0, 0, 0, issues));
     }
 
     let (_tier, action) = plan_upscale_for_stem(&pair.stem, run.opts.target_graphics.clone());
@@ -1366,7 +1458,7 @@ fn process_one_sheet(
                 file: Some(format!("{}.plist", pair.stem)),
             });
             let _ = run.plists_done_atomic.fetch_add(1, Ordering::Relaxed);
-            return Ok((0, 0, 0, issues));
+            return Ok((0, 0, 0, 0, issues));
         }
         UpscalePlanAction::SkipAlreadyAtTarget if !run.opts.convert_to_latest => {
             issues.push(ReportIssue {
@@ -1375,7 +1467,7 @@ fn process_one_sheet(
                 file: Some(format!("{}.plist", pair.stem)),
             });
             let _ = run.plists_done_atomic.fetch_add(1, Ordering::Relaxed);
-            return Ok((0, 0, 0, issues));
+            return Ok((0, 0, 0, 0, issues));
         }
         UpscalePlanAction::SkipAlreadyAtTarget => (None, None, pair.stem.clone()),
         UpscalePlanAction::Upscale {
@@ -1394,11 +1486,11 @@ fn process_one_sheet(
             file: Some(format!("{}.plist", pair.stem)),
         });
         let _ = run.plists_done_atomic.fetch_add(1, Ordering::Relaxed);
-        return Ok((0, 0, 0, issues));
+        return Ok((0, 0, 0, 0, issues));
     }
 
     let extras = run.icon_primaries.lock().unwrap().clone();
-    let (mut split, cache_count, ai_count, prep_issues) =
+    let (mut split, cache_count, ai_count, icon_ai_count, prep_issues) =
         prepare_sheet_sprites(pair, scale, rename_kind, run, &extras)?;
     issues.extend(prep_issues);
 
@@ -1417,7 +1509,7 @@ fn process_one_sheet(
                     .cloned();
             let glow_prepared = if let Some(glow_src) = glow_pair.as_ref() {
                 let extras = run.icon_primaries.lock().unwrap().clone();
-                let (glow_split, glow_cache, glow_ai, glow_issues) =
+                let (glow_split, glow_cache, glow_ai, glow_icon_ai, glow_issues) =
                     prepare_sheet_sprites(glow_src, scale, rename_kind, run, &extras)?;
                 issues.extend(glow_issues);
                 let mut glow_out = glow_src.clone();
@@ -1425,15 +1517,18 @@ fn process_one_sheet(
                     Some(kind) => upscale_rename_identifier(&glow_src.stem, kind),
                     None => glow_src.stem.clone(),
                 };
-                Some((glow_out, glow_split, glow_cache, glow_ai))
+                Some((glow_out, glow_split, glow_cache, glow_ai, glow_icon_ai))
             } else {
                 None
             };
-            let (glow_arg, extra_cache, extra_ai) = match glow_prepared {
-                Some((candidate, split, cache, ai)) => {
-                    (Some((candidate, split.plist_root, split.sprites)), cache, ai)
-                }
-                None => (None, 0, 0),
+            let (glow_arg, extra_cache, extra_ai, extra_icon_ai) = match glow_prepared {
+                Some((candidate, split, cache, ai, icon_ai)) => (
+                    Some((candidate, split.plist_root, split.sprites)),
+                    cache,
+                    ai,
+                    icon_ai,
+                ),
+                None => (None, 0, 0, 0),
             };
             if run.opts.convert_to_latest && !is_gamesheet04_stem(output_stem.as_str()) {
                 let taken =
@@ -1463,6 +1558,7 @@ fn process_one_sheet(
                 written,
                 cache_count.saturating_add(extra_cache),
                 ai_count.saturating_add(extra_ai),
+                icon_ai_count.saturating_add(extra_icon_ai),
                 issues,
             ));
         }
@@ -1492,7 +1588,7 @@ fn process_one_sheet(
         run,
         &mut issues,
     )?;
-    Ok((written, cache_count, ai_count, issues))
+    Ok((written, cache_count, ai_count, icon_ai_count, issues))
 }
 
 fn process_standalone_pngs_batched(
@@ -1558,7 +1654,11 @@ fn process_standalone_pngs_batched(
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("");
-                if is_icon_glow_frame(rel_dir, file_name) {
+                if is_icon_glow_frame(
+                    rel_dir,
+                    file_name,
+                    sheet_is_under_icons(rel_dir) || stem_looks_like_icon_id(&source_stem),
+                ) {
                     glow_jobs.push(GlowStandalone {
                         png_path: png_path.clone(),
                         source_stem,
@@ -1607,8 +1707,7 @@ fn process_standalone_pngs_batched(
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("");
-            if ai_model_for_sprite(rel_dir, file_name, opts.model) == UpscalerModel::RealesrganAnime
-            {
+            if standalone_uses_icon_pipeline(rel_dir, file_name, &job.source_stem) {
                 icon_idxs.push(job_idx);
             } else {
                 other_idxs.push(job_idx);
@@ -1660,7 +1759,15 @@ fn process_standalone_pngs_batched(
                     .file_name()
                     .and_then(|s| s.to_str())
                     .unwrap_or("");
-                let is_icon = uses_icon_upscale_pipeline(rel_dir, file_name);
+                let sheet_is_icon = sheet_is_under_icons(rel_dir)
+                    || stem_looks_like_icon_id(&job.source_stem)
+                    || icon_stem_from_frame_name(file_name).is_some();
+                let is_icon = sprite_gets_icon_finish(
+                    rel_dir,
+                    file_name,
+                    opts.model,
+                    sheet_is_icon,
+                );
                 let layers = finish_ai_upscaled_sprite_layers(
                     &up_img,
                     FinishPolicy::for_upscaled_sprite(is_icon, file_name),
@@ -1891,10 +1998,11 @@ where
 
     for pair in &eligible_sheets {
         check_cancel(cancel.as_ref())?;
-        let (written, cache_n, ai_n, sheet_issues) = process_one_sheet(pair, &run)?;
+        let (written, cache_n, ai_n, icon_ai_n, sheet_issues) = process_one_sheet(pair, &run)?;
         sheets_written = sheets_written.saturating_add(written);
         sprites_from_cache = sprites_from_cache.saturating_add(cache_n);
         sprites_ai_upscaled = sprites_ai_upscaled.saturating_add(ai_n);
+        let _ = icon_ai_n;
         issues.extend(sheet_issues);
     }
 
@@ -2023,19 +2131,26 @@ mod tests {
             ai_model_for_sprite(
                 Path::new("icons"),
                 "bird_18_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::RealesrganAnime
         );
         assert_eq!(
-            ai_model_for_sprite(Path::new(""), "player_02_001.png", UpscalerModel::Waifu2x),
+            ai_model_for_sprite(
+                Path::new(""),
+                "player_02_001.png",
+                UpscalerModel::Waifu2x,
+                false,
+            ),
             UpscalerModel::RealesrganAnime
         );
         assert_eq!(
             ai_model_for_sprite(
                 Path::new("icons"),
                 "bird_18_glow_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::Waifu2x
         );
@@ -2043,7 +2158,8 @@ mod tests {
             ai_model_for_sprite(
                 Path::new(""),
                 "player_02_glow_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::Waifu2x
         );
@@ -2051,7 +2167,8 @@ mod tests {
             ai_model_for_sprite(
                 Path::new(""),
                 "robot_01_03_glow_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::Waifu2x
         );
@@ -2059,23 +2176,35 @@ mod tests {
             ai_model_for_sprite(
                 Path::new("icons"),
                 "bird_18_3_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::RealesrganAnime
         );
         assert_eq!(
-            ai_model_for_sprite(Path::new(""), "bird_01_3_001.png", UpscalerModel::Waifu2x),
+            ai_model_for_sprite(
+                Path::new(""),
+                "bird_01_3_001.png",
+                UpscalerModel::Waifu2x,
+                false,
+            ),
             UpscalerModel::RealesrganAnime
         );
         assert_eq!(
-            ai_model_for_sprite(Path::new(""), "ufo_01_3_001.png", UpscalerModel::Waifu2x),
+            ai_model_for_sprite(
+                Path::new(""),
+                "ufo_01_3_001.png",
+                UpscalerModel::Waifu2x,
+                false,
+            ),
             UpscalerModel::RealesrganAnime
         );
         assert_eq!(
             ai_model_for_sprite(
                 Path::new(""),
                 "bird_01_capsule_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::RealesrganAnime
         );
@@ -2083,18 +2212,69 @@ mod tests {
             ai_model_for_sprite(
                 Path::new(""),
                 "edit_eAlphaBtn_001.png",
-                UpscalerModel::Waifu2x
+                UpscalerModel::Waifu2x,
+                false,
             ),
             UpscalerModel::Waifu2x
         );
         assert_eq!(
-            ai_model_for_sprite(Path::new(""), "square_01_001.png", UpscalerModel::Waifu2x),
+            ai_model_for_sprite(
+                Path::new(""),
+                "square_01_001.png",
+                UpscalerModel::Waifu2x,
+                false,
+            ),
             UpscalerModel::Waifu2x
         );
         assert_eq!(
-            ai_model_for_sprite(Path::new(""), "ship_03_001.png", UpscalerModel::Waifu2x),
+            ai_model_for_sprite(
+                Path::new(""),
+                "ship_03_001.png",
+                UpscalerModel::Waifu2x,
+                false,
+            ),
             UpscalerModel::RealesrganAnime
         );
+        assert_eq!(
+            ai_model_for_sprite(
+                Path::new(""),
+                "neonDragon_01_001.png",
+                UpscalerModel::Waifu2x,
+                true,
+            ),
+            UpscalerModel::RealesrganAnime
+        );
+        assert!(sheet_is_icon_gamesheet(
+            Path::new(""),
+            "neonDragon_01-uhd",
+            &[
+                "neonDragon_01_001.png".to_string(),
+                "neonDragon_01_2_001.png".to_string(),
+            ],
+            None,
+        ));
+        assert!(standalone_uses_icon_pipeline(
+            Path::new(""),
+            "neonDragon_01_001.png",
+            "neonDragon_01_001",
+        ));
+        assert!(sprite_gets_icon_finish(
+            Path::new(""),
+            "neonDragon_01_001.png",
+            UpscalerModel::Waifu2x,
+            true,
+        ));
+        let policy = FinishPolicy::for_upscaled_sprite(
+            sprite_gets_icon_finish(
+                Path::new(""),
+                "neonDragon_01_001.png",
+                UpscalerModel::Waifu2x,
+                true,
+            ),
+            "neonDragon_01_001.png",
+        );
+        assert_eq!(policy.contour, crate::core::image_finish::ContourMode::Ink);
+        assert!(policy.sharpen_amount > 0.0 && policy.sharpen_amount < 1.0);
     }
 
     #[test]
@@ -2126,16 +2306,23 @@ mod tests {
 
     #[test]
     fn icon_glow_frames_are_detected_and_not_ai_pipeline() {
-        assert!(is_icon_glow_frame(Path::new(""), "player_02_glow_001.png"));
+        assert!(is_icon_glow_frame(Path::new(""), "player_02_glow_001.png", false));
         assert!(is_icon_glow_frame(
             Path::new("icons"),
-            "bird_18_glow_001.png"
+            "bird_18_glow_001.png",
+            false,
         ));
-        assert!(!is_icon_glow_frame(Path::new(""), "player_02_001.png"));
-        assert!(!is_icon_glow_frame(Path::new(""), "square_01_glow_001.png"));
+        assert!(!is_icon_glow_frame(Path::new(""), "player_02_001.png", false));
+        assert!(!is_icon_glow_frame(Path::new(""), "square_01_glow_001.png", false));
+        assert!(is_icon_glow_frame(
+            Path::new(""),
+            "neonDragon_01_glow_001.png",
+            true,
+        ));
         assert!(!uses_icon_upscale_pipeline(
             Path::new(""),
-            "player_02_glow_001.png"
+            "player_02_glow_001.png",
+            false,
         ));
     }
 
@@ -2172,6 +2359,7 @@ mod tests {
             &mut sprites,
             &BTreeMap::new(),
             &glow_test_options(),
+            false,
         );
         assert_eq!(generated, 1);
         let glow = sprites.get("player_01_glow_001.png").expect("glow");
@@ -2195,6 +2383,7 @@ mod tests {
             &mut sprites,
             &extras,
             &glow_test_options(),
+            false,
         );
         assert_eq!(generated, 1);
         let glow = sprites.get("ship_03_glow_001.png").expect("glow");

@@ -224,8 +224,8 @@ pub(crate) fn is_icon_extra_frame(frame_name: &str) -> bool {
 
 /// Corner-preserving contour smooth + uniform 1px AA on existing coverage only.
 /// Extra frames use occupancy (any hard pixel) so white/light extras get the
-/// same secondary-hole treatment as black ink. Never invents coverage or
-/// raises alpha.
+/// same secondary-hole treatment as black ink. The first pass never invents
+/// coverage. A follow-up pass only raises existing silhouette fringe alpha.
 pub(crate) fn smooth_ink_contour(image: &RgbaImage) -> RgbaImage {
     smooth_ink_contour_with_mode(image, false)
 }
@@ -263,7 +263,12 @@ pub(crate) fn smooth_ink_contour_with_mode(image: &RgbaImage, occupancy: bool) -
     let contours = extract_ink_contours(&mask, w, h, MIN_CONTOUR);
     let holes = extract_secondary_holes(image, &mask, w, h, MIN_CONTOUR);
     if contours.is_empty() && holes.is_empty() {
-        return clear_soft_ink_haze(image, HARD_ALPHA);
+        let haze = clear_soft_ink_haze(image, HARD_ALPHA);
+        if occupancy {
+            return refine_outline_boundary_aa(&haze, true);
+        }
+        let solid = close_nearly_opaque_ink_cores(&haze);
+        return refine_outline_boundary_aa(&solid, false);
     }
 
     let smoothed_outers: Vec<Vec<(f32, f32)>> = contours
@@ -307,7 +312,7 @@ pub(crate) fn smooth_ink_contour_with_mode(image: &RgbaImage, occupancy: bool) -
                 continue;
             }
 
-            // Deep interior hard ink: leave as-is (already solid).
+            // Deep interior hard coverage: leave RGB/alpha as-is (already solid).
             if hard && !is_mask_boundary(&mask, w, h, x, y) {
                 continue;
             }
@@ -328,6 +333,349 @@ pub(crate) fn smooth_ink_contour_with_mode(image: &RgbaImage, occupancy: bool) -
             }
         }
     }
+    if occupancy {
+        refine_outline_boundary_aa(&out, true)
+    } else {
+        let solid = close_nearly_opaque_ink_cores(&out);
+        refine_outline_boundary_aa(&solid, false)
+    }
+}
+
+fn pixel_is_outside_background(p: [u8; 4]) -> bool {
+    p[3] < 8
+}
+
+/// True when an ink pixel borders transparency (or the image edge) — the only
+/// place fractional alpha is kept for silhouette AA.
+fn ink_pixel_faces_outside(image: &RgbaImage, x: u32, y: u32) -> bool {
+    let w = image.width();
+    let h = image.height();
+    for dy in -1i32..=1 {
+        for dx in -1i32..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                return true;
+            }
+            if pixel_is_outside_background(image.get_pixel(nx as u32, ny as u32).0) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn channel_max(pixel: [u8; 4]) -> u8 {
+    pixel[0].max(pixel[1]).max(pixel[2])
+}
+
+/// Dark neutral ink above the AA band (α ≥ 200). Relaxed luma vs [`is_ink_black`]
+/// so sharpened / premultiplied AI strokes still read as outline core.
+fn is_opaque_ink_core(pixel: [u8; 4]) -> bool {
+    const MIN_CORE_ALPHA: u8 = 200;
+    if pixel[3] < MIN_CORE_ALPHA || is_white_rgb(pixel) {
+        return false;
+    }
+    if pixel[3] == 255 {
+        // Fully opaque: only true-black RGB (avoids crushing dark gray fill ramps).
+        return channel_max(pixel) <= 12 && pixel_chroma(pixel) <= 12;
+    }
+    pixel_luma(pixel) <= 48 && pixel_chroma(pixel) <= 24
+}
+
+fn is_true_solid_core(pixel: [u8; 4], occupancy: bool) -> bool {
+    if pixel[3] < 255 || is_white_rgb(pixel) {
+        return false;
+    }
+    if occupancy {
+        true
+    } else {
+        channel_max(pixel) <= 12 && pixel_chroma(pixel) <= 12
+    }
+}
+
+fn mask_neighbor_count(mask: &[bool], w: u32, h: u32, x: u32, y: u32) -> u32 {
+    let mut n = 0u32;
+    for dy in -1i32..=1 {
+        for dx in -1i32..=1 {
+            if dx == 0 && dy == 0 {
+                continue;
+            }
+            let nx = x as i32 + dx;
+            let ny = y as i32 + dy;
+            if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                continue;
+            }
+            if mask[(ny as u32 * w + nx as u32) as usize] {
+                n = n.saturating_add(1);
+            }
+        }
+    }
+    n
+}
+
+/// Raise existing AA-band alpha toward opaque without flattening the ramp.
+fn boost_existing_aa_alpha(alpha: u8) -> u8 {
+    const GAMMA: f32 = 0.38;
+    const MAX_AA_ALPHA: u8 = 230;
+    if alpha == 0 || alpha >= MAX_AA_ALPHA {
+        return alpha;
+    }
+    let t = f32::from(alpha) / 255.0;
+    let lifted = (t.powf(GAMMA) * 255.0).round() as u8;
+    lifted.max(alpha).min(MAX_AA_ALPHA)
+}
+
+/// Second pass: make the existing silhouette fringe more opaque.
+/// Never writes empty pixels, so the outline cannot grow.
+fn refine_outline_boundary_aa(image: &RgbaImage, occupancy: bool) -> RgbaImage {
+    const MAX_AA_ALPHA: u8 = 230;
+    const MAX_CORE_DIST_SQ: u32 = 8;
+    const DEEP_CONCAVE: u32 = 5;
+
+    let w = image.width();
+    let h = image.height();
+    if w < 3 || h < 3 {
+        return image.clone();
+    }
+
+    let mut mask = vec![false; (w as usize).saturating_mul(h as usize)];
+    for y in 0..h {
+        for x in 0..w {
+            if is_true_solid_core(image.get_pixel(x, y).0, occupancy) {
+                mask[(y * w + x) as usize] = true;
+            }
+        }
+    }
+    let dist = dist_sq_to_solid_core(&mask, w, h);
+
+    let mut out = image.clone();
+    for y in 0..h {
+        for x in 0..w {
+            let src = image.get_pixel(x, y).0;
+            if src[3] == 0 || src[3] >= MAX_AA_ALPHA {
+                continue;
+            }
+            if is_white_rgb(src) {
+                continue;
+            }
+            if !occupancy && !is_ink_black(src, 1) {
+                continue;
+            }
+            if !ink_pixel_faces_outside(image, x, y) {
+                continue;
+            }
+
+            let idx = (y * w + x) as usize;
+            if dist[idx] == 0 || dist[idx] > MAX_CORE_DIST_SQ {
+                continue;
+            }
+            if mask_neighbor_count(&mask, w, h, x, y) >= DEEP_CONCAVE {
+                continue;
+            }
+
+            let a = boost_existing_aa_alpha(src[3]);
+            if a == src[3] {
+                continue;
+            }
+            let rgb = if occupancy {
+                [src[0], src[1], src[2]]
+            } else {
+                [0, 0, 0]
+            };
+            out.put_pixel(x, y, Rgba([rgb[0], rgb[1], rgb[2], a]));
+        }
+    }
+    enforce_outline_aa_falloff(&out, occupancy)
+}
+
+fn is_outline_aa_fringe(pixel: [u8; 4], occupancy: bool) -> bool {
+    if pixel[3] == 0 || pixel[3] == 255 || is_white_rgb(pixel) {
+        return false;
+    }
+    if occupancy {
+        true
+    } else {
+        is_ink_black(pixel, 1)
+    }
+}
+
+fn dist_sq_to_solid_core(mask: &[bool], w: u32, h: u32) -> Vec<u32> {
+    const INF: u32 = u32::MAX / 4;
+    const RADIUS: i32 = 4;
+    let mut dist = vec![INF; mask.len()];
+    for y in 0..h {
+        for x in 0..w {
+            let idx = (y * w + x) as usize;
+            if mask[idx] {
+                dist[idx] = 0;
+                continue;
+            }
+            let mut best = INF;
+            for dy in -RADIUS..=RADIUS {
+                for dx in -RADIUS..=RADIUS {
+                    let nx = x as i32 + dx;
+                    let ny = y as i32 + dy;
+                    if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                        continue;
+                    }
+                    if mask[(ny as u32 * w + nx as u32) as usize] {
+                        let d = (dx * dx + dy * dy) as u32;
+                        if d < best {
+                            best = d;
+                        }
+                    }
+                }
+            }
+            dist[idx] = best;
+        }
+    }
+    dist
+}
+
+fn put_fringe_alpha(out: &mut RgbaImage, occupancy: bool, x: u32, y: u32, src: [u8; 4], alpha: u8) {
+    let rgb = if occupancy {
+        [src[0], src[1], src[2]]
+    } else {
+        [0, 0, 0]
+    };
+    out.put_pixel(x, y, Rgba([rgb[0], rgb[1], rgb[2], alpha]));
+}
+
+/// Make AA opacity decrease with distance from the solid outline.
+/// Existing pixels only: raise too-transparent inner fringe, lower too-opaque outer fringe.
+fn enforce_outline_aa_falloff(image: &RgbaImage, occupancy: bool) -> RgbaImage {
+    const MAX_AA_ALPHA: u8 = 230;
+    const FALLOFF: f32 = 0.68;
+    const INF: u32 = u32::MAX / 4;
+
+    let w = image.width();
+    let h = image.height();
+    if w < 3 || h < 3 {
+        return image.clone();
+    }
+
+    let mut mask = vec![false; (w as usize).saturating_mul(h as usize)];
+    for y in 0..h {
+        for x in 0..w {
+            if is_true_solid_core(image.get_pixel(x, y).0, occupancy) {
+                mask[(y * w + x) as usize] = true;
+            }
+        }
+    }
+
+    let dist = dist_sq_to_solid_core(&mask, w, h);
+    let mut fringe = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            let src = image.get_pixel(x, y).0;
+            if !is_outline_aa_fringe(src, occupancy) {
+                continue;
+            }
+            if !ink_pixel_faces_outside(image, x, y) {
+                continue;
+            }
+            let idx = (y * w + x) as usize;
+            if dist[idx] == 0 || dist[idx] >= INF {
+                continue;
+            }
+            fringe.push((dist[idx], x, y, idx));
+        }
+    }
+
+    let mut out = image.clone();
+
+    // Outside-in: an inner pixel must not be more transparent than a further neighbor.
+    fringe.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.3.cmp(&b.3)));
+    for &(_, x, y, idx) in &fringe {
+        let src = out.get_pixel(x, y).0;
+        let mut a = src[3];
+        for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                    continue;
+                }
+                let nidx = (ny as u32 * w + nx as u32) as usize;
+                if dist[nidx] <= dist[idx] {
+                    continue;
+                }
+                let q = out.get_pixel(nx as u32, ny as u32).0;
+                if is_outline_aa_fringe(q, occupancy) {
+                    a = a.max(q[3]);
+                }
+            }
+        }
+        a = a.min(MAX_AA_ALPHA);
+        if a != src[3] {
+            put_fringe_alpha(&mut out, occupancy, x, y, src, a);
+        }
+    }
+
+    // Inside-out: a further pixel must be lighter than closer AA (not the solid core).
+    fringe.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.3.cmp(&b.3)));
+    for &(_, x, y, idx) in &fringe {
+        let src = out.get_pixel(x, y).0;
+        let mut cap = u8::MAX;
+        let mut has_aa_inner = false;
+        for dy in -1i32..=1 {
+            for dx in -1i32..=1 {
+                if dx == 0 && dy == 0 {
+                    continue;
+                }
+                let nx = x as i32 + dx;
+                let ny = y as i32 + dy;
+                if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
+                    continue;
+                }
+                let nidx = (ny as u32 * w + nx as u32) as usize;
+                if dist[nidx] >= dist[idx] || mask[nidx] {
+                    continue;
+                }
+                let q = out.get_pixel(nx as u32, ny as u32).0;
+                if is_outline_aa_fringe(q, occupancy) {
+                    has_aa_inner = true;
+                    let inner_cap = (f32::from(q[3]) * FALLOFF).round() as u8;
+                    cap = cap.min(inner_cap);
+                }
+            }
+        }
+        if !has_aa_inner {
+            continue;
+        }
+        let a = src[3].min(cap).max(1);
+        if a != src[3] {
+            put_fringe_alpha(&mut out, occupancy, x, y, src, a);
+        }
+    }
+    out
+}
+
+/// Close leftover holes in already-solid black ink. Does not raise a wide
+/// semi-transparent AI smear to opaque — that thickens strokes and kills AA.
+fn close_nearly_opaque_ink_cores(image: &RgbaImage) -> RgbaImage {
+    let w = image.width();
+    let h = image.height();
+    let mut out = image.clone();
+    for y in 0..h {
+        for x in 0..w {
+            let src = image.get_pixel(x, y).0;
+            if !is_opaque_ink_core(src) {
+                continue;
+            }
+            if src == [0, 0, 0, 255] {
+                continue;
+            }
+            out.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+        }
+    }
     out
 }
 
@@ -338,8 +686,8 @@ fn clear_soft_ink_haze(image: &RgbaImage, hard_alpha: u8) -> RgbaImage {
         if is_white_rgb(src) {
             continue;
         }
-        if is_ink_black(src, 1) && src[3] < hard_alpha {
-            out.put_pixel(x, y, Rgba([src[0], src[1], src[2], 0]));
+        if is_ink_black(src, 1) && src[3] < hard_alpha && ink_pixel_faces_outside(image, x, y) {
+            out.put_pixel(x, y, Rgba([0, 0, 0, 0]));
         }
     }
     out
@@ -956,16 +1304,148 @@ mod tests {
                 let dst = out.get_pixel(x, y).0;
                 if src[3] == 0 {
                     assert_eq!(dst[3], 0, "must not paint empty at {x},{y}");
-                } else if is_ink_black(src, 1) {
+                } else if is_ink_black(src, 1) && src[3] < 200 {
                     assert!(
-                        dst[3] <= src[3],
-                        "must not raise ink alpha at {x},{y}: {} -> {}",
+                        dst[3] < 255,
+                        "must not solidify AA fringe at {x},{y}: {} -> {}",
                         src[3],
                         dst[3]
                     );
                 }
             }
         }
+    }
+
+    #[test]
+    fn boundary_aa_pass_raises_existing_fringe_without_thickening() {
+        let mut img = RgbaImage::from_pixel(16, 12, Rgba([0, 0, 0, 0]));
+        for y in 3..9 {
+            for x in 5..11 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+            img.put_pixel(4, y, Rgba([0, 0, 0, 90]));
+        }
+        let out = refine_outline_boundary_aa(&img, false);
+        let fringe = out.get_pixel(4, 5).0[3];
+        assert!(
+            fringe > 90 && fringe < 255,
+            "existing fringe must become more opaque AA, α={fringe}"
+        );
+        assert_eq!(out.get_pixel(7, 6).0, [0, 0, 0, 255], "interior stays solid");
+        assert_eq!(out.get_pixel(3, 5).0[3], 0, "must not add outward pixels");
+        for y in 0..12 {
+            for x in 0..16 {
+                if img.get_pixel(x, y).0[3] == 0 {
+                    assert_eq!(
+                        out.get_pixel(x, y).0[3],
+                        0,
+                        "empty must stay empty at {x},{y}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn outline_aa_falloff_fixes_inverted_opacities() {
+        let mut img = RgbaImage::from_pixel(12, 10, Rgba([0, 0, 0, 0]));
+        for y in 2..8 {
+            for x in 5..9 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+        }
+        // Closer to the core but more transparent than the pixel further out.
+        img.put_pixel(4, 5, Rgba([0, 0, 0, 50]));
+        img.put_pixel(3, 5, Rgba([0, 0, 0, 170]));
+        let out = refine_outline_boundary_aa(&img, false);
+        let inner = out.get_pixel(4, 5).0[3];
+        let outer = out.get_pixel(3, 5).0[3];
+        assert!(inner > 0 && outer > 0, "existing fringe stays occupied");
+        assert!(
+            inner >= outer,
+            "closer fringe must not be more transparent than further: inner={inner} outer={outer}"
+        );
+        assert!(inner < 255 && outer < 255, "must remain AA, not solid");
+        assert_eq!(out.get_pixel(2, 5).0[3], 0, "must not add a third ring");
+        assert_eq!(out.get_pixel(6, 5).0, [0, 0, 0, 255], "core stays solid");
+    }
+
+    #[test]
+    fn close_nearly_opaque_ink_does_not_thicken_soft_smear() {
+        let mut img = RgbaImage::from_pixel(14, 10, Rgba([0, 0, 0, 0]));
+        for y in 3..7 {
+            for x in 3..10 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 110]));
+            }
+        }
+        let out = close_nearly_opaque_ink_cores(&img);
+        assert_eq!(out.get_pixel(6, 5).0[3], 110);
+    }
+
+    #[test]
+    fn close_nearly_opaque_ink_fills_interior_holes() {
+        let mut img = RgbaImage::from_pixel(14, 10, Rgba([0, 0, 0, 0]));
+        for y in 3..7 {
+            for x in 3..10 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+            }
+        }
+        img.put_pixel(6, 5, Rgba([0, 0, 0, 210]));
+        let out = close_nearly_opaque_ink_cores(&img);
+        assert_eq!(out.get_pixel(6, 5).0, [0, 0, 0, 255]);
+        assert_eq!(out.get_pixel(3, 5).0, [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn close_nearly_opaque_ink_solidifies_high_alpha_on_silhouette() {
+        let mut img = RgbaImage::from_pixel(10, 10, Rgba([0, 0, 0, 0]));
+        for y in 3..7 {
+            img.put_pixel(4, y, Rgba([18, 18, 18, 220]));
+        }
+        let out = close_nearly_opaque_ink_cores(&img);
+        assert_eq!(out.get_pixel(4, 5).0, [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn close_nearly_opaque_ink_normalizes_opaque_near_black_rgb() {
+        let mut img = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 0]));
+        img.put_pixel(3, 3, Rgba([8, 8, 8, 255]));
+        let out = close_nearly_opaque_ink_cores(&img);
+        assert_eq!(out.get_pixel(3, 3).0, [0, 0, 0, 255]);
+    }
+
+    #[test]
+    fn occupancy_contour_keeps_gray_fill_and_white_rim() {
+        let mut img = RgbaImage::from_pixel(16, 16, Rgba([0, 0, 0, 0]));
+        for y in 3..13 {
+            for x in 3..13 {
+                img.put_pixel(x, y, Rgba([255, 255, 255, 255]));
+            }
+        }
+        for y in 5..11 {
+            for x in 5..11 {
+                img.put_pixel(x, y, Rgba([90, 90, 90, 255]));
+            }
+        }
+        let out = smooth_ink_contour_with_mode(&img, true);
+        assert_eq!(out.get_pixel(7, 7).0, [90, 90, 90, 255], "gray fill");
+        assert_eq!(out.get_pixel(4, 8).0, [255, 255, 255, 255], "white rim");
+    }
+
+    #[test]
+    fn smooth_ink_contour_does_not_solidify_soft_stroke_into_thick_ink() {
+        let mut img = RgbaImage::from_pixel(14, 10, Rgba([0, 0, 0, 0]));
+        for y in 3..7 {
+            for x in 3..10 {
+                img.put_pixel(x, y, Rgba([0, 0, 0, 110]));
+            }
+        }
+        let out = smooth_ink_contour(&img);
+        assert!(
+            out.get_pixel(6, 5).0[3] < 200,
+            "soft smear must not become a thick opaque core, α={}",
+            out.get_pixel(6, 5).0[3]
+        );
     }
 
     #[test]

@@ -15,6 +15,8 @@ use crate::core::contracts::{
 };
 use crate::core::discovery::{discover_unpaired_pngs, SheetCandidate};
 use crate::core::errors::AppError;
+use crate::core::glow_composite::icon_stem_from_frame_name;
+use crate::core::sprite_index::base_stem_from_stem;
 use crate::core::game_files::{
     discover_sheet_pairs_with_game_plist_fallback, find_current_sheet_for_input,
     normalize_legacy_version, sheet_uses_external_plist, GameFilesLayout,
@@ -23,7 +25,7 @@ use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::merger::{apply_alpha_trim_to_frame_dict, merge_plist_from_memory};
 use crate::core::plist::{
     count_frames_in_plist, denormalize_plist_if_format2, force_plist_frames_to_format3,
-    normalize_plist_frames_to_format3,
+    frame_matches_icon_plist_format, normalize_plist_frames_to_format3,
 };
 use crate::core::porter::flattened_bundle_output_dir;
 use crate::core::report::{OperationProgress, OperationReport, ReportIssue, ReportLevel};
@@ -992,6 +994,130 @@ pub(crate) fn is_icon_sprite(relative_dir: &Path, frame_name: &str) -> bool {
         Some(id) => !is_excluded_legacy_icon_id(&id),
         None => false,
     }
+}
+
+fn is_object_gamesheet_stem(stem: &str) -> bool {
+    let lower = stem.to_ascii_lowercase();
+    lower.starts_with("gj_gamesheet")
+        && !sheet_may_hold_legacy_icons(stem)
+        && !is_gamesheet04_stem(stem)
+}
+
+/// True when a gamesheet stem names a single icon id (`player_02`, `neonDragon_01`, …).
+pub(crate) fn stem_looks_like_icon_id(stem: &str) -> bool {
+    let base = base_stem_from_stem(stem);
+    if icon_stem_from_frame_name(&format!("{base}.png")).is_some() {
+        return true;
+    }
+    let probe = format!("{base}_001.png");
+    icon_sheet_id_from_frame_name(&probe).is_some()
+        || icon_stem_from_frame_name(&probe).is_some()
+}
+
+fn countable_icon_sheet_frames(frame_names: &[String]) -> (usize, usize) {
+    let mut countable = 0usize;
+    let mut icon_like = 0usize;
+    for name in frame_names {
+        if is_glow_frame_name(name) || is_fireboost_frame_name(name) {
+            continue;
+        }
+        countable = countable.saturating_add(1);
+        if icon_stem_from_frame_name(name).is_some() {
+            icon_like = icon_like.saturating_add(1);
+        }
+    }
+    (countable, icon_like)
+}
+
+fn dedicated_icon_frame_ratio(countable: usize, icon_like: usize) -> bool {
+    if countable == 0 || icon_like == 0 {
+        return false;
+    }
+    if icon_like == countable {
+        return true;
+    }
+    // One watermark / stray frame on an otherwise dedicated icon atlas.
+    icon_like + 1 == countable && icon_like >= 1
+}
+
+/// Dedicated icon atlases — including custom names outside `icons/` — vs mixed object gamesheets.
+pub(crate) fn sheet_is_dedicated_icon_gamesheet(
+    relative_dir: &Path,
+    stem: &str,
+    frame_names: &[String],
+) -> bool {
+    if sheet_is_under_icons(relative_dir) {
+        return true;
+    }
+    if sheet_may_hold_legacy_icons(stem) || is_object_gamesheet_stem(stem) {
+        return false;
+    }
+    if stem_looks_like_icon_id(stem) {
+        return true;
+    }
+    let (countable, icon_like) = countable_icon_sheet_frames(frame_names);
+    dedicated_icon_frame_ratio(countable, icon_like)
+}
+
+/// Icon gamesheet detection for upscaler routing + finish (includes custom icon editor atlases).
+pub(crate) fn sheet_is_icon_gamesheet(
+    relative_dir: &Path,
+    stem: &str,
+    frame_names: &[String],
+    plist_root: Option<&Value>,
+) -> bool {
+    if sheet_is_dedicated_icon_gamesheet(relative_dir, stem, frame_names) {
+        return true;
+    }
+    let Some(root) = plist_root else {
+        return false;
+    };
+    if sheet_may_hold_legacy_icons(stem) || is_object_gamesheet_stem(stem) {
+        return false;
+    }
+    let Ok(frames) = frames_dictionary(root) else {
+        return false;
+    };
+    let frame_set: HashSet<&str> = frame_names.iter().map(String::as_str).collect();
+    let mut countable = 0usize;
+    let mut icon_format = 0usize;
+    for (name, value) in frames {
+        if !frame_set.contains(name.as_str()) {
+            continue;
+        }
+        if is_glow_frame_name(name) || is_fireboost_frame_name(name) {
+            continue;
+        }
+        countable = countable.saturating_add(1);
+        if frame_matches_icon_plist_format(value) {
+            icon_format = icon_format.saturating_add(1);
+        }
+    }
+    dedicated_icon_frame_ratio(countable, icon_format)
+}
+
+/// Icon AI upscale + finish pipeline (Real-ESRGAN AnimeV3, not glow).
+pub(crate) fn is_icon_sprite_for_upscale(
+    relative_dir: &Path,
+    frame_name: &str,
+    sheet_is_icon: bool,
+) -> bool {
+    if is_glow_frame_name(frame_name) || is_fireboost_frame_name(frame_name) {
+        return false;
+    }
+    if is_icon_sprite(relative_dir, frame_name) {
+        return true;
+    }
+    sheet_is_icon
+}
+
+pub(crate) fn is_icon_glow_sprite(
+    relative_dir: &Path,
+    frame_name: &str,
+    sheet_is_icon: bool,
+) -> bool {
+    is_glow_frame_name(frame_name)
+        && (is_icon_sprite(relative_dir, frame_name) || sheet_is_icon)
 }
 
 pub(crate) fn group_frame_names_by_icon_id(
@@ -2575,7 +2701,8 @@ mod tests {
         is_glow_frame_name, is_icon_sprite, is_known_legacy_icon_kind,
         is_legacy_combined_icon_sheet, is_legacy_icon_glow_sheet, is_legacy_icon_split_version,
         missing_frame_keys, pack_uses_legacy_combined_icons, plist_contains_legacy_icon_frames,
-        save_merged_sheet, sheet_is_under_icons, sheet_may_hold_legacy_icons,
+        save_merged_sheet, sheet_is_dedicated_icon_gamesheet, sheet_is_icon_gamesheet,
+        sheet_is_under_icons, sheet_may_hold_legacy_icons,
         should_remove_from_legacy_gamesheet02, should_remove_from_legacy_glow_sheet,
         take_gamesheet04_menu_buttons, is_convert_from_2_0, is_gamesheet04_moved_frame,
         is_gamesheet04_stem,
@@ -2648,6 +2775,84 @@ mod tests {
         assert!(!is_known_legacy_icon_kind("portal"));
         assert!(!is_known_legacy_icon_kind("block"));
         assert!(!is_known_legacy_icon_kind("square"));
+    }
+
+    #[test]
+    fn dedicated_icon_gamesheet_detects_custom_names_outside_icons_folder() {
+        assert!(sheet_is_dedicated_icon_gamesheet(
+            Path::new(""),
+            "neonDragon_01-uhd",
+            &[
+                "neonDragon_01_001.png".to_string(),
+                "neonDragon_01_2_001.png".to_string(),
+            ],
+        ));
+        assert!(!sheet_is_dedicated_icon_gamesheet(
+            Path::new(""),
+            "GJ_GameSheet03-uhd",
+            &["block_01_001.png".to_string()],
+        ));
+        assert!(sheet_is_dedicated_icon_gamesheet(
+            Path::new("icons"),
+            "anything-uhd",
+            &["weird_frame.png".to_string()],
+        ));
+        assert!(sheet_is_dedicated_icon_gamesheet(
+            Path::new(""),
+            "neonDragon_01-uhd",
+            &[
+                "neonDragon_01_001.png".to_string(),
+                "neonDragon_01_2_001.png".to_string(),
+                "Viper_WaterMark.png".to_string(),
+            ],
+        ));
+    }
+
+    #[test]
+    fn icon_gamesheet_detects_format3_icon_plist_atlases() {
+        let mut frames = Dictionary::new();
+        frames.insert(
+            "customA_001.png".to_string(),
+            Value::Dictionary(icon_editor_frame_dict()),
+        );
+        frames.insert(
+            "customA_2_001.png".to_string(),
+            Value::Dictionary(icon_editor_frame_dict()),
+        );
+        let mut root = Dictionary::new();
+        root.insert("frames".to_string(), Value::Dictionary(frames));
+        let plist = Value::Dictionary(root);
+        let names = vec![
+            "customA_001.png".to_string(),
+            "customA_2_001.png".to_string(),
+        ];
+        assert!(sheet_is_icon_gamesheet(
+            Path::new(""),
+            "customA-uhd",
+            &names,
+            Some(&plist),
+        ));
+    }
+
+    fn icon_editor_frame_dict() -> Dictionary {
+        let mut d = Dictionary::new();
+        d.insert(
+            "textureRect".to_string(),
+            Value::String("{{0,0},{16,16}}".to_string()),
+        );
+        d.insert(
+            "spriteSize".to_string(),
+            Value::String("{16,16}".to_string()),
+        );
+        d.insert(
+            "spriteOffset".to_string(),
+            Value::String("{0,0}".to_string()),
+        );
+        d.insert(
+            "spriteSourceSize".to_string(),
+            Value::String("{16,16}".to_string()),
+        );
+        d
     }
 
     #[test]
