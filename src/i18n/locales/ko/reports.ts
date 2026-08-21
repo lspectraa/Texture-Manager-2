@@ -56,6 +56,9 @@ const reports = {
     downloadCsvAria: "문제 목록을 CSV로 다운로드",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "오류",
     warning: "경고",

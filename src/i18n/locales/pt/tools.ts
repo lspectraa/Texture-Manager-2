@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "Diretório de saída",
     outputMirroringNote:
       "A saída permanece separada, a menos que você aponte a entrada para um caminho de saída vazio.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Executar operação",
     running: "Executando…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Sprites novos copiados do jogo não ficam mais nítidos. Confira ícones com chave de cor no fim.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Espessura da linha de brilho",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Limiar alfa do brilho",
@@ -141,6 +145,9 @@ const tools = {
       bgChecker: "Xadrez",
       bgGd: "GD",
       dragHint: "Arraste o canvas para mover o emissor",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "Contexto {{mode}} · Reinicie para disparar de novo",
       chipGravity: "Gravidade",
       chipRadius: "Raio",

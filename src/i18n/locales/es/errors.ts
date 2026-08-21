@@ -12,6 +12,8 @@ const errors: AppLocaleResources["errors"] = {
       "El selector de carpetas está disponible en el entorno de ejecución de Tauri.",
     filePickerUnavailable:
       "El selector de archivos solo está disponible en el entorno de ejecución de Tauri.",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired:

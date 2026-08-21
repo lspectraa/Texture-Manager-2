@@ -1,5 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { basenameForDisplay } from "../../../utils/pathDisplay";
+import { isMobileShell } from "../../../utils/platform";
 
 type ToolFilePathFieldProps = {
   label: string;
@@ -25,6 +27,12 @@ export function ToolFilePathField({
   const { t } = useTranslation("common");
   const resolvedPlaceholder = placeholder ?? t("selectFile");
   const resolvedBrowseLabel = browseLabel ?? t("browse");
+  const nameOnly = isMobileShell();
+  const displayValue = nameOnly
+    ? value.trim()
+      ? basenameForDisplay(value)
+      : resolvedPlaceholder
+    : value;
 
   return (
     <label className="tm-tool-field">
@@ -32,9 +40,9 @@ export function ToolFilePathField({
         {label}
         {hint ? <span className="tm-tool-field-hint">{hint}</span> : null}
       </span>
-      <div className="tm-tool-path-input">
+      <div className={`tm-tool-path-input${nameOnly ? " tm-tool-path-input--compact" : ""}`}>
         <input
-          value={value}
+          value={displayValue}
           readOnly
           placeholder={resolvedPlaceholder}
           disabled={disabled}

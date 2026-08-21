@@ -31,6 +31,7 @@ import type {
 import { APP_LANGUAGES } from "../../i18n/languages";
 import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { isDesktopPlatform, isMobileShell } from "../../utils/platform";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
@@ -161,6 +162,7 @@ export function SettingsToolPanel({
   pickFolder,
 }: SettingsToolPanelProps) {
   const { t } = useTranslation("settings");
+  const mobileShell = isMobileShell();
   const [draftPath, setDraftPath] = useState(
     settings.geometryDashResolved || settings.geometryDashDetected || "",
   );
@@ -273,6 +275,7 @@ export function SettingsToolPanel({
             showTitle={false}
           />
 
+          {mobileShell ? null : (
           <div className="tm-tool-field tm-settings-background-field">
             <span className="tm-tool-field-label">
               <Image size={14} strokeWidth={1.9} aria-hidden />
@@ -427,6 +430,7 @@ export function SettingsToolPanel({
               />
             </label>
           </div>
+          )}
 
         </ToolSection>
 
@@ -497,6 +501,7 @@ export function SettingsToolPanel({
               </div>
             </div>
             <div className="tm-settings-actions">
+              {mobileShell ? null : (
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -506,6 +511,7 @@ export function SettingsToolPanel({
                 <FolderOpen size={14} strokeWidth={1.9} />
                 {t("cache.openCacheFolder")}
               </button>
+              )}
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -528,6 +534,7 @@ export function SettingsToolPanel({
             <p className="tm-tool-section-note">{t("cache.regenerateSpriteIndexHint")}</p>
           </ToolSection>
 
+          {isDesktopPlatform() ? (
           <ToolSection
             title={t("updates.title")}
             subtitle={t("updates.subtitle")}
@@ -559,6 +566,9 @@ export function SettingsToolPanel({
               )
             ) : null}
           </ToolSection>
+          ) : (
+            <p className="tm-tool-section-note">{t("updates.androidUnavailable")}</p>
+          )}
 
           <ToolSection
             title={t("geometryDash.title")}
@@ -598,7 +608,9 @@ export function SettingsToolPanel({
 
             {!settings.geometryDashDetected ? (
               <p className="tm-settings-meta-path">
-                {t("geometryDash.browseHint")}
+                {mobileShell
+                  ? t("geometryDash.androidHint")
+                  : t("geometryDash.browseHint")}
               </p>
             ) : null}
 
@@ -621,6 +633,7 @@ export function SettingsToolPanel({
                 <RotateCcw size={14} strokeWidth={1.9} />
                 {t("geometryDash.clearOverride")}
               </button>
+              {mobileShell ? null : (
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -630,6 +643,7 @@ export function SettingsToolPanel({
                 <RefreshCw size={14} strokeWidth={1.9} />
                 {t("geometryDash.redetect")}
               </button>
+              )}
             </div>
           </ToolSection>
         </div>

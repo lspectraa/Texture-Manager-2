@@ -6,6 +6,8 @@ const errors = {
   runtime: {
     folderPickerUnavailable: "文件夹选择器在 Tauri 运行时中可用。",
     filePickerUnavailable: "文件选择器仅在 Tauri 运行时中可用。",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired: "拆分器需要同时指定输入和输出目录。",

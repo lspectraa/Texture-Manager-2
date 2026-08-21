@@ -10,6 +10,7 @@ import type {
   HsvDelta,
 } from "../../domain/operations";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { isMobileShell } from "../../utils/platform";
 import {
   autoSelectGeodeButtonsPlist,
   getGeodeButtonsDefaultInputDir,
@@ -494,6 +495,8 @@ export function GeodeButtonsToolPanel({
   const [targets, setTargets] = useState<GeodeButtonsTargetGroup[] | null>(null);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
+  const [mobileShowAdjust, setMobileShowAdjust] = useState(false);
+  const mobileShell = isMobileShell();
   const [previewByFamily, setPreviewByFamily] = useState<Record<string, string>>({});
   const [basePreviewByFamily, setBasePreviewByFamily] = useState<Record<string, string>>({});
   const [trackBaseColor, setTrackBaseColor] = useState<RgbColor>(DEFAULT_TRACK_COLOR);
@@ -933,7 +936,11 @@ export function GeodeButtonsToolPanel({
 
       {targetsError ? <p className="tm-tool-inline-error">{targetsError}</p> : null}
 
-      <div className="tm-geode-workspace">
+      <div
+        className={`tm-geode-workspace${
+          mobileShell && mobileShowAdjust ? " tm-geode-workspace--mobile-adjust" : ""
+        }`}
+      >
         <ToolSection
           title={t("geodeButtons.buttonFamilies")}
           subtitle={t("geodeButtons.buttonFamiliesDescription")}
@@ -952,7 +959,12 @@ export function GeodeButtonsToolPanel({
                       key={group.id}
                       type="button"
                       className={`tm-geode-family-card${isSelected ? " selected" : ""}`}
-                      onClick={() => setSelectedFamilyId(group.id)}
+                      onClick={() => {
+                        setSelectedFamilyId(group.id);
+                        if (mobileShell) {
+                          setMobileShowAdjust(true);
+                        }
+                      }}
                     >
                       <div className="tm-geode-family-preview">
                         {previewSrc ? (
@@ -1006,6 +1018,15 @@ export function GeodeButtonsToolPanel({
           })}
           icon={SlidersHorizontal}
         >
+          {mobileShell ? (
+            <button
+              type="button"
+              className="tm-settings-action-btn"
+              onClick={() => setMobileShowAdjust(false)}
+            >
+              {t("navigation:mobile.geodeBackToFamilies")}
+            </button>
+          ) : null}
           <ToolFilePathField
             label={t("geodeButtons.templatePng")}
             hint={t("geodeButtons.perFamily")}

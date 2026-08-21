@@ -61,6 +61,8 @@ const settings = {
     noAutoDetect: "没有自动检测结果",
     installLocation: "安装位置",
     browseHint: "浏览到你的 Geometry Dash 文件夹，或通过 Steam 安装后重新检测。",
+    androidHint:
+      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
     applyPath: "应用路径",
     clearOverride: "清除手动指定",
     redetect: "重新检测",
@@ -75,6 +77,7 @@ const settings = {
     unsupported: "检查更新需要已安装的桌面应用。",
     checkFailed: "无法检查更新。{{error}}",
     installBlocked: "请先完成当前操作，再安装更新。",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
     installing: "正在下载并安装…",
     downloading: "正在下载更新… {{percent}}%",
     installAndRestart: "安装并重启",

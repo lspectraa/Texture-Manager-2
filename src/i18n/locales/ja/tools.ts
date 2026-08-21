@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "出力ディレクトリ",
     outputMirroringNote:
       "出力先が空のまま入力を選んだ場合を除き、出力は入力とは別のままになります。",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "処理を実行",
     running: "実行中…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "ゲームから追加したスプライトはシャープになりません。終わったらカラーキーのアイコンを確認してください。",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "グロウの線の太さ",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "グロウのアルファしきい値",
@@ -140,6 +144,9 @@ const tools = {
       bgChecker: "市松",
       bgGd: "GD",
       dragHint: "キャンバスをドラッグしてエミッターを移動",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "{{mode}} の状況 · リスタートで再発射",
       chipGravity: "重力",
       chipRadius: "半径",

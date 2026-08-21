@@ -62,6 +62,8 @@ const settings = {
     installLocation: "インストール場所",
     browseHint:
       "Geometry Dash のフォルダーを選ぶか、Steam でインストールしてから再検出してください。",
+    androidHint:
+      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
     applyPath: "パスを適用",
     clearOverride: "手動指定を解除",
     redetect: "再検出",
@@ -76,6 +78,7 @@ const settings = {
     unsupported: "更新の確認にはインストール済みのデスクトップアプリが必要です。",
     checkFailed: "更新を確認できませんでした。{{error}}",
     installBlocked: "更新をインストールする前に現在の処理を終えてください。",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
     installing: "ダウンロードしてインストール中…",
     downloading: "更新をダウンロード中… {{percent}}%",
     installAndRestart: "インストールして再起動",

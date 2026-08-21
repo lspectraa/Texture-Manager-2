@@ -58,6 +58,15 @@ const iconEditor = {
   },
   viewport: {
     panAndZoomHelp: "滚动可平移。Ctrl+滚轮可缩放。按住中键拖动可平移。",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "帧与角色的映射",

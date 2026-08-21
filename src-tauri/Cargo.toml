@@ -32,7 +32,6 @@ base64 = "0.22"
 regex = "1"
 rand = "0.10.1"
 sha2 = "0.10"
-tauri-plugin-process = "2"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
@@ -40,4 +39,5 @@ winreg = "0.55"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 

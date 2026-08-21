@@ -62,6 +62,8 @@ const settings = {
     installLocation: "Install location",
     browseHint:
       "Browse to your Geometry Dash folder, or install via Steam and re-detect.",
+    androidHint:
+      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
     applyPath: "Apply path",
     clearOverride: "Clear override",
     redetect: "Re-detect",
@@ -76,6 +78,7 @@ const settings = {
     unsupported: "Update checks require the installed desktop app.",
     checkFailed: "Could not check for updates. {{error}}",
     installBlocked: "Finish the current operation before installing an update.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
     installing: "Downloading and installing…",
     downloading: "Downloading update… {{percent}}%",
     installAndRestart: "Install and restart",

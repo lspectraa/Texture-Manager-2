@@ -2,7 +2,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { check, type DownloadEvent, type Update } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { APP_VERSION } from "../config/appMeta";
-import { isTauriRuntime } from "./tauriOperations";
+import { isDesktopPlatform, isTauriRuntime } from "../utils/platform";
 
 export type UpdateDownloadProgress = {
   downloaded: number;
@@ -53,7 +53,7 @@ export async function getAppPackageVersion(): Promise<string> {
 
 export async function checkForAppUpdate(): Promise<UpdateCheckResult> {
   const currentVersion = await getAppPackageVersion();
-  if (!isTauriRuntime()) {
+  if (!isTauriRuntime() || !isDesktopPlatform()) {
     return { status: "unsupported" };
   }
 

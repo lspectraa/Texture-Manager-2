@@ -5,6 +5,8 @@ const tools = {
     inputDirectory: "输入目录",
     outputDirectory: "输出目录",
     outputMirroringNote: "除非在输出路径为空时选择输入目录，否则输出会保持独立。",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "运行操作",
     running: "运行中…",
     range1To64: "1–64",
@@ -40,6 +42,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "从游戏复制的新精灵图不会变清晰。完成后请检查色键图标。",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "光晕描边宽度",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "光晕 alpha 阈值",
@@ -138,6 +142,9 @@ const tools = {
       bgChecker: "棋盘格",
       bgGd: "GD",
       dragHint: "拖动画布以移动发射器",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "{{mode}} 场景 · 重新开始可再次触发",
       chipGravity: "重力",
       chipRadius: "半径",

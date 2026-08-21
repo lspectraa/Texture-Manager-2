@@ -9,6 +9,8 @@ const tools: AppLocaleResources["tools"] = {
     outputDirectory: "Выходная папка",
     outputMirroringNote:
       "Результаты сохраняются отдельно, если только вы не выберете входную папку при пустом поле выходного пути.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Запустить операцию",
     running: "Выполняется…",
     range1To64: "1–64",
@@ -47,6 +49,8 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Новые спрайты из игры не увеличиваются. Проверьте цветовые иконки после завершения.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Толщина линии свечения",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Порог альфы свечения",
@@ -152,6 +156,9 @@ const tools: AppLocaleResources["tools"] = {
       bgChecker: "Шахматы",
       bgGd: "GD",
       dragHint: "Перетащите холст, чтобы переместить эмиттер",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "Контекст «{{mode}}» · Перезапустите для повтора",
       chipGravity: "Гравитация",
       chipRadius: "Радиус",

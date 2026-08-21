@@ -15,6 +15,7 @@ const common = {
   optional: "Optional",
   selectFile: "Datei auswählen",
   selectFolder: "Ordner auswählen",
+  noFolderSelected: "No folder selected",
   light: "Hell",
   dark: "Dunkel",
   back: "Zurück",
@@ -64,3 +65,4 @@ const common = {
 } as const;
 
 export default common;
+ 

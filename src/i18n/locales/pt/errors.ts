@@ -6,6 +6,8 @@ const errors = {
   runtime: {
     folderPickerUnavailable: "O seletor de pastas está disponível no runtime do Tauri.",
     filePickerUnavailable: "O seletor de arquivos só está disponível no runtime do Tauri.",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired: "O Divisor exige os diretórios de entrada e de saída.",

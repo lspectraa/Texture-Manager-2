@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "출력 디렉터리",
     outputMirroringNote:
       "출력 경로가 비어 있는 상태에서 입력을 선택하지 않는 한 출력은 별도로 유지됩니다.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "작업 실행",
     running: "실행 중…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "게임에서 복사한 새 스프라이트는 선명해지지 않습니다. 끝나면 컬러 키 아이콘을 확인하세요.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "글로우 선 두께",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "글로우 알파 기준값",
@@ -140,6 +144,9 @@ const tools = {
       bgChecker: "체커",
       bgGd: "GD",
       dragHint: "캔버스를 드래그해 이미터를 이동하세요",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "{{mode}} 상황 · 다시 시작하면 재발사됩니다",
       chipGravity: "중력",
       chipRadius: "반지름",

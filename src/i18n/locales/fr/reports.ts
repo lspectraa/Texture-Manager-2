@@ -56,6 +56,9 @@ const reports = {
     downloadCsvAria: "Télécharger les problèmes au format CSV",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "erreur",
     warning: "avertissement",

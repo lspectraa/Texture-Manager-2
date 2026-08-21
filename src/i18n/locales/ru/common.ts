@@ -17,6 +17,7 @@ const common: AppLocaleResources["common"] = {
   optional: "Необязательно",
   selectFile: "Выбрать файл",
   selectFolder: "Выбрать папку",
+  noFolderSelected: "No folder selected",
   light: "Светлая",
   dark: "Тёмная",
   back: "Назад",

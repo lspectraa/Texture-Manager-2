@@ -1,3 +1,12 @@
+export function basenameForDisplay(path: string): string {
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+  const parts = trimmed.split(/[/\\]/).filter((part) => part.length > 0);
+  return parts[parts.length - 1] ?? trimmed;
+}
+
 /**
  * Shorten absolute paths in user-facing strings (UI / CSV) without destroying
  * debuggability — keeps basename or parent/basename.

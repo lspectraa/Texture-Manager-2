@@ -59,6 +59,15 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "Scroll to pan. Ctrl+wheel to zoom. Middle-click drag to pan.",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Frame role mapping",

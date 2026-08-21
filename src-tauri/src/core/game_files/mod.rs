@@ -68,10 +68,19 @@ impl GameFilesLayout {
     }
 
     /// `{GD}/geode/config/geode.texture-loader/packs`
+    ///
+    /// On Android there is no live Geode install — packs live under the sandbox.
     pub fn texture_loader_packs(&self) -> PathBuf {
-        self.geode_config()
-            .join("geode.texture-loader")
-            .join("packs")
+        #[cfg(target_os = "android")]
+        {
+            return self.root.join("packs");
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            self.geode_config()
+                .join("geode.texture-loader")
+                .join("packs")
+        }
     }
 
     pub fn to_dto(&self) -> GameFilesLayoutDto {
@@ -183,7 +192,19 @@ pub struct GameFilesLayoutDto {
 /// Override with `TM_GAME_FILES_DIR` (absolute path, no `..` components). Intended for tests and
 /// advanced installs — relocates settings, split-cache, and legacy trees. Invalid overrides are
 /// ignored and the default home-relative path is used.
+///
+/// On Android, [`set_game_files_root_override`] is called from setup with the app files dir.
+static GAME_FILES_ROOT_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub fn set_game_files_root_override(path: PathBuf) {
+    let _ = GAME_FILES_ROOT_OVERRIDE.set(path);
+}
+
 pub fn resolve_game_files_root() -> PathBuf {
+    if let Some(overridden) = GAME_FILES_ROOT_OVERRIDE.get() {
+        return overridden.clone();
+    }
     if let Ok(env_override) = std::env::var("TM_GAME_FILES_DIR") {
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
@@ -493,6 +514,7 @@ fn candidate_steam_roots() -> Vec<PathBuf> {
     roots
 }
 
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn steam_library_roots() -> Vec<PathBuf> {
     let mut roots = candidate_steam_roots();
 
@@ -621,19 +643,27 @@ pub fn resolve_geometry_dash_dir_with_override(
         }
     }
 
-    for steam_root in steam_library_roots() {
-        let candidate = steam_root
-            .join("steamapps")
-            .join("common")
-            .join(GEOMETRY_DASH_FOLDER);
-        if looks_like_geometry_dash_dir(&candidate) {
-            return Ok(candidate);
+    #[cfg(not(target_os = "android"))]
+    {
+        for steam_root in steam_library_roots() {
+            let candidate = steam_root
+                .join("steamapps")
+                .join("common")
+                .join(GEOMETRY_DASH_FOLDER);
+            if looks_like_geometry_dash_dir(&candidate) {
+                return Ok(candidate);
+            }
         }
     }
 
     Err(AppError::IoError(
-        "Geometry Dash installation not found. Set the path in Settings or TM_GEOMETRY_DASH_DIR."
-            .to_string(),
+        if cfg!(target_os = "android") {
+            "Geometry Dash auto-detect is not available on Android. Import packs into the app instead."
+                .to_string()
+        } else {
+            "Geometry Dash installation not found. Set the path in Settings or TM_GEOMETRY_DASH_DIR."
+                .to_string()
+        },
     ))
 }
 
@@ -700,6 +730,8 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     {
         resolve_geometry_dash_dir_with_override(override_path.as_deref())
             .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+    } else if cfg!(target_os = "android") {
+        root.join(UNRESOLVED_GD_DIR_NAME)
     } else {
         // Populate the detection cache so the first Settings IPC does not walk Steam again.
         detect_geometry_dash_dir().unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))

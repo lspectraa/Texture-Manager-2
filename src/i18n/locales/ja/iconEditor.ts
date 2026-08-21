@@ -60,6 +60,15 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "スクロールで移動、Ctrl+ホイールでズーム、中ボタンドラッグで移動できます。",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "フレームとロールの割り当て",

@@ -62,6 +62,8 @@ const settings = {
     installLocation: "Emplacement de l’installation",
     browseHint:
       "Accédez à votre dossier Geometry Dash, ou installez-le via Steam puis relancez la détection.",
+    androidHint:
+      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
     applyPath: "Appliquer le chemin",
     clearOverride: "Effacer le remplacement",
     redetect: "Détecter à nouveau",
@@ -76,6 +78,7 @@ const settings = {
     unsupported: "La recherche de mises à jour nécessite l’application de bureau installée.",
     checkFailed: "Impossible de rechercher des mises à jour. {{error}}",
     installBlocked: "Terminez l’opération en cours avant d’installer une mise à jour.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
     installing: "Téléchargement et installation…",
     downloading: "Téléchargement de la mise à jour… {{percent}} %",
     installAndRestart: "Installer et redémarrer",

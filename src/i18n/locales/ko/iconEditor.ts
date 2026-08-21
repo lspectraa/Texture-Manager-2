@@ -59,6 +59,15 @@ const iconEditor = {
   },
   viewport: {
     panAndZoomHelp: "스크롤로 이동. Ctrl+휠로 확대/축소. 가운데 버튼 드래그로 이동.",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "프레임 역할 매핑",

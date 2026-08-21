@@ -9,6 +9,8 @@ const tools: AppLocaleResources["tools"] = {
     outputDirectory: "Directorio de salida",
     outputMirroringNote:
       "La salida permanece separada, a menos que selecciones la entrada mientras la ruta de salida esté vacía.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Ejecutar operación",
     running: "Ejecutando…",
     range1To64: "1–64",
@@ -47,6 +49,8 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Los sprites nuevos copiados del juego no se hacen más nítidos. Revisa los iconos de color al terminar.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Grosor de la línea de brillo",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Umbral alfa del brillo",
@@ -152,6 +156,9 @@ const tools: AppLocaleResources["tools"] = {
       bgChecker: "Tablero",
       bgGd: "GD",
       dragHint: "Arrastra el lienzo para mover el emisor",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "Contexto {{mode}} · Reinicia para volver a lanzar",
       chipGravity: "Gravedad",
       chipRadius: "Radio",

@@ -58,6 +58,9 @@ const reports: AppLocaleResources["reports"] = {
     downloadCsvAria: "Скачать проблемы в формате CSV",
     occurrence: "×{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "ошибка",
     warning: "предупреждение",

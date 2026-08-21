@@ -6,10 +6,9 @@ import {
   OperationRequest,
   PhaseDefaults,
 } from "../domain/operations";
+import { isTauriRuntime } from "../utils/platform";
 
-export const isTauriRuntime = (): boolean => {
-  return "__TAURI_INTERNALS__" in window;
-};
+export { isTauriRuntime };
 
 export const getPhaseDefaults = async (): Promise<PhaseDefaults> => {
   if (!isTauriRuntime()) {

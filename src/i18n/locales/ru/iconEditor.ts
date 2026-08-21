@@ -63,6 +63,15 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   viewport: {
     panAndZoomHelp:
       "Прокручивайте для перемещения. Ctrl+колесо — масштабирование. Перетаскивайте средней кнопкой мыши для перемещения.",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Сопоставление ролей кадров",

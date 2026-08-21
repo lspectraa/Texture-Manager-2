@@ -204,6 +204,13 @@ where
 
     check_cancel(cancel.as_ref())?;
 
+    #[cfg(target_os = "android")]
+    if matches!(plan.kind, OperationKind::Upscaler) {
+        return Err(AppError::InvalidOperation(
+            "Upscaler is not available on Android",
+        ));
+    }
+
     if !input_dir.exists() {
         return Err(AppError::InvalidPath("input directory does not exist"));
     }

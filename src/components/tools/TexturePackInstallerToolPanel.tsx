@@ -54,8 +54,13 @@ import {
 } from "../../services/tauriPackInstaller";
 import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { isMobileShell } from "../../utils/platform";
 import { openPathInOs } from "../../services/tauriSettings";
-import { redactAbsolutePathsInText, shortenPathForDisplay } from "../../utils/pathDisplay";
+import {
+  basenameForDisplay,
+  redactAbsolutePathsInText,
+  shortenPathForDisplay,
+} from "../../utils/pathDisplay";
 import {
   PackLibraryContextMenu,
   type PackLibraryContextAction,
@@ -295,6 +300,8 @@ export function TexturePackInstallerToolPanel({
   onSidebarActionsChange,
 }: TexturePackInstallerToolPanelProps) {
   const { t } = useTranslation(["tools", "errors", "common"]);
+  const mobileShell = isMobileShell();
+  const packIoReady = geometryDashFound || mobileShell;
   const [plan, setPlan] = useState<InstallPlan | null>(null);
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<BusyKind>(null);
@@ -474,7 +481,7 @@ export function TexturePackInstallerToolPanel({
 
   const runDiscovery = useCallback(
     async (path: string) => {
-      if (!geometryDashFound) {
+      if (!packIoReady) {
         setStatusTone("error");
         setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
         return;
@@ -602,7 +609,7 @@ export function TexturePackInstallerToolPanel({
   );
 
   const refreshLibrary = useCallback(async (): Promise<void> => {
-    if (!geometryDashFound) {
+    if (!packIoReady) {
       setStatusTone("error");
       setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
       return;
@@ -936,7 +943,7 @@ export function TexturePackInstallerToolPanel({
         setStatusMessage(t("errors:packInstaller.noLibraryPackSelected"));
         return;
       }
-      if (!geometryDashFound) {
+      if (!packIoReady) {
         setStatusTone("error");
         setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
         return;
@@ -1291,7 +1298,7 @@ export function TexturePackInstallerToolPanel({
 
   // Tauri webview drag-drop (folders/zips with real OS paths).
   useEffect(() => {
-    if (!isTauriRuntime()) {
+    if (!isTauriRuntime() || isMobileShell()) {
       return;
     }
     let disposed = false;
@@ -1512,7 +1519,7 @@ export function TexturePackInstallerToolPanel({
     if (!plan) {
       return;
     }
-    if (!geometryDashFound) {
+    if (!packIoReady) {
       setStatusTone("error");
       setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
       return;
@@ -1604,7 +1611,7 @@ export function TexturePackInstallerToolPanel({
   };
 
   const runCreate = async (): Promise<void> => {
-    if (!geometryDashFound) {
+    if (!packIoReady) {
       setStatusTone("error");
       setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
       return;
@@ -1746,7 +1753,13 @@ export function TexturePackInstallerToolPanel({
 
       <ToolPageHeader toolId="texturePackInstaller" />
 
-      {!geometryDashFound ? (
+      {mobileShell ? (
+        <p className="tm-tool-section-note" role="status">
+          {t("navigation:mobile.packInstallComingSoon")}
+        </p>
+      ) : null}
+
+      {!geometryDashFound && !mobileShell ? (
         <p className="tm-tool-inline-error" role="alert">
           {t("errors:packInstaller.geometryDashRequired")}
         </p>
@@ -1811,7 +1824,7 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browseFolder()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FolderOpen size={15} />
                   {t("packInstaller.browseFolder")}
@@ -1820,7 +1833,7 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browseZip()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FileArchive size={15} />
                   {t("packInstaller.browseZip")}
@@ -1977,7 +1990,7 @@ export function TexturePackInstallerToolPanel({
               type="button"
               className="tm-tool-run-btn"
               onClick={() => void runInstall()}
-              disabled={busy !== null || !plan || !geometryDashFound}
+              disabled={busy !== null || !plan || !packIoReady}
             >
               {busy === "install" || busy === "discover" ? (
                 <LoaderCircle size={16} className="tm-pack-spin" />
@@ -2021,7 +2034,7 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browseCreateSourceFolder()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FolderOpen size={15} />
                   {t("packInstaller.browseCreateSource")}
@@ -2030,7 +2043,7 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browsePackPng()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   {t("packInstaller.browsePackPng")}
                 </button>
@@ -2061,7 +2074,7 @@ export function TexturePackInstallerToolPanel({
               type="button"
               className="tm-tool-run-btn"
               onClick={() => void runCreate()}
-              disabled={busy !== null || !geometryDashFound}
+              disabled={busy !== null || !packIoReady}
             >
               {busy === "create" ? (
                 <LoaderCircle size={16} className="tm-pack-spin" />
@@ -2070,7 +2083,7 @@ export function TexturePackInstallerToolPanel({
               )}
               {busy === "create" ? t("packInstaller.creating") : t("packInstaller.createPack")}
             </button>
-            {createdPackDir ? (
+            {createdPackDir && !mobileShell ? (
               <button
                 type="button"
                 className="tm-pack-secondary-btn"
@@ -2097,7 +2110,9 @@ export function TexturePackInstallerToolPanel({
                 </span>
                 <span>
                   {libraryPacksPath
-                    ? shortenPathForDisplay(libraryPacksPath)
+                    ? mobileShell
+                      ? basenameForDisplay(libraryPacksPath)
+                      : shortenPathForDisplay(libraryPacksPath)
                     : "—"}
                 </span>
               </p>
@@ -2106,20 +2121,22 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void refreshLibrary()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <RefreshCw size={15} />
                   {t("packInstaller.libraryRefresh")}
                 </button>
+                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void openPacksFolder()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FolderOpen size={15} />
                   {t("packInstaller.libraryOpenPacksFolder")}
                 </button>
+                )}
               </div>
             </div>
 
@@ -2181,6 +2198,7 @@ export function TexturePackInstallerToolPanel({
 
             {bridge.libraryPack ? (
               <div className="tm-pack-library-selection-actions">
+                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2190,6 +2208,7 @@ export function TexturePackInstallerToolPanel({
                   <FolderOpen size={15} />
                   {t("packInstaller.libraryActionOpenFolder")}
                 </button>
+                )}
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2352,6 +2371,7 @@ export function TexturePackInstallerToolPanel({
           x={libraryContextMenu.x}
           y={libraryContextMenu.y}
           disabled={busy !== null}
+          hideOpenFolder={mobileShell}
           onAction={handleLibraryContextAction}
           onClose={() => setLibraryContextMenu(null)}
         />

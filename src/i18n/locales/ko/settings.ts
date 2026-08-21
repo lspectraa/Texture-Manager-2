@@ -63,6 +63,8 @@ const settings = {
     noAutoDetect: "자동 감지 결과 없음",
     installLocation: "설치 위치",
     browseHint: "Geometry Dash 폴더를 찾아보거나, Steam으로 설치한 뒤 다시 감지하세요.",
+    androidHint:
+      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
     applyPath: "경로 적용",
     clearOverride: "수동 지정 해제",
     redetect: "다시 감지",
@@ -77,6 +79,7 @@ const settings = {
     unsupported: "업데이트 확인은 설치된 데스크톱 앱에서만 가능합니다.",
     checkFailed: "업데이트를 확인하지 못했습니다. {{error}}",
     installBlocked: "업데이트를 설치하기 전에 현재 작업을 끝내세요.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
     installing: "다운로드 후 설치 중…",
     downloading: "업데이트 다운로드 중… {{percent}}%",
     installAndRestart: "설치 후 다시 시작",

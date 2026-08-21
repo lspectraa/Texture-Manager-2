@@ -57,6 +57,7 @@ export type OnboardingFlowProps = {
   busy?: boolean;
   error?: string | null;
   pickFolder: PickFolderFn;
+  skipGeometryDash?: boolean;
   onThemeChange: (theme: AppTheme) => void;
   onLanguagePreview?: (language: AppLanguage) => void;
   onGeometryDashPathSelected: (path: string) => void;
@@ -69,6 +70,7 @@ export function OnboardingFlow({
   busy = false,
   error = null,
   pickFolder,
+  skipGeometryDash = false,
   onThemeChange,
   onLanguagePreview,
   onGeometryDashPathSelected,
@@ -77,6 +79,9 @@ export function OnboardingFlow({
 }: OnboardingFlowProps) {
   const { t } = useTranslation("onboarding");
   const titleId = useId();
+  const steps = skipGeometryDash
+    ? (["language", "theme"] as OnboardingStepId[])
+    : STEPS;
   const [stepIndex, setStepIndex] = useState(0);
   const [language, setLanguage] = useState<AppLanguage>(() => settings.language);
   const [theme, setTheme] = useState<AppTheme>(() => settings.theme);
@@ -90,9 +95,9 @@ export function OnboardingFlow({
     );
   }, [settings.geometryDashResolved, settings.geometryDashDetected]);
 
-  const stepId = STEPS[stepIndex] ?? "language";
+  const stepId = steps[stepIndex] ?? "language";
   const isFirst = stepIndex === 0;
-  const isLast = stepIndex === STEPS.length - 1;
+  const isLast = stepIndex === steps.length - 1;
   const gdStatus = geometryDashStatus(settings, t);
   const displayPath = useMemo(() => {
     const path =
@@ -134,7 +139,7 @@ export function OnboardingFlow({
       onComplete({ language, theme });
       return;
     }
-    setStepIndex((index) => Math.min(STEPS.length - 1, index + 1));
+    setStepIndex((index) => Math.min(steps.length - 1, index + 1));
   };
 
   const goBack = () => {
@@ -310,7 +315,7 @@ export function OnboardingFlow({
             role="tablist"
             aria-label={t("progressAria")}
           >
-            {STEPS.map((id, index) => {
+            {steps.map((id, index) => {
               const active = index === stepIndex;
               const complete = index < stepIndex;
               return (

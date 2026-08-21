@@ -35,6 +35,11 @@ use crate::core::icon_editor::{
     IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult,
     IconEditorSheetInfo,
 };
+use crate::core::mobile_fs::{
+    allocate_output_dir as allocate_output_dir_core,
+    export_directory_as_zip as export_directory_as_zip_core,
+    import_user_path as import_user_path_core,
+};
 use crate::core::operations::build_operation_plan;
 use crate::core::pack_installer::{
     cleanup_pack_install_temp as cleanup_pack_install_temp_core,
@@ -349,6 +354,25 @@ impl OperationCancel {
 #[tauri::command]
 fn cancel_operation(cancel: tauri::State<'_, OperationCancel>) {
     cancel.request_cancel();
+}
+
+#[tauri::command]
+fn import_user_path(source_path: String) -> Result<String, String> {
+    import_user_path_core(&source_path)
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn allocate_output_dir(tool_id: String) -> Result<String, String> {
+    allocate_output_dir_core(&tool_id)
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn export_directory_as_zip(source_dir: String, zip_path: String) -> Result<(), String> {
+    export_directory_as_zip_core(&source_dir, &zip_path).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -836,20 +860,28 @@ async fn particle_editor_sheet_frame_cmd(
 pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        builder = builder
+            .plugin(tauri_plugin_process::init())
+            .plugin(tauri_plugin_updater::Builder::new().build());
     }
 
     builder
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            {
+                if let Ok(dir) = app.path().app_data_dir() {
+                    crate::core::game_files::set_game_files_root_override(dir.join("game-files"));
+                }
+            }
             let layout = bootstrap_game_files().map_err(|err| err.to_string())?;
             app.manage(GameFilesState::new(layout));
             // Window starts hidden so bootstrap / Steam detection never flash a blank frame.
+            #[cfg(desktop)]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -882,6 +914,9 @@ pub fn run() {
             validate_operation_request,
             run_operation,
             cancel_operation,
+            import_user_path,
+            allocate_output_dir,
+            export_directory_as_zip,
             geode_buttons_target_index_cmd,
             geode_buttons_autoselect_plist_cmd,
             geode_buttons_default_input_dir_cmd,

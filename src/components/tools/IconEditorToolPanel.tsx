@@ -40,6 +40,8 @@ import {
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { getAppI18n } from "../../i18n";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { usePinchZoom } from "../../hooks/usePinchZoom";
+import { isMobileShell } from "../../utils/platform";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
 import {
   extractIconEditorFrames,
@@ -329,6 +331,8 @@ const quantizeOffset = (value: number): number => Math.round(value / OFFSET_STEP
 const snapZoomToTenth = (value: number): number => Math.round(value * 10) / 10;
 const clampZoom = (value: number): number =>
   snapZoomToTenth(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value)));
+const clampZoomContinuous = (value: number): number =>
+  Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 
 /** Scrollport height mapped to 100% auto zoom (typical 1080p-class layout). */
 const ZOOM_AUTO_VIEWPORT_HEIGHT_BASE = 1000;
@@ -1223,6 +1227,10 @@ export function IconEditorToolPanel() {
   const [isMiddlePanning, setIsMiddlePanning] = useState(false);
   const [framesPanelCollapsed, setFramesPanelCollapsed] = useState(false);
   const [plistPanelCollapsed, setPlistPanelCollapsed] = useState(false);
+  const [mobileFramesOpen, setMobileFramesOpen] = useState(false);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [mobileColorsOpen, setMobileColorsOpen] = useState(false);
+  const mobileShell = isMobileShell();
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
@@ -1238,6 +1246,14 @@ export function IconEditorToolPanel() {
     startScrollLeft: number;
     startScrollTop: number;
   } | null>(null);
+
+  usePinchZoom(stageScrollPortRef, {
+    enabled: mobileShell,
+    zoom,
+    setZoom,
+    clamp: clampZoomContinuous,
+    finalize: clampZoom,
+  });
 
   const frameMap = useMemo(() => {
     const map = new Map<string, IconEditorFrameInfo>();
@@ -3192,7 +3208,12 @@ export function IconEditorToolPanel() {
   });
 
   return (
-    <div className="tm-icon-editor">
+    <div
+      className={`tm-icon-editor${mobileShell ? " tm-icon-editor--mobile" : ""}`}
+      data-frames-open={mobileShell && mobileFramesOpen ? "true" : undefined}
+      data-inspector-open={mobileShell && mobileInspectorOpen ? "true" : undefined}
+      data-colors-open={mobileShell && mobileColorsOpen ? "true" : undefined}
+    >
       <header className="tm-icon-editor-top-bar">
         <div className="tm-icon-editor-top-bar-track">
           <div className="tm-icon-editor-top-bar-primary">
@@ -3261,14 +3282,16 @@ export function IconEditorToolPanel() {
               </div>
               <IconEditorToolbarTip label={t("toolbar.downloadTooltip")}>
                 <button
-                  className="tm-icon-editor-toolbar-btn"
+                  className={`tm-icon-editor-toolbar-btn${
+                    mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
+                  }`}
                   type="button"
                   aria-label={t("toolbar.downloadAria")}
                   onClick={() => downloadCurrentIconPng().catch(() => {})}
                   disabled={isBusy}
                 >
                   <Download size={15} aria-hidden />
-                  {t("toolbar.download")}
+                  {mobileShell ? null : t("toolbar.download")}
                 </button>
               </IconEditorToolbarTip>
             </div>
@@ -3316,7 +3339,9 @@ export function IconEditorToolPanel() {
               >
                 <button
                   type="button"
-                  className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
+                  className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}${
+                    mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
+                  }`}
                   aria-label={
                     canWriteSheet && !isBusy
                       ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
@@ -3326,10 +3351,12 @@ export function IconEditorToolPanel() {
                   disabled={!canWriteSheet || isBusy}
                 >
                   <Save size={15} aria-hidden />
-                  {isBusy ? t("saveStatus.saving") : saveStatusLabel}
+                  {mobileShell ? null : isBusy ? t("saveStatus.saving") : saveStatusLabel}
                 </button>
               </IconEditorToolbarTip>
             </div>
+            {mobileShell ? null : (
+              <>
             <div className="tm-icon-editor-toolbar-divider" aria-hidden />
             <div className="tm-icon-editor-toolbar-group">
               <div className="tm-icon-editor-zoom-row">
@@ -3393,6 +3420,8 @@ export function IconEditorToolPanel() {
                 </label>
               </IconEditorToolbarTip>
             </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -3472,6 +3501,73 @@ export function IconEditorToolPanel() {
         <div className="tm-icon-editor-viewport">
           <div className="tm-icon-editor-viewport-main">
             <div className="tm-icon-editor-stage-shell">
+              {mobileShell ? (
+                <div
+                  className="tm-icon-editor-mobile-chrome"
+                  role="tablist"
+                  aria-label={t("viewport.surfacesAria")}
+                >
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`tm-icon-editor-surface-toggle${mobileFramesOpen ? " is-open" : ""}`}
+                    aria-selected={mobileFramesOpen}
+                    aria-expanded={mobileFramesOpen}
+                    onClick={() => {
+                      setMobileFramesOpen((open) => {
+                        const next = !open;
+                        if (next) {
+                          setMobileInspectorOpen(false);
+                          setMobileColorsOpen(false);
+                          setFramesPanelCollapsed(false);
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    {t("viewport.framesTab")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`tm-icon-editor-surface-toggle${mobileInspectorOpen ? " is-open" : ""}`}
+                    aria-selected={mobileInspectorOpen}
+                    aria-expanded={mobileInspectorOpen}
+                    onClick={() => {
+                      setMobileInspectorOpen((open) => {
+                        const next = !open;
+                        if (next) {
+                          setMobileFramesOpen(false);
+                          setMobileColorsOpen(false);
+                          setPlistPanelCollapsed(false);
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    {t("viewport.inspectorTab")}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    className={`tm-icon-editor-surface-toggle${mobileColorsOpen ? " is-open" : ""}`}
+                    aria-selected={mobileColorsOpen}
+                    aria-expanded={mobileColorsOpen}
+                    onClick={() => {
+                      setMobileColorsOpen((open) => {
+                        const next = !open;
+                        if (next) {
+                          setMobileFramesOpen(false);
+                          setMobileInspectorOpen(false);
+                        }
+                        return next;
+                      });
+                    }}
+                  >
+                    {t("viewport.colorsTab")}
+                  </button>
+                </div>
+              ) : null}
               <div
                 ref={stageScrollPortRef}
                 className={`tm-icon-editor-stage-scrollport${isMiddlePanning ? " tm-icon-editor-stage-scrollport--panning" : ""}`}
@@ -3481,7 +3577,11 @@ export function IconEditorToolPanel() {
                 onPointerMove={onScrollPortPointerMove}
                 onPointerUp={endScrollPortPan}
                 onPointerCancel={endScrollPortPan}
-                title={t("viewport.panAndZoomHelp")}
+                title={t(
+                  mobileShell
+                    ? "viewport.mobilePanAndZoomHelp"
+                    : "viewport.panAndZoomHelp",
+                )}
               >
                 <div
                   className="tm-icon-editor-stage-zoom-track"
@@ -4190,19 +4290,24 @@ export function IconEditorToolPanel() {
             <aside
               className={`tm-icon-editor-roles-overlay${
                 framesPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
-              }`}
+              }${mobileShell ? " tm-icon-editor-drawer" : ""}`}
               aria-label={t("frames.panelAria")}
+              aria-hidden={mobileShell && !mobileFramesOpen ? true : undefined}
             >
               <div className="tm-icon-editor-side-panel-head">
                 <div className="tm-icon-editor-side-panel-head-copy">
+                  {mobileShell ? <span className="tm-icon-editor-drawer-handle" aria-hidden /> : null}
                   <h3>
                     <Layers3 size={14} strokeWidth={2} aria-hidden />
                     {t("frames.title")}
                   </h3>
-                  <p className="tm-icon-editor-side-panel-subtitle">
-                    {t("frames.subtitle")}
-                  </p>
+                  {mobileShell ? null : (
+                    <p className="tm-icon-editor-side-panel-subtitle">
+                      {t("frames.subtitle")}
+                    </p>
+                  )}
                 </div>
+                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-icon-editor-side-panel-toggle"
@@ -4223,6 +4328,7 @@ export function IconEditorToolPanel() {
                     <ChevronLeft size={15} />
                   </span>
                 </button>
+                )}
               </div>
               <div className="tm-icon-editor-side-panel-body" aria-hidden={framesPanelCollapsed}>
                 <div className="tm-icon-editor-side-panel-body-inner">
@@ -4278,19 +4384,24 @@ export function IconEditorToolPanel() {
             <aside
               className={`tm-icon-editor-plist-overlay${
                 plistPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
-              }`}
+              }${mobileShell ? " tm-icon-editor-drawer" : ""}`}
               aria-label={t("plist.panelAria")}
+              aria-hidden={mobileShell && !mobileInspectorOpen ? true : undefined}
             >
               <div className="tm-icon-editor-side-panel-head">
                 <div className="tm-icon-editor-side-panel-head-copy">
+                  {mobileShell ? <span className="tm-icon-editor-drawer-handle" aria-hidden /> : null}
                   <h3>
                     <FileCode2 size={14} strokeWidth={2} aria-hidden />
                     {t("plist.title")}
                   </h3>
-                  <p className="tm-icon-editor-side-panel-subtitle">
-                    {t("plist.subtitle")}
-                  </p>
+                  {mobileShell ? null : (
+                    <p className="tm-icon-editor-side-panel-subtitle">
+                      {t("plist.subtitle")}
+                    </p>
+                  )}
                 </div>
+                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-icon-editor-side-panel-toggle"
@@ -4311,6 +4422,7 @@ export function IconEditorToolPanel() {
                     <ChevronRight size={15} />
                   </span>
                 </button>
+                )}
               </div>
               <div className="tm-icon-editor-side-panel-body" aria-hidden={plistPanelCollapsed}>
                 <div className="tm-icon-editor-side-panel-body-inner">
@@ -4566,10 +4678,73 @@ export function IconEditorToolPanel() {
                 </div>
               </div>
             </aside>
+            {mobileShell ? (
+              <aside
+                className="tm-icon-editor-colors-overlay tm-icon-editor-drawer"
+                aria-label={t("viewport.colorsPanelAria")}
+                aria-hidden={!mobileColorsOpen ? true : undefined}
+              >
+                <header className="tm-icon-editor-side-panel-head">
+                  <div className="tm-icon-editor-side-panel-head-copy">
+                    <span className="tm-icon-editor-drawer-handle" aria-hidden />
+                    <h3>
+                      <Palette size={14} strokeWidth={2} aria-hidden />
+                      {t("viewport.colorsTab")}
+                    </h3>
+                  </div>
+                </header>
+                <div className="tm-icon-editor-colors-scroll">
+                  <div
+                    className="tm-icon-editor-tint-targets"
+                    role="group"
+                    aria-label={t("viewport.colorsTargetsAria")}
+                  >
+                    {TINT_TARGETS.map((target) => (
+                      <button
+                        key={target}
+                        type="button"
+                        className={`menu-btn ${activeTintTarget === target ? "active" : ""}`}
+                        onClick={() => {
+                          setActiveTintTarget(target);
+                          setInspectorRole(target);
+                        }}
+                      >
+                        {t(`roles.${target}`)}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className="tm-icon-editor-palette"
+                    role="group"
+                    aria-label={t("viewport.colorsPaletteAria")}
+                  >
+                    {ICON_EDITOR_PALETTE.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`tm-icon-editor-swatch ${
+                          tintByTarget[activeTintTarget] === color ? "active" : ""
+                        }`}
+                        title={color}
+                        aria-label={color}
+                        style={{ background: color }}
+                        onClick={() =>
+                          setTintByTarget((previous) => ({
+                            ...previous,
+                            [activeTintTarget]: color,
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              </aside>
+            ) : null}
             </div>
           </div>
         </div>
       </div>
+      {mobileShell ? null : (
       <div className="tm-icon-editor-bottom-bar">
         <div className="tm-icon-editor-tint-column">
           <div className="tm-icon-editor-tint-row">
@@ -4608,6 +4783,7 @@ export function IconEditorToolPanel() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

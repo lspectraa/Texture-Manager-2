@@ -1,7 +1,15 @@
-import { ArrowRight, Clock3, Sparkles } from "lucide-react";
+import { ArrowRight, Clock3 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AppToolId, TOOL_COUNT, TOOL_NAV_SECTIONS, UPCOMING_TOOL_COUNT } from "../config/toolNavigation";
+import {
+  AppToolId,
+  MOBILE_TOOL_COUNT,
+  TOOL_COUNT,
+  TOOL_NAV_SECTIONS,
+  UPCOMING_TOOL_COUNT,
+  isToolListedOnMobile,
+  isUpcomingTool,
+} from "../config/toolNavigation";
 import {
   collectHomeSplashTitles,
   HOME_SPLASH_FADE_MS,
@@ -9,6 +17,7 @@ import {
   homeSplashGroupsForDate,
   type HomeSplashGroup,
 } from "../utils/homeSplash";
+import { isMobileShell } from "../utils/platform";
 import { GlassFrost } from "./GlassFrost";
 import { TranslationQualityNotice } from "./TranslationQualityNotice";
 
@@ -26,6 +35,8 @@ function readSplashGroup(t: (key: string, options: { returnObjects: true }) => u
 
 export function HomeScreen({ onSelectTool }: HomeScreenProps) {
   const { t, i18n } = useTranslation("navigation");
+  const mobileShell = isMobileShell();
+  const visibleToolCount = mobileShell ? MOBILE_TOOL_COUNT : TOOL_COUNT;
   const titles = useMemo(() => {
     const collected = collectHomeSplashTitles(homeSplashGroupsForDate(new Date()), (group) =>
       readSplashGroup(t, group),
@@ -64,25 +75,21 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
   }, [titles]);
 
   return (
-    <div className="tm-home">
+    <div className={`tm-home${mobileShell ? " tm-home--mobile" : ""}`}>
       <TranslationQualityNotice variant="banner" />
       <header className="tm-home-hero">
-        <GlassFrost className="tm-home-hero-frost" />
+        {mobileShell ? null : <GlassFrost className="tm-home-hero-frost" />}
         <div className="tm-home-hero-copy">
-          <p className="tm-home-eyebrow">
-            <Sparkles size={14} aria-hidden />
-            {t("homeScreen.eyebrow")}
-          </p>
           <h2 className={`tm-home-title${fading ? " is-fading" : ""}`}>{titles[index] ?? t("homeScreen.title")}</h2>
           <p className="tm-home-lead">{t("homeScreen.lead")}</p>
         </div>
         <div
           className="tm-home-hero-stats"
-          aria-label={t("homeScreen.toolsAvailableAria", { count: TOOL_COUNT })}
+          aria-label={t("homeScreen.toolsAvailableAria", { count: visibleToolCount })}
         >
-          <span className="tm-home-stat-value">{TOOL_COUNT}</span>
+          <span className="tm-home-stat-value">{visibleToolCount}</span>
           <span className="tm-home-stat-label">{t("homeScreen.toolsReady")}</span>
-          {UPCOMING_TOOL_COUNT > 0 ? (
+          {!mobileShell && UPCOMING_TOOL_COUNT > 0 ? (
             <span className="tm-home-stat-upcoming">
               {t("homeScreen.comingSoonCount", { count: UPCOMING_TOOL_COUNT })}
             </span>
@@ -93,6 +100,12 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
       <div className="tm-home-sections">
         {TOOL_NAV_SECTIONS.map((section) => {
           const SectionIcon = section.icon;
+          const sectionTools = mobileShell
+            ? section.tools.filter((tool) => isToolListedOnMobile(tool.id))
+            : section.tools;
+          if (sectionTools.length === 0) {
+            return null;
+          }
           return (
             <section
               key={section.id}
@@ -113,15 +126,15 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
 
               <div
                 className={`tm-home-card-grid ${
-                  section.tools.some((tool) => tool.featured)
+                  sectionTools.some((tool) => tool.featured)
                     ? "tm-home-card-grid-featured"
                     : ""
                 }`}
                 role="list"
               >
-                {section.tools.map((tool) => {
+                {sectionTools.map((tool) => {
                   const ToolIcon = tool.icon;
-                  const isUpcoming = tool.upcoming === true;
+                  const isUpcoming = isUpcomingTool(tool.id);
                   return (
                     <button
                       key={tool.id}
@@ -145,7 +158,10 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
                         </span>
                       ) : null}
                       <span className="tm-home-card-icon" aria-hidden>
-                        <ToolIcon size={tool.featured ? 30 : 22} strokeWidth={1.75} />
+                        <ToolIcon
+                          size={mobileShell ? 20 : tool.featured ? 30 : 22}
+                          strokeWidth={1.75}
+                        />
                       </span>
                       <span className="tm-home-card-body">
                         <span className="tm-home-card-label">{t(tool.label)}</span>

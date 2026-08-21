@@ -14,6 +14,7 @@ pub mod image_alpha;
 pub mod image_finish;
 pub mod image_io;
 pub mod merger;
+pub mod mobile_fs;
 pub mod operations;
 pub mod pack_installer;
 pub mod particle_editor;

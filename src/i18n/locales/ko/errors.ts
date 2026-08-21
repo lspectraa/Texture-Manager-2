@@ -6,6 +6,8 @@ const errors = {
   runtime: {
     folderPickerUnavailable: "폴더 선택기는 Tauri 런타임에서 사용할 수 있습니다.",
     filePickerUnavailable: "파일 선택기는 Tauri 런타임에서만 사용할 수 있습니다.",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired: "분할기에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",

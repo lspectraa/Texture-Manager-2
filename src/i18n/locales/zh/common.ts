@@ -15,6 +15,7 @@ const common = {
   optional: "可选",
   selectFile: "选择文件",
   selectFolder: "选择文件夹",
+  noFolderSelected: "No folder selected",
   light: "浅色",
   dark: "深色",
   back: "上一步",

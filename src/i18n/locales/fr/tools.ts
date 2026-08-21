@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "Dossier de sortie",
     outputMirroringNote:
       "La sortie reste distincte, sauf si vous choisissez une entrée alors que le chemin de sortie est vide.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Lancer l’opération",
     running: "En cours…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Les nouveaux sprites copiés du jeu ne sont pas affinés. Vérifiez les icônes à clé de couleur à la fin.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Épaisseur de la ligne de glow",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Seuil alpha du glow",
@@ -141,6 +145,9 @@ const tools = {
       bgChecker: "Damier",
       bgGd: "GD",
       dragHint: "Faites glisser le canvas pour déplacer l’émetteur",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "Contexte {{mode}} · Redémarrez pour relancer",
       chipGravity: "Gravité",
       chipRadius: "Rayon",

@@ -1,0 +1,14 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="app (x86_64 emulator)" type="AndroidRunConfigurationType" factoryName="Android App">
+    <module name="texture_manager_2.app.main" />
+    <option name="DEPLOY" value="true" />
+    <option name="DEPLOY_APK_FROM_BUNDLE" value="false" />
+    <option name="MODE" value="default_activity" />
+    <option name="SHOW_LOGCAT_AUTOMATICALLY" value="true" />
+    <option name="TARGET_SELECTION_MODE" value="DEVICE_AND_SNAPSHOT_COMBO_BOX" />
+    <option name="DEBUGGER_TYPE" value="Auto" />
+    <method v="2">
+      <option name="Android.Gradle.BeforeRunTask" enabled="true" />
+    </method>
+  </configuration>
+</component>

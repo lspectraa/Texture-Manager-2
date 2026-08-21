@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "externalBin": [],
+    "resources": [],
+    "targets": []
+  }
+}

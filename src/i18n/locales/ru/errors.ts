@@ -11,6 +11,8 @@ const errors: AppLocaleResources["errors"] = {
       "Выбор папки доступен в среде выполнения Tauri.",
     filePickerUnavailable:
       "Выбор файла доступен только в среде выполнения Tauri.",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired:

@@ -60,6 +60,15 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "Role para mover. Ctrl+roda para zoom. Arraste com o botão do meio para mover.",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Mapeamento de frames por função",

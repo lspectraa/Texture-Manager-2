@@ -1,0 +1,4 @@
+rootProject.name = "texture_manager_2"
+include ':app'
+
+apply from: 'tauri.settings.gradle'

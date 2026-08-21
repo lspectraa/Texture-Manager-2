@@ -65,6 +65,8 @@ const settings: AppLocaleResources["settings"] = {
     installLocation: "Ubicación de instalación",
     browseHint:
       "Busca la carpeta de Geometry Dash o instálalo mediante Steam y vuelve a detectarlo.",
+    androidHint:
+      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
     applyPath: "Aplicar ruta",
     clearOverride: "Borrar configuración manual",
     redetect: "Volver a detectar",
@@ -81,6 +83,7 @@ const settings: AppLocaleResources["settings"] = {
     checkFailed: "No se pudieron buscar actualizaciones. {{error}}",
     installBlocked:
       "Termina la operación actual antes de instalar una actualización.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
     installing: "Descargando e instalando…",
     downloading: "Descargando actualización… {{percent}}%",
     installAndRestart: "Instalar y reiniciar",

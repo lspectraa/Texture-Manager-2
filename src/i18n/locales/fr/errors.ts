@@ -7,6 +7,8 @@ const errors = {
     folderPickerUnavailable: "Le sélecteur de dossier est disponible dans le runtime Tauri.",
     filePickerUnavailable:
       "Le sélecteur de fichier est disponible uniquement dans le runtime Tauri.",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired: "Le Découpeur nécessite un dossier d’entrée et un dossier de sortie.",

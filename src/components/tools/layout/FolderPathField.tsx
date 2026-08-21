@@ -1,5 +1,7 @@
 import { FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { basenameForDisplay } from "../../../utils/pathDisplay";
+import { isMobileShell } from "../../../utils/platform";
 import { PickFolderFn } from "../types";
 import { ToolField } from "./ToolField";
 
@@ -10,6 +12,7 @@ type FolderPathFieldProps = {
   pickFolder: PickFolderFn;
   placeholder?: string;
   onBrowse?: (path: string) => void;
+  compact?: boolean;
 };
 
 export function FolderPathField({
@@ -19,17 +22,30 @@ export function FolderPathField({
   pickFolder,
   placeholder = "C:/path/to/folder",
   onBrowse,
+  compact,
 }: FolderPathFieldProps) {
   const { t } = useTranslation("common");
+  const nameOnly = compact ?? isMobileShell();
+  const displayValue = nameOnly
+    ? value.trim()
+      ? basenameForDisplay(value)
+      : t("noFolderSelected")
+    : value;
 
   return (
     <ToolField label={label}>
-      <div className="tm-tool-path-input">
-        <input
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          placeholder={placeholder}
-        />
+      <div className={`tm-tool-path-input${nameOnly ? " tm-tool-path-input--compact" : ""}`}>
+        {nameOnly ? (
+          <p className="tm-tool-path-name" title={value || undefined}>
+            {displayValue}
+          </p>
+        ) : (
+          <input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            placeholder={placeholder}
+          />
+        )}
         <button
           type="button"
           className="tm-tool-path-browse"

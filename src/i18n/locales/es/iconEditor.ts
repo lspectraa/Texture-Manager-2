@@ -65,6 +65,15 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   viewport: {
     panAndZoomHelp:
       "Desplázate para mover la vista. Usa Ctrl+rueda para acercar o alejar. Arrastra con el botón central para mover la vista.",
+    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    surfacesAria: "Icon editor views",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    colorsTab: "Colors",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Asignación de roles de fotogramas",

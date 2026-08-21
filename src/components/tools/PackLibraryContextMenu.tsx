@@ -21,6 +21,7 @@ type PackLibraryContextMenuProps = {
   x: number;
   y: number;
   disabled?: boolean;
+  hideOpenFolder?: boolean;
   onAction: (action: PackLibraryContextAction) => void;
   onClose: () => void;
 };
@@ -64,6 +65,7 @@ export function PackLibraryContextMenu({
   x,
   y,
   disabled = false,
+  hideOpenFolder = false,
   onAction,
   onClose,
 }: PackLibraryContextMenuProps) {
@@ -117,7 +119,7 @@ export function PackLibraryContextMenu({
       style={{ left: x, top: y }}
       data-pack-id={pack.id}
     >
-      {MENU_ITEMS.map((item) => {
+      {MENU_ITEMS.filter((item) => !(hideOpenFolder && item.action === "openFolder")).map((item) => {
         const Icon = item.icon;
         return (
           <button

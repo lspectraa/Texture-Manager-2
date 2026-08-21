@@ -15,6 +15,7 @@ const common = {
   optional: "Opcional",
   selectFile: "Selecionar arquivo",
   selectFolder: "Selecionar pasta",
+  noFolderSelected: "No folder selected",
   light: "Claro",
   dark: "Escuro",
   back: "Voltar",

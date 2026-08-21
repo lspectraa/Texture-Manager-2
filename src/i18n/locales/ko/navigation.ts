@@ -100,6 +100,25 @@ const navigation = {
       description: "텍스처 팩을 Geometry Dash에 추가합니다.",
     },
   },
+  mobile: {
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    desktopOnlyBadge: "Desktop",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    previewTab: "Preview",
+    framesTab: "Frames",
+    inspectorTab: "Inspector",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
+    packInstallDesktopOnly:
+      "Installing into a live Geometry Dash / Geode folder is desktop-only. Create and export packs here, then install them on PC.",
+    packInstallComingSoon:
+      "Pack install UI is available here. Connecting it to device folders comes later — create and export still work now.",
+  },
 } as const;
 
 export default navigation;

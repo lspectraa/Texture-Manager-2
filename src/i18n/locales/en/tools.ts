@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "Output folder",
     outputMirroringNote:
       "If output is empty, choosing an input folder uses that same folder for output.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Run Operation",
     running: "Running…",
     range1To64: "1–64",
@@ -38,6 +40,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "New sprites are copied from the game after your pack sprites are upscaled, then everything is saved once. They are not sharpened. Check color-keyed icons when it finishes.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Glow line thickness",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Glow alpha threshold",
@@ -137,6 +141,9 @@ const tools = {
       bgChecker: "Check",
       bgGd: "GD",
       dragHint: "Drag the canvas to move the emitter",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "{{mode}} context · Restart to re-fire",
       chipGravity: "Gravity",
       chipRadius: "Radius",
