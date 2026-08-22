@@ -45,6 +45,8 @@ const iconEditor = {
     hideGlowTooltip: "Hide glow layers in the icon preview",
     hideBorder: "Hide border",
     hideBorderTooltip: "Hide selection borders on icon layers",
+    moreTooltip: "More actions",
+    moreAria: "More icon editor actions",
   },
   saveStatus: {
     save: "Save",
@@ -60,6 +62,8 @@ const iconEditor = {
     panAndZoomHelp:
       "Scroll to pan. Ctrl+wheel to zoom. Middle-click drag to pan.",
     mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
+    zoomHudAria: "Canvas zoom",
+    offsetDpadAria: "Nudge sprite offset",
     surfacesAria: "Icon editor views",
     previewTab: "Preview",
     framesTab: "Frames",

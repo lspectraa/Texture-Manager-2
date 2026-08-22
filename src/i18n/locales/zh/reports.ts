@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "运行输出",
+  viewRunOutput: "查看运行输出",
   expandPanelAria: "展开运行输出面板",
   collapsePanelAria: "收起运行输出面板",
   showPanel: "显示运行输出",

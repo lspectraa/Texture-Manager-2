@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "실행 결과",
+  viewRunOutput: "실행 결과 보기",
   expandPanelAria: "실행 결과 패널 펼치기",
   collapsePanelAria: "실행 결과 패널 접기",
   showPanel: "실행 결과 표시",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FolderKey } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -30,6 +30,7 @@ export function AndroidGeodeAccessBanner({
   const [allFilesAccess, setAllFilesAccess] = useState<boolean | null>(null);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const lastStatusRef = useRef<string | null>(null);
 
   const refreshAccess = useCallback(async (): Promise<boolean> => {
     try {
@@ -48,14 +49,10 @@ export function AndroidGeodeAccessBanner({
     try {
       const granted = await refreshAccess();
       if (!granted) {
-        setLocalError(t("errors:packInstaller.allFilesAccessRequired"));
         return;
       }
       const settings = await redetectGeometryDashDir();
       onSettingsUpdated?.(settings);
-      if (!settings.geometryDashFound) {
-        setLocalError(t("errors:packInstaller.geodeRequiredMobile"));
-      }
     } catch (err: unknown) {
       setLocalError(
         err instanceof Error
@@ -96,13 +93,21 @@ export function AndroidGeodeAccessBanner({
   }
 
   const permissionBlocked = allFilesAccess === false;
-  const statusMessage = localError
+  const resolvedStatus = localError
     ? localError
     : permissionBlocked
       ? t("errors:packInstaller.allFilesAccessRequired")
-      : allFilesAccess === null
-        ? t("errors:packInstaller.geodeCheckingAccess")
-        : t("errors:packInstaller.geodeRequiredMobile");
+      : allFilesAccess === true
+        ? t("errors:packInstaller.geodeRequiredMobile")
+        : null;
+  // Hold the last actionable error across brief re-checks instead of flashing "Checking…".
+  if (resolvedStatus) {
+    lastStatusRef.current = resolvedStatus;
+  }
+  const statusMessage =
+    resolvedStatus ??
+    lastStatusRef.current ??
+    t("errors:packInstaller.geodeCheckingAccess");
 
   return (
     <div className={`tm-android-geode-access ${className}`.trim()} role="alert">
@@ -132,7 +137,7 @@ export function AndroidGeodeAccessBanner({
             }}
           >
             <FolderKey size={16} strokeWidth={2.2} />
-            {t("settings:geometryDash.grantAllFilesAccess")}
+            {t("errors:packInstaller.grantAllFilesAccess")}
           </button>
         </div>
       ) : null}

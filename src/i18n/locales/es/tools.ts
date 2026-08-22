@@ -341,10 +341,9 @@ const tools: AppLocaleResources["tools"] = {
       resetHint: "Doble clic para restablecer",
     },
     errors: {
-      desktopOnlyOpen: "Abrir archivos solo está disponible en la aplicación de escritorio.",
-      desktopOnlySave: "Guardar archivos solo está disponible en la aplicación de escritorio.",
-      desktopOnlyTexture:
-        "Reemplazar la textura solo está disponible en la aplicación de escritorio.",
+      desktopOnlyOpen: "Abrir archivos requiere la aplicación instalada de Texture Manager.",
+      desktopOnlySave: "Guardar archivos requiere la aplicación instalada de Texture Manager.",
+      desktopOnlyTexture: "Reemplazar la textura requiere la aplicación instalada de Texture Manager.",
       resourcesMissing:
         "No se encontró la carpeta Resources de Geometry Dash. Configura la ruta de instalación en Ajustes.",
       stockEffectFailed:
@@ -456,6 +455,7 @@ const tools: AppLocaleResources["tools"] = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "Más acciones del pack",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -464,6 +464,8 @@ const tools: AppLocaleResources["tools"] = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "Suelta una carpeta o .zip aquí",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "Explora una carpeta o zip para descubrir packs.",
+    mobileDropCreateHint: "Explora una carpeta de pack o pack.png como origen.",
     browseFolder: "Examinar carpeta",
     browseZip: "Examinar zip",
     sourceFolder: "Folder",

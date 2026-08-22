@@ -46,6 +46,8 @@ const iconEditor = {
     hideGlowTooltip: "Glow-Ebenen in der Icon-Vorschau ausblenden",
     hideBorder: "Rahmen ausblenden",
     hideBorderTooltip: "Auswahlrahmen auf den Icon-Ebenen ausblenden",
+    moreTooltip: "Weitere Aktionen",
+    moreAria: "Weitere Icon-Editor-Aktionen",
   },
   saveStatus: {
     save: "Speichern",
@@ -60,12 +62,14 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "Scrollen zum Verschieben. Strg+Mausrad zum Zoomen. Mittlere Maustaste zum Ziehen.",
-    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
-    surfacesAria: "Icon editor views",
-    previewTab: "Preview",
+    mobilePanAndZoomHelp: "Ziehen zum Verschieben. Zwei Finger zum Zoomen.",
+    zoomHudAria: "Leinwand-Zoom",
+    offsetDpadAria: "Sprite-Offset verschieben",
+    surfacesAria: "Icon-Editor-Ansichten",
+    previewTab: "Vorschau",
     framesTab: "Frames",
-    inspectorTab: "Inspector",
-    colorsTab: "Colors",
+    inspectorTab: "Inspektor",
+    colorsTab: "Farben",
     colorsPanelAria: "Icon color tint options",
     colorsTargetsAria: "Tint layer",
     colorsPaletteAria: "Color palette",

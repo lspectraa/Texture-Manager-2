@@ -18,6 +18,7 @@ const common: AppLocaleResources["common"] = {
   selectFile: "Seleccionar archivo",
   selectFolder: "Seleccionar carpeta",
   noFolderSelected: "No folder selected",
+  appStorage: "App storage",
   light: "Claro",
   dark: "Oscuro",
   back: "Atrás",

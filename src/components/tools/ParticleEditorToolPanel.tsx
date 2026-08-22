@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FilePlus,
   FolderOpen,
@@ -61,6 +61,7 @@ import {
 } from "../../services/particleEditorHistory";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
 import { AppTooltip } from "../AppTooltip";
+import { MobileSheet } from "../mobile/MobileSheet";
 import {
   ParticlePreviewCanvas,
   ICON_PATH_SPEEDS,
@@ -1121,7 +1122,6 @@ export function ParticleEditorToolPanel() {
   return (
     <div
       className={`tm-particle-editor${mobileShell ? " tm-particle-editor--mobile" : ""}`}
-      data-inspector-open={mobileShell && mobileInspectorOpen ? "true" : undefined}
     >
       <header className="tm-pe-toolbar">
         <div className="tm-pe-toolbar-actions">
@@ -1512,27 +1512,13 @@ export function ParticleEditorToolPanel() {
           </div>
         </section>
 
-        <aside
-          className={`tm-pe-inspector${mobileShell ? " tm-pe-inspector--drawer" : ""}`}
-          aria-label={t("particleEditor.stage.inspectorTab")}
-          aria-hidden={mobileShell && !mobileInspectorOpen ? true : undefined}
+        <ParticleInspectorShell
+          mobileShell={mobileShell}
+          mobileOpen={mobileInspectorOpen}
+          onMobileClose={() => setMobileInspectorOpen(false)}
+          title={t("particleEditor.stage.inspectorTab")}
+          ariaLabel={t("particleEditor.stage.inspectorTab")}
         >
-          {mobileShell ? (
-            <header className="tm-pe-inspector-drawer-head">
-              <span className="tm-pe-inspector-drawer-handle" aria-hidden />
-              <h3 className="tm-pe-inspector-drawer-title">
-                {t("particleEditor.stage.inspectorTab")}
-              </h3>
-              <button
-                type="button"
-                className="tm-pe-inspector-drawer-close"
-                aria-label={t("particleEditor.errors.dismiss")}
-                onClick={() => setMobileInspectorOpen(false)}
-              >
-                <X size={16} aria-hidden />
-              </button>
-            </header>
-          ) : null}
           <nav className="tm-pe-tabs" role="tablist">
             {inspectorTabs.map((item) => (
               <button
@@ -2283,8 +2269,45 @@ export function ParticleEditorToolPanel() {
               </div>
             ) : null}
           </div>
-        </aside>
+        </ParticleInspectorShell>
       </div>
     </div>
+  );
+}
+
+type ParticleInspectorShellProps = {
+  mobileShell: boolean;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+  title: string;
+  ariaLabel: string;
+  children: ReactNode;
+};
+
+function ParticleInspectorShell({
+  mobileShell,
+  mobileOpen,
+  onMobileClose,
+  title,
+  ariaLabel,
+  children,
+}: ParticleInspectorShellProps) {
+  if (mobileShell) {
+    return (
+      <MobileSheet
+        open={mobileOpen}
+        onClose={onMobileClose}
+        title={title}
+        className="tm-pe-inspector-sheet"
+      >
+        {children}
+      </MobileSheet>
+    );
+  }
+
+  return (
+    <aside className="tm-pe-inspector" aria-label={ariaLabel}>
+      {children}
+    </aside>
   );
 }

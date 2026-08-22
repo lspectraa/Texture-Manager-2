@@ -2,6 +2,7 @@ import type { AppLocaleResources } from "../../types";
 
 const reports: AppLocaleResources["reports"] = {
   panelTitle: "Результат выполнения",
+  viewRunOutput: "Посмотреть результат выполнения",
   expandPanelAria: "Развернуть панель результатов выполнения",
   collapsePanelAria: "Свернуть панель результатов выполнения",
   showPanel: "Показать результаты выполнения",

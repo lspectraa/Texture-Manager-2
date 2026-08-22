@@ -16,6 +16,7 @@ type FolderPathFieldProps = {
   placeholder?: string;
   onBrowse?: (path: string) => void;
   compact?: boolean;
+  sandboxImported?: boolean;
 };
 
 export function FolderPathField({
@@ -26,21 +27,32 @@ export function FolderPathField({
   placeholder = "C:/path/to/folder",
   onBrowse,
   compact,
+  sandboxImported = false,
 }: FolderPathFieldProps) {
   const { t } = useTranslation("common");
-  const nameOnly = compact ?? isMobileShell();
+  const mobile = isMobileShell();
+  const nameOnly = compact ?? mobile;
   const displayValue = nameOnly
     ? value.trim()
       ? shortenPathForDisplay(value) || basenameForDisplay(value)
       : t("noFolderSelected")
     : value;
+  const showSandboxChip = mobile && sandboxImported && value.trim().length > 0;
 
   return (
     <ToolField label={label}>
       <div className={`tm-tool-path-input${nameOnly ? " tm-tool-path-input--compact" : ""}`}>
         {nameOnly ? (
           <p className="tm-tool-path-name" title={value || undefined}>
-            {displayValue}
+            {showSandboxChip ? (
+              <span
+                className="tm-tool-path-sandbox-chip"
+                title={t("appStorage")}
+              >
+                {t("appStorage")}
+              </span>
+            ) : null}
+            <span className="tm-tool-path-name-text">{displayValue}</span>
           </p>
         ) : (
           <input

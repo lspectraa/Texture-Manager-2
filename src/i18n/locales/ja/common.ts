@@ -16,6 +16,7 @@ const common = {
   selectFile: "ファイルを選択",
   selectFolder: "フォルダーを選択",
   noFolderSelected: "No folder selected",
+  appStorage: "App storage",
   light: "ライト",
   dark: "ダーク",
   back: "戻る",

@@ -49,6 +49,7 @@ const errors = {
       "Looking on internal storage at {{path}}. All-files access is under Android Settings → Special app access (not the normal App permissions list).",
     allFilesAccessRequired:
       "Android blocked access to Geode files. Tap Grant all-files access, allow Texture Manager 2, then Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     allFilesAccessRequestFailed: "Could not open the Android all-files access settings page.",
     runtimeUnavailable: "Pack Installer is available only in the desktop app.",
     discoverFailed: "Failed to discover install units from the selected source.",

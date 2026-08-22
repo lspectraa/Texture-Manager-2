@@ -631,7 +631,7 @@ export function SettingsToolPanel({
                   }}
                 >
                   <FolderOpen size={14} strokeWidth={1.9} />
-                  {t("geometryDash.grantAllFilesAccess")}
+                  {t("errors:packInstaller.grantAllFilesAccess")}
                 </button>
               ) : null}
               <button

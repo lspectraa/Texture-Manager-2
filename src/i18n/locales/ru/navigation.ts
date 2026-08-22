@@ -103,25 +103,16 @@ const navigation: AppLocaleResources["navigation"] = {
     },
   },
   mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
     expandAllToolsAria: "Show all tools",
     closeGridAria: "Close tools",
     allToolsTitle: "All tools",
-    desktopOnlyBadge: "Desktop",
     backAria: "Back",
     closeDrawerAria: "Close side panel",
     showDrawerAria: "Show {{panel}}",
     hideDrawerAria: "Hide {{panel}}",
-    previewTab: "Preview",
-    framesTab: "Frames",
-    inspectorTab: "Inspector",
     editorSurfacesAria: "Editor views",
     geodeBackToFamilies: "Back to families",
-    packInstallDesktopOnly:
-      "Installing into a live Geometry Dash / Geode folder is desktop-only. Create and export packs here, then install them on PC.",
-    packInstallComingSoon:
-      "Pack install UI is available here. Connecting it to device folders comes later — create and export still work now.",
-    packInstallGeodePath:
-      "Installs into Geode on this device (Android/media/com.geode.launcher/game/geode). Convert to latest version needs game Resources and stays desktop-only.",
   },
 } as const;
 

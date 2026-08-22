@@ -46,6 +46,8 @@ const iconEditor = {
     hideGlowTooltip: "Ocultar as camadas de brilho na prévia do ícone",
     hideBorder: "Ocultar borda",
     hideBorderTooltip: "Ocultar as bordas de seleção nas camadas do ícone",
+    moreTooltip: "Mais ações",
+    moreAria: "Mais ações do editor de ícones",
   },
   saveStatus: {
     save: "Salvar",
@@ -60,12 +62,14 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "Role para mover. Ctrl+roda para zoom. Arraste com o botão do meio para mover.",
-    mobilePanAndZoomHelp: "Drag to pan. Pinch to zoom.",
-    surfacesAria: "Icon editor views",
-    previewTab: "Preview",
+    mobilePanAndZoomHelp: "Arraste para mover. Pinça para zoom.",
+    zoomHudAria: "Zoom da tela",
+    offsetDpadAria: "Ajustar deslocamento do sprite",
+    surfacesAria: "Vistas do editor de ícones",
+    previewTab: "Pré-visualização",
     framesTab: "Frames",
     inspectorTab: "Inspector",
-    colorsTab: "Colors",
+    colorsTab: "Cores",
     colorsPanelAria: "Icon color tint options",
     colorsTargetsAria: "Tint layer",
     colorsPaletteAria: "Color palette",

@@ -16,6 +16,8 @@ import {
   FolderPlus,
   Library,
   LoaderCircle,
+  MoreHorizontal,
+  Package,
   PackageOpen,
   RefreshCw,
   Scissors,
@@ -95,6 +97,7 @@ type TexturePackInstallerToolPanelProps = {
   onBridgeChange: (next: PackInstallerBridge) => void;
   onSidebarActionsChange?: (actions: PackInstallerSidebarActions) => void;
   onAppSettingsUpdated?: (settings: AppSettingsView) => void;
+  onOpenMobileSideRail?: () => void;
 };
 
 type BusyKind = "discover" | "install" | "create" | "library" | "librarySave" | null;
@@ -302,6 +305,7 @@ export function TexturePackInstallerToolPanel({
   onBridgeChange,
   onSidebarActionsChange,
   onAppSettingsUpdated,
+  onOpenMobileSideRail,
 }: TexturePackInstallerToolPanelProps) {
   const { t } = useTranslation(["tools", "errors", "common"]);
   const mobileShell = isMobileShell();
@@ -352,6 +356,7 @@ export function TexturePackInstallerToolPanel({
   bridgeRef.current = bridge;
   const overlayTimerRef = useRef<number | null>(null);
   const libraryRailFocusRef = useRef<HTMLDivElement | null>(null);
+  const libraryLongPressTimerRef = useRef<number | null>(null);
 
   const setBridge = useCallback(
     (patch: Partial<PackInstallerBridge>) => {
@@ -631,8 +636,14 @@ export function TexturePackInstallerToolPanel({
 
   const refreshLibrary = useCallback(async (): Promise<void> => {
     if (!packIoReady) {
-      setStatusTone("error");
-      setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+      // Mobile already surfaces Geode/path access via AndroidGeodeAccessBanner —
+      // avoid a duplicate error sitting on the sticky action bar.
+      if (!mobileShell) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+      } else {
+        setStatusMessage(null);
+      }
       return;
     }
     if (!isTauriRuntime()) {
@@ -678,7 +689,7 @@ export function TexturePackInstallerToolPanel({
     } finally {
       setBusy(null);
     }
-  }, [geometryDashFound, selectLibraryPack, t]);
+  }, [geometryDashFound, mobileShell, selectLibraryPack, t]);
 
   // Reload whenever Library is shown — including remount after leaving the tool
   // with Library still selected (local grid state is empty on mount).
@@ -1060,6 +1071,41 @@ export function TexturePackInstallerToolPanel({
     ],
   );
 
+  const clearLibraryLongPressTimer = useCallback((): void => {
+    if (libraryLongPressTimerRef.current !== null) {
+      window.clearTimeout(libraryLongPressTimerRef.current);
+      libraryLongPressTimerRef.current = null;
+    }
+  }, []);
+
+  const openLibraryContextMenuAt = useCallback(
+    (pack: InstalledPack, x: number, y: number): void => {
+      void selectLibraryPack(pack);
+      setLibraryContextMenu({ pack, x, y });
+    },
+    [selectLibraryPack],
+  );
+
+  const startLibraryLongPress = useCallback(
+    (pack: InstalledPack, clientX: number, clientY: number): void => {
+      if (!mobileShell || busy !== null) {
+        return;
+      }
+      clearLibraryLongPressTimer();
+      libraryLongPressTimerRef.current = window.setTimeout(() => {
+        libraryLongPressTimerRef.current = null;
+        openLibraryContextMenuAt(pack, clientX, clientY);
+      }, 500);
+    },
+    [busy, clearLibraryLongPressTimer, mobileShell, openLibraryContextMenuAt],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearLibraryLongPressTimer();
+    };
+  }, [clearLibraryLongPressTimer]);
+
   const openLibrarySplitPanel = useCallback(
     (pack: InstalledPack): void => {
       void selectLibraryPack(pack);
@@ -1177,6 +1223,30 @@ export function TexturePackInstallerToolPanel({
       openLibrarySplitPanel,
       selectLibraryPack,
     ],
+  );
+
+  const handleMobileLibraryCardAction = useCallback(
+    (pack: InstalledPack, action: "port" | "split" | "delete"): void => {
+      switch (action) {
+        case "port":
+          void selectLibraryPack(pack);
+          setLibraryActionPanel("port");
+          break;
+        case "split":
+          openLibrarySplitPanel(pack);
+          break;
+        case "delete":
+          void selectLibraryPack(pack);
+          setLibraryDeleteConfirm(pack);
+          break;
+        default: {
+          const _exhaustive: never = action;
+          void _exhaustive;
+          break;
+        }
+      }
+    },
+    [openLibrarySplitPanel, selectLibraryPack],
   );
 
   const confirmDeleteLibraryPack = useCallback(async (): Promise<void> => {
@@ -1730,6 +1800,21 @@ export function TexturePackInstallerToolPanel({
       ? Math.min(1, Math.max(0, overlayProgressCompleted / overlayProgressTotal))
       : 0;
 
+  const mobileMetadataRailButton =
+    mobileShell && onOpenMobileSideRail ? (
+      <button
+        type="button"
+        className="tm-tool-rail-btn"
+        onClick={onOpenMobileSideRail}
+        aria-label={t("navigation:mobile.showDrawerAria", {
+          panel: t("packInstaller.metadataPanelTitle"),
+        })}
+      >
+        <Package size={16} strokeWidth={1.85} />
+        {t("packInstaller.metadataPanelTitle")}
+      </button>
+    ) : null;
+
   return (
     <ToolPage accent="amber" wide>
       {overlay ? (
@@ -1782,12 +1867,6 @@ export function TexturePackInstallerToolPanel({
       ) : null}
 
       <ToolPageHeader toolId="texturePackInstaller" />
-
-      {mobileShell ? (
-        <p className="tm-tool-section-note" role="status">
-          {t("navigation:mobile.packInstallGeodePath")}
-        </p>
-      ) : null}
 
       {mobileShell ? (
         <AndroidGeodeAccessBanner
@@ -1852,8 +1931,14 @@ export function TexturePackInstallerToolPanel({
               onDrop={onHtmlDrop}
             >
               <FileArchive size={28} strokeWidth={1.5} />
-              <p className="tm-pack-dropzone-title">{t("packInstaller.dropHint")}</p>
-              <p className="tm-pack-dropzone-sub">{t("packInstaller.dropHintSub")}</p>
+              <p className="tm-pack-dropzone-title">
+                {mobileShell
+                  ? t("packInstaller.mobileDropHint")
+                  : t("packInstaller.dropHint")}
+              </p>
+              {mobileShell ? null : (
+                <p className="tm-pack-dropzone-sub">{t("packInstaller.dropHintSub")}</p>
+              )}
               <div className="tm-pack-dropzone-actions">
                 <button
                   type="button"
@@ -2036,6 +2121,7 @@ export function TexturePackInstallerToolPanel({
               )}
               {busy === "install" ? t("packInstaller.installing") : t("packInstaller.install")}
             </button>
+            {mobileMetadataRailButton}
           </div>
         </>
       ) : bridge.mode === "create" ? (
@@ -2064,8 +2150,14 @@ export function TexturePackInstallerToolPanel({
               onDragLeave={onHtmlDragLeave}
               onDrop={onHtmlDrop}
             >
-              <p className="tm-pack-dropzone-title">{t("packInstaller.dropCreateHint")}</p>
-              <p className="tm-pack-dropzone-sub">{t("packInstaller.dropCreateHintSub")}</p>
+              <p className="tm-pack-dropzone-title">
+                {mobileShell
+                  ? t("packInstaller.mobileDropCreateHint")
+                  : t("packInstaller.dropCreateHint")}
+              </p>
+              {mobileShell ? null : (
+                <p className="tm-pack-dropzone-sub">{t("packInstaller.dropCreateHintSub")}</p>
+              )}
               <div className="tm-pack-dropzone-actions">
                 <button
                   type="button"
@@ -2120,6 +2212,7 @@ export function TexturePackInstallerToolPanel({
               )}
               {busy === "create" ? t("packInstaller.creating") : t("packInstaller.createPack")}
             </button>
+            {mobileMetadataRailButton}
             {createdPackDir && !mobileShell ? (
               <button
                 type="button"
@@ -2190,52 +2283,125 @@ export function TexturePackInstallerToolPanel({
                   const author = pack.metadata?.author?.trim() || t("packInstaller.libraryNoAuthor");
                   const version = pack.metadata?.version?.trim() || "1.0.0";
                   return (
-                    <button
+                    <div
                       key={pack.id}
-                      type="button"
-                      className={`tm-pack-library-card${selected ? " selected" : ""}`}
-                      onClick={() => void selectLibraryPack(pack)}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void selectLibraryPack(pack);
-                        setLibraryContextMenu({
-                          pack,
-                          x: event.clientX,
-                          y: event.clientY,
-                        });
-                      }}
-                      disabled={busy !== null}
+                      className={`tm-pack-library-card${selected ? " selected" : ""}${
+                        busy !== null ? " is-disabled" : ""
+                      }`}
                     >
-                      <div className="tm-pack-library-preview">
-                        {preview ? (
-                          <img
-                            className="tm-pack-library-thumb"
-                            src={preview}
-                            alt=""
-                          />
-                        ) : (
-                          <div className="tm-pack-library-thumb-missing" aria-hidden>
-                            <PackageOpen size={28} strokeWidth={1.5} />
+                      <button
+                        type="button"
+                        className="tm-pack-library-card-main"
+                        onClick={() => void selectLibraryPack(pack)}
+                        onContextMenu={
+                          mobileShell
+                            ? undefined
+                            : (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openLibraryContextMenuAt(
+                                  pack,
+                                  event.clientX,
+                                  event.clientY,
+                                );
+                              }
+                        }
+                        onTouchStart={
+                          mobileShell
+                            ? (event) => {
+                                const touch = event.touches[0];
+                                if (!touch) {
+                                  return;
+                                }
+                                startLibraryLongPress(pack, touch.clientX, touch.clientY);
+                              }
+                            : undefined
+                        }
+                        onTouchEnd={mobileShell ? clearLibraryLongPressTimer : undefined}
+                        onTouchMove={mobileShell ? clearLibraryLongPressTimer : undefined}
+                        onTouchCancel={mobileShell ? clearLibraryLongPressTimer : undefined}
+                        disabled={busy !== null}
+                      >
+                        <div className="tm-pack-library-preview">
+                          {preview ? (
+                            <img
+                              className="tm-pack-library-thumb"
+                              src={preview}
+                              alt=""
+                            />
+                          ) : (
+                            <div className="tm-pack-library-thumb-missing" aria-hidden>
+                              <PackageOpen size={28} strokeWidth={1.5} />
+                            </div>
+                          )}
+                        </div>
+                        <div className="tm-pack-library-title">{libraryPackTitle(pack)}</div>
+                        <div className="tm-pack-library-meta">
+                          {t("packInstaller.libraryVersionAuthor", {
+                            author,
+                            version,
+                          })}
+                        </div>
+                      </button>
+                      {mobileShell ? (
+                        <>
+                          <button
+                            type="button"
+                            className="tm-pack-library-card-more"
+                            aria-label={t("packInstaller.libraryMoreActionsAria")}
+                            disabled={busy !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              openLibraryContextMenuAt(
+                                pack,
+                                Math.min(rect.right, window.innerWidth - 8),
+                                rect.bottom + 4,
+                              );
+                            }}
+                          >
+                            <MoreHorizontal size={18} aria-hidden />
+                          </button>
+                          <div
+                            className="tm-pack-library-card-actions"
+                            aria-label={t("packInstaller.libraryContextMenu")}
+                          >
+                            <button
+                              type="button"
+                              disabled={busy !== null}
+                              onClick={() => handleMobileLibraryCardAction(pack, "port")}
+                            >
+                              <Shuffle size={14} aria-hidden />
+                              {t("packInstaller.libraryActionPort")}
+                            </button>
+                            <button
+                              type="button"
+                              disabled={busy !== null}
+                              onClick={() => handleMobileLibraryCardAction(pack, "split")}
+                            >
+                              <Scissors size={14} aria-hidden />
+                              {t("packInstaller.libraryActionSplit")}
+                            </button>
+                            <button
+                              type="button"
+                              className="is-danger"
+                              disabled={busy !== null}
+                              onClick={() => handleMobileLibraryCardAction(pack, "delete")}
+                            >
+                              <Trash2 size={14} aria-hidden />
+                              {t("packInstaller.libraryActionDelete")}
+                            </button>
                           </div>
-                        )}
-                      </div>
-                      <div className="tm-pack-library-title">{libraryPackTitle(pack)}</div>
-                      <div className="tm-pack-library-meta">
-                        {t("packInstaller.libraryVersionAuthor", {
-                          author,
-                          version,
-                        })}
-                      </div>
-                    </button>
+                        </>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
             )}
 
-            {bridge.libraryPack ? (
+            {bridge.libraryPack && !mobileShell ? (
               <div className="tm-pack-library-selection-actions">
-                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2245,8 +2411,6 @@ export function TexturePackInstallerToolPanel({
                   <FolderOpen size={15} />
                   {t("packInstaller.libraryActionOpenFolder")}
                 </button>
-                )}
-                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2256,7 +2420,6 @@ export function TexturePackInstallerToolPanel({
                   <WandSparkles size={15} />
                   {t("packInstaller.libraryActionConvert")}
                 </button>
-                )}
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2404,6 +2567,10 @@ export function TexturePackInstallerToolPanel({
         </>
       )}
 
+      {bridge.mode === "library" && mobileMetadataRailButton ? (
+        <div className="tm-pack-actions">{mobileMetadataRailButton}</div>
+      ) : null}
+
       {libraryContextMenu ? (
         <PackLibraryContextMenu
           pack={libraryContextMenu.pack}
@@ -2470,7 +2637,8 @@ export function TexturePackInstallerToolPanel({
       busy !== "install" &&
       busy !== "create" &&
       busy !== "library" &&
-      busy !== "librarySave" ? (
+      busy !== "librarySave" &&
+      !(mobileShell && !geometryDashFound && statusTone === "error") ? (
         <div className={`tm-pack-status tm-pack-status-${statusTone}`} role="status">
           {busy ? <LoaderCircle size={15} className="tm-pack-spin" /> : null}
           <div>

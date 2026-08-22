@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "Run Output",
+  viewRunOutput: "View Run Output",
   expandPanelAria: "Expand run output panel",
   collapsePanelAria: "Collapse run output panel",
   showPanel: "Show run output",

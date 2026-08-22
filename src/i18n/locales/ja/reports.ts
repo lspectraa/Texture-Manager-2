@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "実行結果",
+  viewRunOutput: "実行結果を表示",
   expandPanelAria: "実行結果パネルを展開",
   collapsePanelAria: "実行結果パネルを折りたたむ",
   showPanel: "実行結果を表示",

@@ -341,9 +341,9 @@ const tools: AppLocaleResources["tools"] = {
       resetHint: "Двойной щелчок сбрасывает",
     },
     errors: {
-      desktopOnlyOpen: "Открытие файлов доступно только в настольном приложении.",
-      desktopOnlySave: "Сохранение файлов доступно только в настольном приложении.",
-      desktopOnlyTexture: "Замена текстуры доступна только в настольном приложении.",
+      desktopOnlyOpen: "Открытие файлов требует установленного приложения Texture Manager.",
+      desktopOnlySave: "Сохранение файлов требует установленного приложения Texture Manager.",
+      desktopOnlyTexture: "Замена текстуры требует установленного приложения Texture Manager.",
       resourcesMissing:
         "Папка Resources Geometry Dash не найдена. Укажите путь установки в настройках.",
       stockEffectFailed:
@@ -454,6 +454,7 @@ const tools: AppLocaleResources["tools"] = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "Другие действия с паком",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -462,6 +463,8 @@ const tools: AppLocaleResources["tools"] = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "Перетащите папку или .zip сюда",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "Выберите папку или zip, чтобы найти паки.",
+    mobileDropCreateHint: "Выберите папку пака или pack.png как источник.",
     browseFolder: "Выбрать папку",
     browseZip: "Выбрать zip",
     sourceFolder: "Folder",

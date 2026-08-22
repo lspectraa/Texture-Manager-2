@@ -55,6 +55,7 @@ const errors = {
       "Looking on internal storage at {{path}}. All-files access is under Android Settings → Special app access (not the normal App permissions list).",
     allFilesAccessRequired:
       "Android blocked reading internal storage. Tap Grant all-files access (Special app access), allow Texture Manager 2, then return here.",
+    grantAllFilesAccess: "Grant all-files access",
     allFilesAccessRequestFailed: "Could not open the Android all-files access settings page.",
     runtimeUnavailable: "Pack Installer is available only in the desktop app.",
     discoverFailed: "Failed to discover install units from the selected source.",

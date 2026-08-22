@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import html2canvas from "html2canvas";
@@ -36,13 +37,16 @@ import {
   Layers3,
   Undo2,
   Redo2,
+  MoreHorizontal,
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { getAppI18n } from "../../i18n";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { usePinchZoom } from "../../hooks/usePinchZoom";
 import { isMobileShell } from "../../utils/platform";
-import { AppSelect, type AppSelectOption } from "../AppSelect";
+import {
+  markSuppressNextMobilePopState,
+} from "../../utils/mobileHistory";
 import {
   extractIconEditorFrames,
   getIconEditorPngDataUrl,
@@ -87,10 +91,12 @@ import {
   type GlowGenSettings,
 } from "../../utils/iconEditorGeneratedGlow";
 import { IconEditorGeneratedGlowControls } from "./IconEditorGeneratedGlowControls";
+import { MobileSheet } from "../mobile/MobileSheet";
 
 type IconLayerRole = "primary" | "secondary" | "extra" | "glow" | "capsule";
 type TintTarget = "primary" | "secondary" | "glow";
 type RobotPartId = "01" | "02" | "03" | "04";
+type IconEditorMobileSurface = "frames" | "inspector" | "colors";
 
 type BackgroundLayer = {
   id: string;
@@ -1230,7 +1236,11 @@ export function IconEditorToolPanel() {
   const [mobileFramesOpen, setMobileFramesOpen] = useState(false);
   const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [mobileColorsOpen, setMobileColorsOpen] = useState(false);
+  const [mobileOverflowOpen, setMobileOverflowOpen] = useState(false);
   const mobileShell = isMobileShell();
+  const toolbarIconSize = mobileShell ? 20 : 15;
+  const sheetHistoryPushedRef = useRef(false);
+  const overflowMenuRef = useRef<HTMLDivElement | null>(null);
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
@@ -1254,6 +1264,123 @@ export function IconEditorToolPanel() {
     clamp: clampZoomContinuous,
     finalize: clampZoom,
   });
+
+  const closeMobileSurface = useCallback(() => {
+    setMobileFramesOpen(false);
+    setMobileInspectorOpen(false);
+    setMobileColorsOpen(false);
+    if (sheetHistoryPushedRef.current) {
+      markSuppressNextMobilePopState();
+      sheetHistoryPushedRef.current = false;
+      window.history.back();
+    }
+  }, []);
+
+  const openMobileSurface = useCallback((surface: IconEditorMobileSurface) => {
+    if (!sheetHistoryPushedRef.current) {
+      window.history.pushState({ tm: "icon-sheet" }, "");
+      sheetHistoryPushedRef.current = true;
+    }
+    setMobileOverflowOpen(false);
+    switch (surface) {
+      case "frames":
+        setMobileFramesOpen(true);
+        setMobileInspectorOpen(false);
+        setMobileColorsOpen(false);
+        setFramesPanelCollapsed(false);
+        break;
+      case "inspector":
+        setMobileFramesOpen(false);
+        setMobileInspectorOpen(true);
+        setMobileColorsOpen(false);
+        setPlistPanelCollapsed(false);
+        break;
+      case "colors":
+        setMobileFramesOpen(false);
+        setMobileInspectorOpen(false);
+        setMobileColorsOpen(true);
+        break;
+      default: {
+        const _exhaustive: never = surface;
+        return _exhaustive;
+      }
+    }
+  }, []);
+
+  const toggleMobileSurface = useCallback(
+    (surface: IconEditorMobileSurface) => {
+      let isOpen = false;
+      switch (surface) {
+        case "frames":
+          isOpen = mobileFramesOpen;
+          break;
+        case "inspector":
+          isOpen = mobileInspectorOpen;
+          break;
+        case "colors":
+          isOpen = mobileColorsOpen;
+          break;
+        default: {
+          const _exhaustive: never = surface;
+          return _exhaustive;
+        }
+      }
+      if (isOpen) {
+        closeMobileSurface();
+        return;
+      }
+      openMobileSurface(surface);
+    },
+    [
+      closeMobileSurface,
+      mobileColorsOpen,
+      mobileFramesOpen,
+      mobileInspectorOpen,
+      openMobileSurface,
+    ],
+  );
+
+  useEffect(() => {
+    if (!mobileShell) {
+      return;
+    }
+    const onPopState = (event: PopStateEvent) => {
+      if (!sheetHistoryPushedRef.current) {
+        return;
+      }
+      event.stopImmediatePropagation();
+      sheetHistoryPushedRef.current = false;
+      setMobileFramesOpen(false);
+      setMobileInspectorOpen(false);
+      setMobileColorsOpen(false);
+      window.history.pushState({ tm: "tool" }, "");
+    };
+    window.addEventListener("popstate", onPopState, true);
+    return () => window.removeEventListener("popstate", onPopState, true);
+  }, [mobileShell]);
+
+  useEffect(() => {
+    if (!mobileOverflowOpen) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const root = overflowMenuRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setMobileOverflowOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileOverflowOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileOverflowOpen]);
 
   const frameMap = useMemo(() => {
     const map = new Map<string, IconEditorFrameInfo>();
@@ -3080,61 +3207,11 @@ export function IconEditorToolPanel() {
           : spiderPartRoleMap[selectedSpiderPartId][role] ?? ""
         : roleMap[role];
 
-    const frameOptions: AppSelectOption[] = [
-      { value: "", label: t("frames.none") },
-      ...Array.from(frameMap.values())
-        .filter((frame) => {
-          if (isRobotIcon) {
-            const parsed = parseRobotPartFrame(frame.name);
-            if (!parsed) {
-              return false;
-            }
-            return parsed.partId === selectedRobotPartId && parsed.role === role;
-          }
-          if (isSpiderIcon) {
-            const parsed = parseSpiderPartFrame(frame.name);
-            if (!parsed) {
-              return false;
-            }
-            return parsed.partId === selectedSpiderPartId && parsed.role === role;
-          }
-          return true;
-        })
-        .map((frame) => ({
-          value: frame.name,
-          label: frame.name,
-        })),
-    ];
-
-    const handleRoleFrameChange = (nextFrame: string) => {
-      if (isRobotIcon) {
-        if (role === "extra" && selectedRobotPartId === "01") {
-          commitRoleMapExtra(nextFrame);
-          setInspectorFrameOverride(nextFrame || null);
-          setInspectorRole(role);
-          return;
-        }
-        setInspectorFrameOverride(nextFrame || null);
-        setInspectorRole(role);
-        return;
-      }
-      if (isSpiderIcon) {
-        if (role === "extra" && selectedSpiderPartId === "01") {
-          commitRoleMapExtra(nextFrame);
-          setInspectorFrameOverride(nextFrame || null);
-          setInspectorRole(role);
-          return;
-        }
-        setInspectorFrameOverride(nextFrame || null);
-        setInspectorRole(role);
-        return;
-      }
-      if (role === "extra") {
-        commitRoleMapExtra(nextFrame);
-        return;
-      }
-      setRoleMap((previous) => ({ ...previous, [role]: nextFrame }));
-    };
+    const previewCanvas = roleValue ? displayFrameCanvases[roleValue] ?? null : null;
+    const previewTint =
+      role === "primary" || role === "secondary" || role === "glow"
+        ? tintByTarget[role]
+        : null;
 
     return (
       <div
@@ -3144,11 +3221,7 @@ export function IconEditorToolPanel() {
         key={role}
         onClick={(event) => {
           const target = event.target as HTMLElement;
-          if (
-            target.closest("select") ||
-            target.closest("button") ||
-            target.closest(".tm-app-select")
-          ) {
+          if (target.closest("button")) {
             return;
           }
           setInspectorRole(role);
@@ -3158,19 +3231,20 @@ export function IconEditorToolPanel() {
         <div className="tm-icon-editor-role-card-head">
           <span className="tm-icon-editor-role-chip">{t(`roles.${role}`)}</span>
           <span className="tm-icon-editor-role-card-hint">
-            {t("frames.layerFrame")}
+            {roleValue.trim() ? roleValue : t("frames.none")}
           </span>
         </div>
         <div className="tm-icon-editor-role-actions">
-          <AppSelect
-            className="tm-icon-editor-role-select"
-            value={roleValue}
-            options={frameOptions}
-            onChange={handleRoleFrameChange}
-            disabled={isBusy}
-            aria-label={`${t(`roles.${role}`)}: ${t("frames.layerFrame")}`}
-            portal
-          />
+          <div
+            className={`tm-icon-editor-role-preview${previewCanvas ? "" : " is-empty"}`}
+            aria-hidden={!previewCanvas}
+          >
+            {previewCanvas ? (
+              <LayerCanvas sourceCanvas={previewCanvas} tint={previewTint} />
+            ) : (
+              <span className="tm-icon-editor-role-preview-empty">{t("frames.none")}</span>
+            )}
+          </div>
           <button
             type="button"
             className="tm-icon-editor-import-icon-btn"
@@ -3207,6 +3281,98 @@ export function IconEditorToolPanel() {
     );
   });
 
+  const anyMobileSheetOpen =
+    mobileFramesOpen || mobileInspectorOpen || mobileColorsOpen;
+  const mobileChromeRef = useRef<HTMLDivElement | null>(null);
+  const [floatingChromeBox, setFloatingChromeBox] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!mobileShell || !anyMobileSheetOpen) {
+      setFloatingChromeBox(null);
+      return;
+    }
+    const update = (): void => {
+      const element = mobileChromeRef.current;
+      if (!element) {
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      setFloatingChromeBox({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [
+    anyMobileSheetOpen,
+    mobileColorsOpen,
+    mobileFramesOpen,
+    mobileInspectorOpen,
+    mobileShell,
+  ]);
+
+  const renderMobileSurfaceTabs = (floating: boolean): ReactNode => (
+    <div
+      ref={floating ? undefined : mobileChromeRef}
+      className={`tm-icon-editor-mobile-chrome${
+        floating ? " tm-icon-editor-mobile-chrome--floating" : ""
+      }`}
+      role="tablist"
+      aria-label={t("viewport.surfacesAria")}
+      aria-hidden={!floating && anyMobileSheetOpen ? true : undefined}
+      style={
+        floating && floatingChromeBox
+          ? {
+              top: floatingChromeBox.top,
+              left: floatingChromeBox.left,
+              width: floatingChromeBox.width,
+            }
+          : undefined
+      }
+    >
+      <button
+        type="button"
+        role="tab"
+        className={`tm-icon-editor-surface-toggle${mobileFramesOpen ? " is-open" : ""}`}
+        aria-selected={mobileFramesOpen}
+        aria-expanded={mobileFramesOpen}
+        onClick={() => toggleMobileSurface("frames")}
+      >
+        <Layers3 size={16} strokeWidth={2} aria-hidden />
+        {t("viewport.framesTab")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        className={`tm-icon-editor-surface-toggle${mobileInspectorOpen ? " is-open" : ""}`}
+        aria-selected={mobileInspectorOpen}
+        aria-expanded={mobileInspectorOpen}
+        onClick={() => toggleMobileSurface("inspector")}
+      >
+        <FileCode2 size={16} strokeWidth={2} aria-hidden />
+        {t("viewport.inspectorTab")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        className={`tm-icon-editor-surface-toggle${mobileColorsOpen ? " is-open" : ""}`}
+        aria-selected={mobileColorsOpen}
+        aria-expanded={mobileColorsOpen}
+        onClick={() => toggleMobileSurface("colors")}
+      >
+        <Palette size={16} strokeWidth={2} aria-hidden />
+        {t("viewport.colorsTab")}
+      </button>
+    </div>
+  );
+
   return (
     <div
       className={`tm-icon-editor${mobileShell ? " tm-icon-editor--mobile" : ""}`}
@@ -3231,7 +3397,7 @@ export function IconEditorToolPanel() {
                   onClick={() => reloadSheet().catch(() => {})}
                   disabled={!sheetInfo || isBusy}
                 >
-                  <RefreshCw size={15} aria-hidden />
+                  <RefreshCw size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
               <IconEditorToolbarTip label={t("toolbar.openTooltip")}>
@@ -3242,7 +3408,7 @@ export function IconEditorToolPanel() {
                   onClick={() => openSheet().catch(() => {})}
                   disabled={isBusy}
                 >
-                  <FolderOpen size={15} aria-hidden />
+                  <FolderOpen size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
               <div className="tm-icon-editor-rename">
@@ -3290,7 +3456,7 @@ export function IconEditorToolPanel() {
                   onClick={() => downloadCurrentIconPng().catch(() => {})}
                   disabled={isBusy}
                 >
-                  <Download size={15} aria-hidden />
+                  <Download size={toolbarIconSize} aria-hidden />
                   {mobileShell ? null : t("toolbar.download")}
                 </button>
               </IconEditorToolbarTip>
@@ -3313,7 +3479,7 @@ export function IconEditorToolPanel() {
                   onClick={undoEdits}
                   disabled={isBusy || !canUndoEdits}
                 >
-                  <Undo2 size={15} aria-hidden />
+                  <Undo2 size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
               <IconEditorToolbarTip
@@ -3327,7 +3493,7 @@ export function IconEditorToolPanel() {
                   onClick={redoEdits}
                   disabled={isBusy || !canRedoEdits}
                 >
-                  <Redo2 size={15} aria-hidden />
+                  <Redo2 size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
             </div>
@@ -3339,7 +3505,7 @@ export function IconEditorToolPanel() {
               >
                 <button
                   type="button"
-                  className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}${
+                  className={`tm-primary-btn tm-icon-editor-toolbar-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}${
                     mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
                   }`}
                   aria-label={
@@ -3350,11 +3516,95 @@ export function IconEditorToolPanel() {
                   onClick={() => saveOffsets().catch(() => {})}
                   disabled={!canWriteSheet || isBusy}
                 >
-                  <Save size={15} aria-hidden />
+                  <Save size={toolbarIconSize} aria-hidden />
                   {mobileShell ? null : isBusy ? t("saveStatus.saving") : saveStatusLabel}
                 </button>
               </IconEditorToolbarTip>
             </div>
+            {mobileShell ? (
+              <div className="tm-icon-editor-toolbar-overflow" ref={overflowMenuRef}>
+                <IconEditorToolbarTip label={t("toolbar.moreTooltip")}>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                    aria-label={t("toolbar.moreAria")}
+                    aria-haspopup="true"
+                    aria-expanded={mobileOverflowOpen}
+                    onClick={() => setMobileOverflowOpen((open) => !open)}
+                  >
+                    <MoreHorizontal size={toolbarIconSize} aria-hidden />
+                  </button>
+                </IconEditorToolbarTip>
+                {mobileOverflowOpen ? (
+                  <div className="tm-icon-editor-overflow-menu" role="menu">
+                    <label className="tm-icon-editor-overflow-rename">
+                      <span className="tm-icon-editor-overflow-label">{t("common:rename")}</span>
+                      <div className="tm-folder-input">
+                        <input
+                          value={renameValue}
+                          onChange={(event) => setRenameValue(event.target.value)}
+                          placeholder="icons-hd"
+                        />
+                        <button
+                          type="button"
+                          className="tm-icon-editor-toolbar-btn"
+                          aria-label={t("toolbar.renameAria")}
+                          disabled={!sheetInfo || isBusy}
+                          onClick={() => {
+                            renameSheet().catch(() => {});
+                            setMobileOverflowOpen(false);
+                          }}
+                        >
+                          <PencilLine size={16} aria-hidden />
+                          {t("common:rename")}
+                        </button>
+                      </div>
+                    </label>
+                    <button
+                      type="button"
+                      className="tm-icon-editor-overflow-item"
+                      role="menuitem"
+                      disabled={!canSaveCopy || isBusy}
+                      onClick={() => {
+                        saveCopy().catch(() => {});
+                        setMobileOverflowOpen(false);
+                      }}
+                    >
+                      <Copy size={16} aria-hidden />
+                      {t("common:saveCopy")}
+                    </button>
+                    <button
+                      type="button"
+                      className="tm-icon-editor-overflow-item"
+                      role="menuitem"
+                      onClick={() => {
+                        setZoom(autoResolutionZoom);
+                        setMobileOverflowOpen(false);
+                      }}
+                    >
+                      <RotateCcw size={16} aria-hidden />
+                      {t("toolbar.resetZoom")}
+                    </button>
+                    <label className="checkbox tm-icon-editor-overflow-check">
+                      <input
+                        type="checkbox"
+                        checked={hideGlow}
+                        onChange={(event) => setHideGlow(event.target.checked)}
+                      />
+                      {t("toolbar.hideGlow")}
+                    </label>
+                    <label className="checkbox tm-icon-editor-overflow-check">
+                      <input
+                        type="checkbox"
+                        checked={hideLayerBorders}
+                        onChange={(event) => setHideLayerBorders(event.target.checked)}
+                      />
+                      {t("toolbar.hideBorder")}
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             {mobileShell ? null : (
               <>
             <div className="tm-icon-editor-toolbar-divider" aria-hidden />
@@ -3501,70 +3751,100 @@ export function IconEditorToolPanel() {
         <div className="tm-icon-editor-viewport">
           <div className="tm-icon-editor-viewport-main">
             <div className="tm-icon-editor-stage-shell">
+              {mobileShell ? renderMobileSurfaceTabs(false) : null}
+              {mobileShell && anyMobileSheetOpen && floatingChromeBox && typeof document !== "undefined"
+                ? createPortal(renderMobileSurfaceTabs(true), document.body)
+                : null}
               {mobileShell ? (
                 <div
-                  className="tm-icon-editor-mobile-chrome"
-                  role="tablist"
-                  aria-label={t("viewport.surfacesAria")}
+                  className="tm-icon-editor-zoom-hud"
+                  aria-label={t("viewport.zoomHudAria")}
+                >
+                  <span className="tm-icon-editor-zoom-hud-value">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-zoom-hud-reset"
+                    aria-label={t("toolbar.resetZoom")}
+                    title={t("toolbar.resetZoomTooltip", {
+                      percent: Math.round(autoResolutionZoom * 100),
+                    })}
+                    onClick={() => setZoom(autoResolutionZoom)}
+                  >
+                    <RotateCcw size={16} aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+              {effectiveInspectorFrameName && !glowOffsetLocked ? (
+                <div
+                  className="tm-icon-editor-offset-dpad"
+                  role="group"
+                  aria-label={t("viewport.offsetDpadAria")}
                 >
                   <button
                     type="button"
-                    role="tab"
-                    className={`tm-icon-editor-surface-toggle${mobileFramesOpen ? " is-open" : ""}`}
-                    aria-selected={mobileFramesOpen}
-                    aria-expanded={mobileFramesOpen}
-                    onClick={() => {
-                      setMobileFramesOpen((open) => {
-                        const next = !open;
-                        if (next) {
-                          setMobileInspectorOpen(false);
-                          setMobileColorsOpen(false);
-                          setFramesPanelCollapsed(false);
-                        }
-                        return next;
-                      });
-                    }}
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-up"
+                    aria-label={t("plist.increaseOffsetByOne", { axis: "Y" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "y",
+                        1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
                   >
-                    {t("viewport.framesTab")}
+                    <ChevronUp size={18} strokeWidth={2.25} aria-hidden />
                   </button>
                   <button
                     type="button"
-                    role="tab"
-                    className={`tm-icon-editor-surface-toggle${mobileInspectorOpen ? " is-open" : ""}`}
-                    aria-selected={mobileInspectorOpen}
-                    aria-expanded={mobileInspectorOpen}
-                    onClick={() => {
-                      setMobileInspectorOpen((open) => {
-                        const next = !open;
-                        if (next) {
-                          setMobileFramesOpen(false);
-                          setMobileColorsOpen(false);
-                          setPlistPanelCollapsed(false);
-                        }
-                        return next;
-                      });
-                    }}
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-left"
+                    aria-label={t("plist.decreaseOffsetByOne", { axis: "X" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "x",
+                        -1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
                   >
-                    {t("viewport.inspectorTab")}
+                    <ChevronLeft size={18} strokeWidth={2.25} aria-hidden />
                   </button>
                   <button
                     type="button"
-                    role="tab"
-                    className={`tm-icon-editor-surface-toggle${mobileColorsOpen ? " is-open" : ""}`}
-                    aria-selected={mobileColorsOpen}
-                    aria-expanded={mobileColorsOpen}
-                    onClick={() => {
-                      setMobileColorsOpen((open) => {
-                        const next = !open;
-                        if (next) {
-                          setMobileFramesOpen(false);
-                          setMobileInspectorOpen(false);
-                        }
-                        return next;
-                      });
-                    }}
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-right"
+                    aria-label={t("plist.increaseOffsetByOne", { axis: "X" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "x",
+                        1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
                   >
-                    {t("viewport.colorsTab")}
+                    <ChevronRight size={18} strokeWidth={2.25} aria-hidden />
+                  </button>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-down"
+                    aria-label={t("plist.decreaseOffsetByOne", { axis: "Y" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "y",
+                        -1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
+                  >
+                    <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
                   </button>
                 </div>
               ) : null}
@@ -4287,51 +4567,50 @@ export function IconEditorToolPanel() {
                   </div>
                 </div>
               </div>
-            <aside
-              className={`tm-icon-editor-roles-overlay${
+            <IconEditorPanelShell
+              mobileShell={mobileShell}
+              mobileOpen={mobileFramesOpen}
+              onMobileClose={closeMobileSurface}
+              title={t("frames.title")}
+              ariaLabel={t("frames.panelAria")}
+              desktopClassName={`tm-icon-editor-roles-overlay${
                 framesPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
-              }${mobileShell ? " tm-icon-editor-drawer" : ""}`}
-              aria-label={t("frames.panelAria")}
-              aria-hidden={mobileShell && !mobileFramesOpen ? true : undefined}
-            >
-              <div className="tm-icon-editor-side-panel-head">
-                <div className="tm-icon-editor-side-panel-head-copy">
-                  {mobileShell ? <span className="tm-icon-editor-drawer-handle" aria-hidden /> : null}
-                  <h3>
-                    <Layers3 size={14} strokeWidth={2} aria-hidden />
-                    {t("frames.title")}
-                  </h3>
-                  {mobileShell ? null : (
+              }`}
+              collapsed={framesPanelCollapsed}
+              desktopHead={
+                <div className="tm-icon-editor-side-panel-head">
+                  <div className="tm-icon-editor-side-panel-head-copy">
+                    <h3>
+                      <Layers3 size={14} strokeWidth={2} aria-hidden />
+                      {t("frames.title")}
+                    </h3>
                     <p className="tm-icon-editor-side-panel-subtitle">
                       {t("frames.subtitle")}
                     </p>
-                  )}
+                  </div>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-side-panel-toggle"
+                    onClick={() => setFramesPanelCollapsed((value) => !value)}
+                    aria-expanded={!framesPanelCollapsed}
+                    aria-label={
+                      framesPanelCollapsed
+                        ? t("frames.expandPanelAria")
+                        : t("frames.collapsePanelAria")
+                    }
+                    title={
+                      framesPanelCollapsed
+                        ? t("frames.showPanel")
+                        : t("frames.hidePanel")
+                    }
+                  >
+                    <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
+                      <ChevronLeft size={15} />
+                    </span>
+                  </button>
                 </div>
-                {mobileShell ? null : (
-                <button
-                  type="button"
-                  className="tm-icon-editor-side-panel-toggle"
-                  onClick={() => setFramesPanelCollapsed((value) => !value)}
-                  aria-expanded={!framesPanelCollapsed}
-                  aria-label={
-                    framesPanelCollapsed
-                      ? t("frames.expandPanelAria")
-                      : t("frames.collapsePanelAria")
-                  }
-                  title={
-                    framesPanelCollapsed
-                      ? t("frames.showPanel")
-                      : t("frames.hidePanel")
-                  }
-                >
-                  <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
-                    <ChevronLeft size={15} />
-                  </span>
-                </button>
-                )}
-              </div>
-              <div className="tm-icon-editor-side-panel-body" aria-hidden={framesPanelCollapsed}>
-                <div className="tm-icon-editor-side-panel-body-inner">
+              }
+            >
               {isRobotIcon ? (
                 <div
                   className="tm-icon-editor-part-tabs"
@@ -4378,54 +4657,52 @@ export function IconEditorToolPanel() {
               <div className="tm-icon-editor-roles-scroll">
                 <div className="tm-icon-editor-role-grid">{roleControls}</div>
               </div>
-                </div>
-              </div>
-            </aside>
-            <aside
-              className={`tm-icon-editor-plist-overlay${
+            </IconEditorPanelShell>
+            <IconEditorPanelShell
+              mobileShell={mobileShell}
+              mobileOpen={mobileInspectorOpen}
+              onMobileClose={closeMobileSurface}
+              title={t("plist.title")}
+              ariaLabel={t("plist.panelAria")}
+              sheetSize="half"
+              desktopClassName={`tm-icon-editor-plist-overlay${
                 plistPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
-              }${mobileShell ? " tm-icon-editor-drawer" : ""}`}
-              aria-label={t("plist.panelAria")}
-              aria-hidden={mobileShell && !mobileInspectorOpen ? true : undefined}
-            >
-              <div className="tm-icon-editor-side-panel-head">
-                <div className="tm-icon-editor-side-panel-head-copy">
-                  {mobileShell ? <span className="tm-icon-editor-drawer-handle" aria-hidden /> : null}
-                  <h3>
-                    <FileCode2 size={14} strokeWidth={2} aria-hidden />
-                    {t("plist.title")}
-                  </h3>
-                  {mobileShell ? null : (
+              }`}
+              collapsed={plistPanelCollapsed}
+              desktopHead={
+                <div className="tm-icon-editor-side-panel-head">
+                  <div className="tm-icon-editor-side-panel-head-copy">
+                    <h3>
+                      <FileCode2 size={14} strokeWidth={2} aria-hidden />
+                      {t("plist.title")}
+                    </h3>
                     <p className="tm-icon-editor-side-panel-subtitle">
                       {t("plist.subtitle")}
                     </p>
-                  )}
+                  </div>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-side-panel-toggle"
+                    onClick={() => setPlistPanelCollapsed((value) => !value)}
+                    aria-expanded={!plistPanelCollapsed}
+                    aria-label={
+                      plistPanelCollapsed
+                        ? t("plist.expandPanelAria")
+                        : t("plist.collapsePanelAria")
+                    }
+                    title={
+                      plistPanelCollapsed
+                        ? t("plist.showPanel")
+                        : t("plist.hidePanel")
+                    }
+                  >
+                    <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
+                      <ChevronRight size={15} />
+                    </span>
+                  </button>
                 </div>
-                {mobileShell ? null : (
-                <button
-                  type="button"
-                  className="tm-icon-editor-side-panel-toggle"
-                  onClick={() => setPlistPanelCollapsed((value) => !value)}
-                  aria-expanded={!plistPanelCollapsed}
-                  aria-label={
-                    plistPanelCollapsed
-                      ? t("plist.expandPanelAria")
-                      : t("plist.collapsePanelAria")
-                  }
-                  title={
-                    plistPanelCollapsed
-                      ? t("plist.showPanel")
-                      : t("plist.hidePanel")
-                  }
-                >
-                  <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
-                    <ChevronRight size={15} />
-                  </span>
-                </button>
-                )}
-              </div>
-              <div className="tm-icon-editor-side-panel-body" aria-hidden={plistPanelCollapsed}>
-                <div className="tm-icon-editor-side-panel-body-inner">
+              }
+            >
               {isRobotIcon ? (
                 <div
                   className="tm-icon-editor-part-tabs"
@@ -4675,24 +4952,15 @@ export function IconEditorToolPanel() {
                   </div>
                 )}
               </div>
-                </div>
-              </div>
-            </aside>
+            </IconEditorPanelShell>
             {mobileShell ? (
-              <aside
-                className="tm-icon-editor-colors-overlay tm-icon-editor-drawer"
-                aria-label={t("viewport.colorsPanelAria")}
-                aria-hidden={!mobileColorsOpen ? true : undefined}
+              <MobileSheet
+                open={mobileColorsOpen}
+                onClose={closeMobileSurface}
+                title={t("viewport.colorsTab")}
+                className="tm-icon-editor-sheet tm-icon-editor-sheet-colors"
+                size="half"
               >
-                <header className="tm-icon-editor-side-panel-head">
-                  <div className="tm-icon-editor-side-panel-head-copy">
-                    <span className="tm-icon-editor-drawer-handle" aria-hidden />
-                    <h3>
-                      <Palette size={14} strokeWidth={2} aria-hidden />
-                      {t("viewport.colorsTab")}
-                    </h3>
-                  </div>
-                </header>
                 <div className="tm-icon-editor-colors-scroll">
                   <div
                     className="tm-icon-editor-tint-targets"
@@ -4738,7 +5006,7 @@ export function IconEditorToolPanel() {
                     ))}
                   </div>
                 </div>
-              </aside>
+              </MobileSheet>
             ) : null}
             </div>
           </div>
@@ -4785,5 +5053,54 @@ export function IconEditorToolPanel() {
       </div>
       )}
     </div>
+  );
+}
+
+type IconEditorPanelShellProps = {
+  mobileShell: boolean;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+  title: string;
+  ariaLabel: string;
+  desktopClassName: string;
+  collapsed: boolean;
+  desktopHead: ReactNode;
+  children: ReactNode;
+  sheetSize?: "default" | "half";
+};
+
+function IconEditorPanelShell({
+  mobileShell,
+  mobileOpen,
+  onMobileClose,
+  title,
+  ariaLabel,
+  desktopClassName,
+  collapsed,
+  desktopHead,
+  children,
+  sheetSize = "default",
+}: IconEditorPanelShellProps) {
+  if (mobileShell) {
+    return (
+      <MobileSheet
+        open={mobileOpen}
+        onClose={onMobileClose}
+        title={title}
+        className="tm-icon-editor-sheet"
+        size={sheetSize}
+      >
+        {children}
+      </MobileSheet>
+    );
+  }
+
+  return (
+    <aside className={desktopClassName} aria-label={ariaLabel}>
+      {desktopHead}
+      <div className="tm-icon-editor-side-panel-body" aria-hidden={collapsed}>
+        <div className="tm-icon-editor-side-panel-body-inner">{children}</div>
+      </div>
+    </aside>
   );
 }

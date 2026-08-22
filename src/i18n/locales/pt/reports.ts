@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "Saída da execução",
+  viewRunOutput: "Ver saída da execução",
   expandPanelAria: "Expandir painel de saída da execução",
   collapsePanelAria: "Recolher painel de saída da execução",
   showPanel: "Mostrar saída da execução",

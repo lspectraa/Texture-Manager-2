@@ -1,5 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { GlowGenSettings } from "../../utils/iconEditorGeneratedGlow";
+import { isMobileShell } from "../../utils/platform";
+import { GlassNumberInput } from "../inputs/GlassNumberInput";
 
 type IconEditorGeneratedGlowControlsProps = {
   settings: GlowGenSettings;
@@ -21,6 +23,7 @@ export function IconEditorGeneratedGlowControls({
   onCompositeChange,
 }: IconEditorGeneratedGlowControlsProps) {
   const { t } = useTranslation("iconEditor");
+  const mobileShell = isMobileShell();
 
   return (
     <section className="tm-icon-editor-plist-section" aria-labelledby="plist-generated-glow-title">
@@ -43,19 +46,28 @@ export function IconEditorGeneratedGlowControls({
         <div className="tm-icon-editor-generated-glow-fields">
           <label className="tm-icon-editor-generated-glow-field">
             <span>{t("generatedGlow.thickness")}</span>
-            <input
-              type="number"
-              min={1}
-              max={128}
-              value={settings.thickness}
-              onChange={(event) => {
-                const next = Number(event.target.value);
-                if (!Number.isFinite(next)) {
-                  return;
-                }
-                onThicknessChange(Math.min(128, Math.max(1, Math.round(next))));
-              }}
-            />
+            {mobileShell ? (
+              <GlassNumberInput
+                value={settings.thickness}
+                min={1}
+                max={128}
+                onChange={onThicknessChange}
+              />
+            ) : (
+              <input
+                type="number"
+                min={1}
+                max={128}
+                value={settings.thickness}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  if (!Number.isFinite(next)) {
+                    return;
+                  }
+                  onThicknessChange(Math.min(128, Math.max(1, Math.round(next))));
+                }}
+              />
+            )}
           </label>
           <label className="checkbox tm-icon-editor-generated-glow-enable">
             <input

@@ -2,6 +2,7 @@ import type { AppLocaleResources } from "../../types";
 
 const reports: AppLocaleResources["reports"] = {
   panelTitle: "Resultado de la ejecución",
+  viewRunOutput: "Ver resultado de la ejecución",
   expandPanelAria: "Expandir el panel de resultados de la ejecución",
   collapsePanelAria: "Contraer el panel de resultados de la ejecución",
   showPanel: "Mostrar resultados de la ejecución",

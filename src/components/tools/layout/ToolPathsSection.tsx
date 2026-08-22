@@ -58,6 +58,7 @@ export function ToolPathsSection({
         onChange={onInputDirChange}
         pickFolder={pickFolder}
         placeholder={inputPlaceholder}
+        sandboxImported={mobile && inputDir.trim().length > 0}
         onBrowse={(path) => {
           onInputDirChange(path);
           if (outputDir.trim()) {
@@ -83,6 +84,7 @@ export function ToolPathsSection({
         onChange={onOutputDirChange}
         pickFolder={resolveOutputFolder}
         placeholder={outputPlaceholder}
+        sandboxImported={mobile && outputDir.trim().length > 0}
       />
       {!mobile ? (
         <p className="tm-tool-section-note">{t("common.outputMirroringNote")}</p>

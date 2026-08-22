@@ -16,6 +16,7 @@ import {
   Files,
   FolderOutput,
   Package,
+  X,
 } from "lucide-react";
 import "./App.css";
 import {
@@ -59,7 +60,6 @@ import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
 import { MobileBottomDock } from "./components/mobile/MobileBottomDock";
 import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
-import { MobileToolGridSheet } from "./components/mobile/MobileToolGridSheet";
 import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { GlassFrost } from "./components/GlassFrost";
@@ -107,6 +107,7 @@ import {
 } from "./services/tauriUpdater";
 import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
 import { isDesktopPlatform, isMobileShell } from "./utils/platform";
+import { consumeSuppressNextMobilePopState } from "./utils/mobileHistory";
 import {
   exportDirectoryAsZip,
 } from "./services/tauriMobileFs";
@@ -247,10 +248,18 @@ function App() {
   const mobileShell = isMobileShell();
   const [mobileGridOpen, setMobileGridOpen] = useState(false);
   const [mobileSideOpen, setMobileSideOpen] = useState(false);
+  const [mobileOutputChipDismissed, setMobileOutputChipDismissed] =
+    useState(false);
   const mobileGridOpenRef = useRef(mobileGridOpen);
   const mobileSideOpenRef = useRef(mobileSideOpen);
   mobileGridOpenRef.current = mobileGridOpen;
   mobileSideOpenRef.current = mobileSideOpen;
+  const openMobileSideRail = useCallback((): void => {
+    if (!mobileSideOpenRef.current) {
+      window.history.pushState({ tm: "drawer" }, "");
+    }
+    setMobileSideOpen(true);
+  }, []);
   const [appSettings, setAppSettings] = useState<AppSettingsView>(
     DEFAULT_APP_SETTINGS_VIEW,
   );
@@ -696,6 +705,7 @@ function App() {
   const executeSelectedOperation = async (): Promise<void> => {
     setRunError(null);
     setReport(null);
+    setMobileOutputChipDismissed(false);
 
     let request: OperationRequest | null = null;
 
@@ -871,10 +881,7 @@ function App() {
       });
       setReport(operationReport);
       if (mobileShell) {
-        if (!mobileSideOpenRef.current) {
-          window.history.pushState({ tm: "drawer" }, "");
-        }
-        setMobileSideOpen(true);
+        openMobileSideRail();
       }
       const hasError = operationReport.issues.some((issue) => issue.level === "error");
       const hasWarning = operationReport.issues.some((issue) => issue.level === "warning");
@@ -1069,6 +1076,9 @@ function App() {
       return;
     }
     const onPopState = () => {
+      if (consumeSuppressNextMobilePopState()) {
+        return;
+      }
       if (mobileGridOpen) {
         setMobileGridOpen(false);
         window.history.pushState({ tm: "shell" }, "");
@@ -1472,6 +1482,7 @@ function App() {
             onBridgeChange={setPackInstallerBridge}
             onAppSettingsUpdated={applySettingsView}
             onSidebarActionsChange={setPackInstallerSidebarActions}
+            onOpenMobileSideRail={mobileShell ? openMobileSideRail : undefined}
           />
         );
       default: {
@@ -1680,41 +1691,34 @@ function App() {
             <MobileBottomDock
               selectedTool={selectedTool}
               onNavigate={navigateTool}
-              onExpandGrid={() => {
-                if (!mobileGridOpenRef.current) {
-                  window.history.pushState({ tm: "grid" }, "");
+              expanded={mobileGridOpen}
+              onExpandedChange={(next) => {
+                if (next) {
+                  if (!mobileGridOpenRef.current) {
+                    window.history.pushState({ tm: "grid" }, "");
+                  }
+                  setMobileGridOpen(true);
+                  return;
                 }
-                setMobileGridOpen(true);
-              }}
-            />
-            <MobileToolGridSheet
-              open={mobileGridOpen}
-              selectedTool={selectedTool}
-              onClose={() => {
                 if (mobileGridOpenRef.current) {
                   window.history.back();
+                  return;
                 }
+                setMobileGridOpen(false);
               }}
-              onNavigate={navigateTool}
             />
             {showRightRail ? (
               <MobileSideDrawer
                 open={mobileSideOpen}
                 onOpenChange={(open) => {
                   if (open) {
-                    if (!mobileSideOpenRef.current) {
-                      window.history.pushState({ tm: "drawer" }, "");
-                    }
-                    setMobileSideOpen(true);
+                    openMobileSideRail();
                     return;
                   }
                   if (mobileSideOpenRef.current) {
                     window.history.back();
                   }
                 }}
-                mode={showPackMetadataRail ? "metadata" : "status"}
-                tone={showPackMetadataRail ? "ready" : reportState}
-                hasAttention={Boolean(report || runError)}
               />
             ) : null}
           </>
@@ -1766,6 +1770,40 @@ function App() {
                   <Sparkles size={16} />
                   {isRunning ? t("tools:common.running") : t("tools:common.runOperation")}
                 </button>
+                {mobileShell && showOperationAndReport ? (
+                  <button
+                    type="button"
+                    className="tm-tool-rail-btn"
+                    onClick={openMobileSideRail}
+                  >
+                    <Activity size={16} strokeWidth={1.85} />
+                    {t("reports:panelTitle")}
+                  </button>
+                ) : null}
+                {mobileShell &&
+                showOperationAndReport &&
+                (report || runError) &&
+                !mobileSideOpen &&
+                !mobileOutputChipDismissed ? (
+                  <div className="tm-mobile-output-chip">
+                    <button
+                      type="button"
+                      className="tm-tool-rail-btn tm-mobile-output-chip-open"
+                      onClick={openMobileSideRail}
+                    >
+                      <Activity size={16} strokeWidth={1.85} />
+                      {t("reports:viewRunOutput")}
+                    </button>
+                    <button
+                      type="button"
+                      className="tm-mobile-output-chip-dismiss"
+                      onClick={() => setMobileOutputChipDismissed(true)}
+                      aria-label={t("common:close")}
+                    >
+                      <X size={15} strokeWidth={2} />
+                    </button>
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </section>
@@ -1799,6 +1837,18 @@ function App() {
                       : t("reports:panelTitle")}
                   </span>
                 </span>
+                <button
+                  type="button"
+                  className="tm-mobile-rail-close"
+                  aria-label={t("navigation:mobile.closeDrawerAria")}
+                  onClick={() => {
+                    if (mobileSideOpenRef.current) {
+                      window.history.back();
+                    }
+                  }}
+                >
+                  <X size={18} strokeWidth={2} aria-hidden />
+                </button>
               </div>
             ) : (
               <button

@@ -329,9 +329,9 @@ const tools = {
       resetHint: "두 번 클릭하면 초기화",
     },
     errors: {
-      desktopOnlyOpen: "파일 열기는 데스크톱 앱에서만 사용할 수 있습니다.",
-      desktopOnlySave: "파일 저장은 데스크톱 앱에서만 사용할 수 있습니다.",
-      desktopOnlyTexture: "텍스처 교체는 데스크톱 앱에서만 사용할 수 있습니다.",
+      desktopOnlyOpen: "파일을 열려면 설치된 Texture Manager 앱이 필요합니다.",
+      desktopOnlySave: "파일을 저장하려면 설치된 Texture Manager 앱이 필요합니다.",
+      desktopOnlyTexture: "텍스처를 교체하려면 설치된 Texture Manager 앱이 필요합니다.",
       resourcesMissing:
         "Geometry Dash의 Resources 폴더를 찾지 못했습니다. 설정에서 설치 경로를 지정하세요.",
       stockEffectFailed:
@@ -441,6 +441,7 @@ const tools = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "추가 팩 작업",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -449,6 +450,8 @@ const tools = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "폴더 또는 .zip을 여기에 놓으세요",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "폴더 또는 zip을 찾아 패키를 검색하세요.",
+    mobileDropCreateHint: "소스로 팩 폴더 또는 pack.png를 찾아보세요.",
     browseFolder: "폴더 찾아보기",
     browseZip: "zip 찾아보기",
     sourceFolder: "Folder",

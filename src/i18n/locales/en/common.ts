@@ -16,6 +16,7 @@ const common = {
   selectFile: "Select file",
   selectFolder: "Select folder",
   noFolderSelected: "No folder selected",
+  appStorage: "App storage",
   light: "Light",
   dark: "Dark",
   back: "Back",
