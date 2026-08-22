@@ -6,7 +6,6 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   Check,
@@ -36,6 +35,7 @@ import type {
   PackMetadata,
   PackOperationKind,
 } from "../../domain/packInstaller";
+import type { AppSettingsView } from "../../domain/settings";
 import {
   DEFAULT_PACK_METADATA,
   folderNameFromPackName,
@@ -55,12 +55,14 @@ import {
 import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { isMobileShell } from "../../utils/platform";
+import { pickUserFile, pickUserFolder } from "../../services/tauriPicker";
 import { openPathInOs } from "../../services/tauriSettings";
 import {
   basenameForDisplay,
   redactAbsolutePathsInText,
   shortenPathForDisplay,
 } from "../../utils/pathDisplay";
+import { AndroidGeodeAccessBanner } from "./AndroidGeodeAccessBanner";
 import {
   PackLibraryContextMenu,
   type PackLibraryContextAction,
@@ -92,6 +94,7 @@ type TexturePackInstallerToolPanelProps = {
   bridge: PackInstallerBridge;
   onBridgeChange: (next: PackInstallerBridge) => void;
   onSidebarActionsChange?: (actions: PackInstallerSidebarActions) => void;
+  onAppSettingsUpdated?: (settings: AppSettingsView) => void;
 };
 
 type BusyKind = "discover" | "install" | "create" | "library" | "librarySave" | null;
@@ -298,10 +301,11 @@ export function TexturePackInstallerToolPanel({
   bridge,
   onBridgeChange,
   onSidebarActionsChange,
+  onAppSettingsUpdated,
 }: TexturePackInstallerToolPanelProps) {
   const { t } = useTranslation(["tools", "errors", "common"]);
   const mobileShell = isMobileShell();
-  const packIoReady = geometryDashFound || mobileShell;
+  const packIoReady = geometryDashFound;
   const [plan, setPlan] = useState<InstallPlan | null>(null);
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<BusyKind>(null);
@@ -391,13 +395,23 @@ export function TexturePackInstallerToolPanel({
     };
   }, [clearOverlayTimer]);
 
+  useEffect(() => {
+    if (!mobileShell) {
+      return;
+    }
+    setConvertToLatestVersion(false);
+    setLibraryActionPanel((panel) => (panel === "convert" ? null : panel));
+  }, [mobileShell]);
+
   const extrasActiveCount =
-    (convertToLatestVersion ? 1 : 0) + (portPacks ? 1 : 0);
+    (mobileShell ? 0 : convertToLatestVersion ? 1 : 0) + (portPacks ? 1 : 0);
   const extrasSummary =
     extrasActiveCount === 0
       ? t("packInstaller.extrasNone")
       : [
-          convertToLatestVersion ? t("packInstaller.convertToLatestVersion") : null,
+          !mobileShell && convertToLatestVersion
+            ? t("packInstaller.convertToLatestVersion")
+            : null,
           portPacks ? t("packInstaller.portPacks") : null,
         ]
           .filter((part): part is string => Boolean(part))
@@ -538,16 +552,19 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFolder({
         title: t("packInstaller.selectFolderDialog"),
-        directory: true,
-        multiple: false,
       });
-      if (typeof selected === "string" && selected.trim()) {
+      if (selected) {
         await runDiscovery(selected);
       }
-    } catch {
-      // Cancelled.
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        err instanceof Error
+          ? err.message
+          : t("errors:packInstaller.runtimeUnavailable"),
+      );
     }
   };
 
@@ -558,17 +575,21 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("packInstaller.selectZipDialog"),
-        directory: false,
-        multiple: false,
-        filters: [{ name: t("packInstaller.zipFilter"), extensions: ["zip"] }],
+        extensions: ["zip"],
+        filterName: t("packInstaller.zipFilter"),
       });
-      if (typeof selected === "string" && selected.trim()) {
+      if (selected) {
         await runDiscovery(selected);
       }
-    } catch {
-      // Cancelled.
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        err instanceof Error
+          ? err.message
+          : t("errors:packInstaller.runtimeUnavailable"),
+      );
     }
   };
 
@@ -673,13 +694,12 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("packInstaller.selectPackPngDialog"),
-        directory: false,
-        multiple: false,
-        filters: [{ name: t("packInstaller.pngFilter"), extensions: ["png"] }],
+        extensions: ["png"],
+        filterName: t("packInstaller.pngFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) {
+      if (!selected) {
         return;
       }
       const dataUrl = await getPackPngDataUrl(selected);
@@ -768,16 +788,19 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFolder({
         title: t("packInstaller.selectCreateSourceDialog"),
-        directory: true,
-        multiple: false,
       });
-      if (typeof selected === "string" && selected.trim()) {
+      if (selected) {
         await applyCreateSourceDir(selected);
       }
-    } catch {
-      // Cancelled.
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        err instanceof Error
+          ? err.message
+          : t("errors:packInstaller.runtimeUnavailable"),
+      );
     }
   }, [applyCreateSourceDir, t]);
 
@@ -1051,13 +1074,15 @@ export function TexturePackInstallerToolPanel({
       if (!isTauriRuntime()) {
         return;
       }
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t("packInstaller.librarySplitOutputBrowse"),
-      });
-      if (typeof selected === "string" && selected.trim()) {
-        onPicked(selected);
+      try {
+        const selected = await pickUserFolder({
+          title: t("packInstaller.librarySplitOutputBrowse"),
+        });
+        if (selected) {
+          onPicked(selected);
+        }
+      } catch {
+        // Cancelled or unavailable.
       }
     },
     [t],
@@ -1521,7 +1546,11 @@ export function TexturePackInstallerToolPanel({
     }
     if (!packIoReady) {
       setStatusTone("error");
-      setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+      setStatusMessage(
+        mobileShell
+          ? t("errors:packInstaller.geodeRequiredMobile")
+          : t("errors:packInstaller.geometryDashRequired"),
+      );
       return;
     }
     const unitIds = plan.units.filter((unit) => unit.enabled).map((unit) => unit.id);
@@ -1530,7 +1559,8 @@ export function TexturePackInstallerToolPanel({
       setStatusMessage(t("errors:packInstaller.noUnitsSelected"));
       return;
     }
-    if (convertToLatestVersion && !convertGameVersion.trim()) {
+    const shouldConvert = !mobileShell && convertToLatestVersion;
+    if (shouldConvert && !convertGameVersion.trim()) {
       setStatusTone("error");
       setStatusMessage(t("errors:packInstaller.convertVersionRequired"));
       return;
@@ -1552,7 +1582,7 @@ export function TexturePackInstallerToolPanel({
         plan,
         unitIds,
         {
-          convertToLatestVersion,
+          convertToLatestVersion: shouldConvert,
           gameVersion: convertGameVersion,
           portPacks,
           lowPort: portLowGraphics,
@@ -1755,11 +1785,16 @@ export function TexturePackInstallerToolPanel({
 
       {mobileShell ? (
         <p className="tm-tool-section-note" role="status">
-          {t("navigation:mobile.packInstallComingSoon")}
+          {t("navigation:mobile.packInstallGeodePath")}
         </p>
       ) : null}
 
-      {!geometryDashFound && !mobileShell ? (
+      {mobileShell ? (
+        <AndroidGeodeAccessBanner
+          geometryDashFound={geometryDashFound}
+          onSettingsUpdated={onAppSettingsUpdated}
+        />
+      ) : !geometryDashFound ? (
         <p className="tm-tool-inline-error" role="alert">
           {t("errors:packInstaller.geometryDashRequired")}
         </p>
@@ -1902,26 +1937,28 @@ export function TexturePackInstallerToolPanel({
                       <p className="tm-tool-section-note tm-pack-extras-hint">
                         {t("packInstaller.extrasHint")}
                       </p>
-                      <div className="tm-pack-extras-option">
-                        <ToolCheckboxField
-                          label={t("packInstaller.convertToLatestVersion")}
-                          checked={convertToLatestVersion}
-                          onChange={setConvertToLatestVersion}
-                        />
-                        {convertToLatestVersion ? (
-                          <div className="tm-pack-extras-option-settings">
-                            <ToolSelectField
-                              label={t("packInstaller.convertPreviousVersion")}
-                              value={convertGameVersion}
-                              options={CONVERT_VERSION_OPTIONS}
-                              onChange={setConvertGameVersion}
-                            />
-                            <p className="tm-tool-section-note">
-                              {t("packInstaller.convertToLatestVersionHint")}
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
+                      {mobileShell ? null : (
+                        <div className="tm-pack-extras-option">
+                          <ToolCheckboxField
+                            label={t("packInstaller.convertToLatestVersion")}
+                            checked={convertToLatestVersion}
+                            onChange={setConvertToLatestVersion}
+                          />
+                          {convertToLatestVersion ? (
+                            <div className="tm-pack-extras-option-settings">
+                              <ToolSelectField
+                                label={t("packInstaller.convertPreviousVersion")}
+                                value={convertGameVersion}
+                                options={CONVERT_VERSION_OPTIONS}
+                                onChange={setConvertGameVersion}
+                              />
+                              <p className="tm-tool-section-note">
+                                {t("packInstaller.convertToLatestVersionHint")}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                       <div className="tm-pack-extras-option">
                         <ToolCheckboxField
                           label={t("packInstaller.portPacks")}
@@ -2209,6 +2246,7 @@ export function TexturePackInstallerToolPanel({
                   {t("packInstaller.libraryActionOpenFolder")}
                 </button>
                 )}
+                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2218,6 +2256,7 @@ export function TexturePackInstallerToolPanel({
                   <WandSparkles size={15} />
                   {t("packInstaller.libraryActionConvert")}
                 </button>
+                )}
                 <button
                   type="button"
                   className="tm-pack-secondary-btn"
@@ -2252,7 +2291,7 @@ export function TexturePackInstallerToolPanel({
                       : t("packInstaller.librarySplitOptions")
                 }
               >
-                {libraryActionPanel === "convert" ? (
+                {libraryActionPanel === "convert" && !mobileShell ? (
                   <>
                     <p className="tm-pack-library-action-title">
                       {t("packInstaller.libraryConvertOptions")}
@@ -2372,6 +2411,7 @@ export function TexturePackInstallerToolPanel({
           y={libraryContextMenu.y}
           disabled={busy !== null}
           hideOpenFolder={mobileShell}
+          hideConvert={mobileShell}
           onAction={handleLibraryContextAction}
           onClose={() => setLibraryContextMenu(null)}
         />

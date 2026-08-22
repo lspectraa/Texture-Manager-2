@@ -57,14 +57,18 @@ export function MobileSideDrawer({
 
   return (
     <>
-      {open ? (
-        <button
-          type="button"
-          className="tm-mobile-drawer-backdrop"
-          aria-label={t("navigation:mobile.closeDrawerAria")}
-          onClick={() => onOpenChange(false)}
-        />
-      ) : null}
+      <button
+        type="button"
+        className={`tm-mobile-drawer-backdrop${open ? " is-open" : ""}`}
+        aria-label={t("navigation:mobile.closeDrawerAria")}
+        aria-hidden={!open}
+        tabIndex={-1}
+        onClick={() => {
+          if (open) {
+            onOpenChange(false);
+          }
+        }}
+      />
       <button
         type="button"
         className={`tm-mobile-drawer-handle tm-mobile-drawer-handle-${tone}${

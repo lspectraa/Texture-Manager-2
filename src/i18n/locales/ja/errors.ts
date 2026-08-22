@@ -31,6 +31,8 @@ const errors = {
   geodeButtons: {
     gameFilesNotFound:
       "geode.loader のゲームファイルを解決できませんでした。TM_GEOMETRY_DASH_DIR を設定するか、Steam で Geometry Dash と Geode をインストールしてください。",
+    gameFilesNotFoundMobile:
+      "Could not resolve geode.loader under Android/media/com.geode.launcher/game/geode. Grant all-files access, then Re-detect.",
     resolveDefaultInputFailed: "既定の入力を解決できませんでした。",
     blankSheetNotFound:
       "geode.loader（または選択した入力ディレクトリ）で BlankSheet を自動的に見つけられませんでした。",
@@ -41,6 +43,14 @@ const errors = {
   packInstaller: {
     geometryDashRequired:
       "Geometry Dash のパスが見つかりません。パックをインストールする前に設定で指定してください（または Steam で GD + Geode をインストール）。",
+    geodeRequiredMobile:
+      "Geode folder not found. Install Geometry Dash with Geode Launcher, grant all-files access if needed, then Re-detect in Settings.",
+    geodeCheckingAccess: "Checking storage access…",
+    geodeInternalStorageHint:
+      "Looking on internal storage at {{path}}. All-files access is under Android Settings → Special app access (not the normal App permissions list).",
+    allFilesAccessRequired:
+      "Android blocked access to Geode files. Tap Grant all-files access, allow Texture Manager 2, then Re-detect.",
+    allFilesAccessRequestFailed: "Could not open the Android all-files access settings page.",
     runtimeUnavailable: "Pack Installer is available only in the desktop app.",
     discoverFailed: "Failed to discover install units from the selected source.",
     installFailed: "Failed to install the selected pack units.",

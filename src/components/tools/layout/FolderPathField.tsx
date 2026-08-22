@@ -1,6 +1,9 @@
 import { FolderOpen } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { basenameForDisplay } from "../../../utils/pathDisplay";
+import {
+  basenameForDisplay,
+  shortenPathForDisplay,
+} from "../../../utils/pathDisplay";
 import { isMobileShell } from "../../../utils/platform";
 import { PickFolderFn } from "../types";
 import { ToolField } from "./ToolField";
@@ -28,7 +31,7 @@ export function FolderPathField({
   const nameOnly = compact ?? isMobileShell();
   const displayValue = nameOnly
     ? value.trim()
-      ? basenameForDisplay(value)
+      ? shortenPathForDisplay(value) || basenameForDisplay(value)
       : t("noFolderSelected")
     : value;
 

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles,
@@ -109,10 +109,11 @@ import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
 import { isDesktopPlatform, isMobileShell } from "./utils/platform";
 import {
   exportDirectoryAsZip,
-  importUserPath,
 } from "./services/tauriMobileFs";
+import { pickUserFolder } from "./services/tauriPicker";
 import { changeAppLanguage } from "./i18n";
 import { resolveInitialAppLanguage } from "./i18n/languages";
+import type { PickFolderOptions } from "./components/tools/types";
 
 type PrimaryTool =
   | "home"
@@ -513,27 +514,28 @@ function App() {
     [applySettingsView],
   );
 
-  const pickFolder = async (assign: (path: string) => void): Promise<void> => {
+  const pickFolder = async (
+    assign: (path: string) => void,
+    options?: PickFolderOptions,
+  ): Promise<void> => {
     if (!isTauriRuntime()) {
       setRunError(t("errors:runtime.folderPickerUnavailable"));
       return;
     }
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: t("common:selectFolder"),
-    });
-    if (typeof selected === "string" && selected.trim().length > 0) {
-      try {
-        const imported = mobileShell ? await importUserPath(selected) : selected;
-        assign(imported);
-      } catch (error) {
-        setRunError(
-          error instanceof Error
-            ? error.message
-            : t("errors:runtime.importFailed"),
-        );
+    try {
+      const selected = await pickUserFolder({
+        title: t("common:selectFolder"),
+        importToSandbox: options?.importToSandbox ?? true,
+      });
+      if (selected) {
+        assign(selected);
       }
+    } catch (error) {
+      setRunError(
+        error instanceof Error
+          ? error.message
+          : t("errors:runtime.importFailed"),
+      );
     }
   };
 
@@ -1160,7 +1162,9 @@ function App() {
             updateStatusTone={updateStatusTone}
             updateCheckBusy={updateCheckBusy}
             operationRunning={isRunning}
-            pickFolder={pickFolder}
+            pickFolder={(assign) =>
+              pickFolder(assign, { importToSandbox: false })
+            }
             onCheckForUpdates={() => {
               void runUpdateCheck({ silent: false });
             }}
@@ -1409,6 +1413,15 @@ function App() {
           />
         );
       case "convertToNewVersion":
+        if (mobileShell) {
+          return (
+            <div className="tm-tool-page tm-tool-page-sky">
+              <p className="tm-tool-section-note" role="status">
+                {t("tools:convertToNewVersion.desktopOnly")}
+              </p>
+            </div>
+          );
+        }
         return (
           <ConvertToNewVersionToolPanel
             inputDir={convertInputDir}
@@ -1445,6 +1458,8 @@ function App() {
             onOutputDirChange={setGeodeButtonsOutputDir}
             onOptionsChange={setGeodeButtonsOptions}
             pickFolder={pickFolder}
+            geometryDashFound={appSettings.geometryDashFound}
+            onAppSettingsUpdated={applySettingsView}
           />
         );
       case "particleEditor":
@@ -1455,6 +1470,7 @@ function App() {
             geometryDashFound={appSettings.geometryDashFound}
             bridge={packInstallerBridge}
             onBridgeChange={setPackInstallerBridge}
+            onAppSettingsUpdated={applySettingsView}
             onSidebarActionsChange={setPackInstallerSidebarActions}
           />
         );
@@ -1767,60 +1783,79 @@ function App() {
             }${mobileShell && mobileSideOpen ? " tm-report--mobile-open" : ""}`}
           >
             <GlassFrost />
-            <button
-              type="button"
-              className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${
-                isReportCollapsed && !reportPanelTransition.animating
-                  ? " tm-report-rail-btn"
-                  : ""
-              }`}
-              onClick={
-                reportPanelTransition.animating
-                  ? undefined
-                  : isReportCollapsed
-                    ? reportPanelTransition.expand
-                    : reportPanelTransition.collapse
-              }
-              aria-expanded={!isReportCollapsed}
-              aria-label={
-                isReportCollapsed
-                  ? showPackMetadataRail
-                    ? t("tools:packInstaller.expandPanelAria")
-                    : t("reports:expandPanelAria")
-                  : showPackMetadataRail
-                    ? t("tools:packInstaller.collapsePanelAria")
-                    : t("reports:collapsePanelAria")
-              }
-              title={
-                isReportCollapsed
-                  ? showPackMetadataRail
-                    ? t("tools:packInstaller.showPanel")
-                    : t("reports:showPanel")
-                  : showPackMetadataRail
-                    ? t("tools:packInstaller.hidePanel")
-                    : t("reports:hidePanel")
-              }
-              disabled={reportPanelTransition.animating}
-            >
-              <span className="tm-nav-btn-icon" aria-hidden>
-                {showPackMetadataRail ? (
-                  <Package size={16} strokeWidth={1.85} />
-                ) : (
-                  <Activity size={16} strokeWidth={1.85} />
-                )}
-              </span>
-              <span className="tm-nav-btn-copy">
-                <span className="tm-nav-btn-label">
-                  {showPackMetadataRail
-                    ? t("tools:packInstaller.metadataPanelTitle")
-                    : t("reports:panelTitle")}
+            {mobileShell ? (
+              <div className="tm-shell-panel-title tm-nav-btn tm-nav-btn-sky tm-shell-panel-title--static">
+                <span className="tm-nav-btn-icon" aria-hidden>
+                  {showPackMetadataRail ? (
+                    <Package size={16} strokeWidth={1.85} />
+                  ) : (
+                    <Activity size={16} strokeWidth={1.85} />
+                  )}
                 </span>
-              </span>
-              <span className="tm-shell-panel-title-chevron" aria-hidden>
-                <ChevronRight size={15} />
-              </span>
-            </button>
-            <div className="tm-report-body" aria-hidden={isReportCollapsed}>
+                <span className="tm-nav-btn-copy">
+                  <span className="tm-nav-btn-label">
+                    {showPackMetadataRail
+                      ? t("tools:packInstaller.metadataPanelTitle")
+                      : t("reports:panelTitle")}
+                  </span>
+                </span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${
+                  isReportCollapsed && !reportPanelTransition.animating
+                    ? " tm-report-rail-btn"
+                    : ""
+                }`}
+                onClick={
+                  reportPanelTransition.animating
+                    ? undefined
+                    : isReportCollapsed
+                      ? reportPanelTransition.expand
+                      : reportPanelTransition.collapse
+                }
+                aria-expanded={!isReportCollapsed}
+                aria-label={
+                  isReportCollapsed
+                    ? showPackMetadataRail
+                      ? t("tools:packInstaller.expandPanelAria")
+                      : t("reports:expandPanelAria")
+                    : showPackMetadataRail
+                      ? t("tools:packInstaller.collapsePanelAria")
+                      : t("reports:collapsePanelAria")
+                }
+                title={
+                  isReportCollapsed
+                    ? showPackMetadataRail
+                      ? t("tools:packInstaller.showPanel")
+                      : t("reports:showPanel")
+                    : showPackMetadataRail
+                      ? t("tools:packInstaller.hidePanel")
+                      : t("reports:hidePanel")
+                }
+                disabled={reportPanelTransition.animating}
+              >
+                <span className="tm-nav-btn-icon" aria-hidden>
+                  {showPackMetadataRail ? (
+                    <Package size={16} strokeWidth={1.85} />
+                  ) : (
+                    <Activity size={16} strokeWidth={1.85} />
+                  )}
+                </span>
+                <span className="tm-nav-btn-copy">
+                  <span className="tm-nav-btn-label">
+                    {showPackMetadataRail
+                      ? t("tools:packInstaller.metadataPanelTitle")
+                      : t("reports:panelTitle")}
+                  </span>
+                </span>
+                <span className="tm-shell-panel-title-chevron" aria-hidden>
+                  <ChevronRight size={15} />
+                </span>
+              </button>
+            )}
+            <div className="tm-report-body" aria-hidden={isReportCollapsed && !mobileShell}>
             <div className="tm-report-body-inner">
             {showPackMetadataRail ? (
               <PackInstallerMetadataSidebar

@@ -25,7 +25,7 @@
   <body>
     <script>
       // Tauri Android/iOS dev proxy serves from tauri.localhost / tauri://localhost.
-      // Only rewrite Vite HMR WebSocket URLs to the emulator host loopback.
+      // Rewrite Vite HMR WebSocket URLs so the emulator can reach the host Vite server.
       (function () {
         var host = window.location.hostname;
         var isDevProxy =
@@ -34,15 +34,26 @@
           return;
         }
 
-        var hmrHost = "127.0.0.1";
+        // Emulator → host loopback. Works with Vite on 127.0.0.1 or 0.0.0.0
+        // without requiring `adb reverse` (unlike device localhost).
+        // Physical devices: prefer `npm run android:dev` (adb reverse) and set
+        // window.__TM2_HMR_HOST__ = "127.0.0.1" before this script if needed.
+        var isAndroid = /Android/i.test(navigator.userAgent || "");
+        var hmrHost =
+          typeof window.__TM2_HMR_HOST__ === "string" && window.__TM2_HMR_HOST__
+            ? window.__TM2_HMR_HOST__
+            : isAndroid
+              ? "10.0.2.2"
+              : "127.0.0.1";
+
         function rewriteWsUrl(url) {
           if (typeof url !== "string") {
             return url;
           }
-          // With `adb reverse`, device localhost reaches the host Vite/HMR ports.
           return url
             .replace(/tauri\.localhost/gi, hmrHost)
             .replace(/\/\/localhost/gi, "//" + hmrHost)
+            .replace(/\/\/127\.0\.0\.1/gi, "//" + hmrHost)
             .replace(/\/\/10\.0\.2\.2/gi, "//" + hmrHost)
             .replace(/\/\/10\.2\.0\.2/gi, "//" + hmrHost);
         }
@@ -50,10 +61,15 @@
         var NativeWebSocket = window.WebSocket;
         function PatchedWebSocket(url, protocols) {
           var rewritten = rewriteWsUrl(url);
-          if (protocols !== undefined) {
-            return new NativeWebSocket(rewritten, protocols);
-          }
-          return new NativeWebSocket(rewritten);
+          var socket =
+            protocols !== undefined
+              ? new NativeWebSocket(rewritten, protocols)
+              : new NativeWebSocket(rewritten);
+          // Vite's client rejects if HMR never opens; keep app boot usable.
+          socket.addEventListener("error", function () {
+            /* HMR optional on mobile — HTTP still loads via Tauri proxy */
+          });
+          return socket;
         }
         PatchedWebSocket.prototype = NativeWebSocket.prototype;
         PatchedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
@@ -62,7 +78,12 @@
         PatchedWebSocket.CLOSED = NativeWebSocket.CLOSED;
         window.WebSocket = PatchedWebSocket;
 
-        console.log("[TM2] dev proxy shim active", window.location.href);
+        console.log(
+          "[TM2] dev proxy shim active",
+          window.location.href,
+          "hmr→",
+          hmrHost,
+        );
       })();
     </script>
     <div id="root">

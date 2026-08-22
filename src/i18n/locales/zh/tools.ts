@@ -67,6 +67,8 @@ const tools = {
     versionTargetDescription: "选择目标游戏版本和处理并发数",
     previousGameVersion: "此前的游戏版本",
     concurrentGamesheets: "并发 gamesheet 数",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "光晕参数",

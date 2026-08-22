@@ -1,3 +1,4 @@
+mod android_storage;
 mod core;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -240,6 +241,49 @@ async fn clear_geometry_dash_dir(
         )
     })
     .await
+}
+
+#[tauri::command]
+fn android_check_all_files_access(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+) -> Result<bool, String> {
+    access.check_all_files_access()
+}
+
+#[tauri::command]
+fn android_request_all_files_access(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+) -> Result<(), String> {
+    access.request_all_files_access()
+}
+
+#[tauri::command]
+fn android_probe_geode_paths() -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "android")]
+    {
+        let paths = crate::core::game_files::probe_android_geode_paths();
+        return serde_json::to_value(paths).map_err(|err| err.to_string());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(serde_json::json!([]))
+    }
+}
+
+#[tauri::command]
+fn android_pick_folder(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    import_to_sandbox: Option<bool>,
+) -> Result<Option<String>, String> {
+    access.pick_folder(import_to_sandbox.unwrap_or(true))
+}
+
+#[tauri::command]
+fn android_pick_file(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    extensions: Option<Vec<String>>,
+) -> Result<Option<String>, String> {
+    access.pick_file(extensions)
 }
 
 #[tauri::command]
@@ -871,6 +915,7 @@ pub fn run() {
     }
 
     builder
+        .plugin(crate::android_storage::init())
         .setup(|app| {
             #[cfg(target_os = "android")]
             {
@@ -900,6 +945,11 @@ pub fn run() {
             set_geometry_dash_dir,
             clear_geometry_dash_dir,
             redetect_geometry_dash_dir,
+            android_check_all_files_access,
+            android_request_all_files_access,
+            android_probe_geode_paths,
+            android_pick_folder,
+            android_pick_file,
             open_path_in_os,
             get_game_files_layout,
             discover_pack_install,

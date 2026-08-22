@@ -118,6 +118,8 @@ const navigation = {
       "Installing into a live Geometry Dash / Geode folder is desktop-only. Create and export packs here, then install them on PC.",
     packInstallComingSoon:
       "Pack install UI is available here. Connecting it to device folders comes later — create and export still work now.",
+    packInstallGeodePath:
+      "Installs into Geode on this device (Android/media/com.geode.launcher/game/geode). Convert to latest version needs game Resources and stays desktop-only.",
   },
 } as const;
 

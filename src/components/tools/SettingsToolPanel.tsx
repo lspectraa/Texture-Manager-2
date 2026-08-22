@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   CheckCircle2,
   FolderOpen,
@@ -30,7 +29,9 @@ import type {
 } from "../../domain/settings";
 import { APP_LANGUAGES } from "../../i18n/languages";
 import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages";
+import { androidRequestAllFilesAccess } from "../../services/tauriAndroidStorage";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { pickUserFile } from "../../services/tauriPicker";
 import { isDesktopPlatform, isMobileShell } from "../../utils/platform";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
@@ -205,17 +206,12 @@ export function SettingsToolPanel({
     if (busy || !isTauriRuntime()) {
       return;
     }
-    const selected = await open({
-      multiple: false,
+    const selected = await pickUserFile({
       title: t("background.custom.addTitle"),
-      filters: [
-        {
-          name: t("background.custom.imageFilter"),
-          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
-        },
-      ],
+      extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+      filterName: t("background.custom.imageFilter"),
     });
-    if (typeof selected !== "string" || !selected) {
+    if (!selected) {
       return;
     }
     onAddCustomAppBackground(selected);
@@ -572,7 +568,11 @@ export function SettingsToolPanel({
 
           <ToolSection
             title={t("geometryDash.title")}
-            subtitle={t("geometryDash.subtitle")}
+            subtitle={
+              mobileShell
+                ? t("geometryDash.subtitleMobile")
+                : t("geometryDash.subtitle")
+            }
             icon={HardDrive}
             className="tm-settings-section-gd"
           >
@@ -599,14 +599,18 @@ export function SettingsToolPanel({
               value={draftPath}
               onChange={setDraftPath}
               pickFolder={pickFolder}
-              placeholder="C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
+              placeholder={
+                mobileShell
+                  ? "/storage/emulated/0/Android/media/com.geode.launcher/game/geode"
+                  : "C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
+              }
               onBrowse={(path) => {
                 setDraftPath(path);
                 onGeometryDashPathSelected(path);
               }}
             />
 
-            {!settings.geometryDashDetected ? (
+            {!settings.geometryDashDetected || mobileShell ? (
               <p className="tm-settings-meta-path">
                 {mobileShell
                   ? t("geometryDash.androidHint")
@@ -615,6 +619,21 @@ export function SettingsToolPanel({
             ) : null}
 
             <div className="tm-settings-actions">
+              {mobileShell ? (
+                <button
+                  type="button"
+                  className="tm-settings-action-btn"
+                  disabled={busy}
+                  onClick={() => {
+                    void androidRequestAllFilesAccess().catch(() => {
+                      // Settings error path still allows manual redetect.
+                    });
+                  }}
+                >
+                  <FolderOpen size={14} strokeWidth={1.9} />
+                  {t("geometryDash.grantAllFilesAccess")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -633,7 +652,6 @@ export function SettingsToolPanel({
                 <RotateCcw size={14} strokeWidth={1.9} />
                 {t("geometryDash.clearOverride")}
               </button>
-              {mobileShell ? null : (
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -643,7 +661,6 @@ export function SettingsToolPanel({
                 <RefreshCw size={14} strokeWidth={1.9} />
                 {t("geometryDash.redetect")}
               </button>
-              )}
             </div>
           </ToolSection>
         </div>

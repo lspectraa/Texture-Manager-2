@@ -77,6 +77,8 @@ const tools: AppLocaleResources["tools"] = {
       "Выберите целевую версию игры и количество параллельных операций",
     previousGameVersion: "Предыдущая версия игры",
     concurrentGamesheets: "Одновременно обрабатываемых атласов",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Параметры свечения",

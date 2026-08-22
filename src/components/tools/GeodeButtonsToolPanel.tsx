@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
-import { open } from "@tauri-apps/plugin-dialog";
+import { pickUserFile } from "../../services/tauriPicker";
 import { useTranslation } from "react-i18next";
 import type {
   GeodeButtonsOptions,
@@ -9,6 +9,7 @@ import type {
   GeodeButtonsVariantRule,
   HsvDelta,
 } from "../../domain/operations";
+import type { AppSettingsView } from "../../domain/settings";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { isMobileShell } from "../../utils/platform";
 import {
@@ -18,6 +19,7 @@ import {
   getGeodeButtonsTemplatePreviewDataUrl,
   GeodeButtonsTargetGroup,
 } from "../../services/tauriGeodeButtons";
+import { AndroidGeodeAccessBanner } from "./AndroidGeodeAccessBanner";
 import { PickFolderFn } from "./types";
 import {
   FolderPathField,
@@ -35,6 +37,8 @@ type GeodeButtonsToolPanelProps = {
   onOutputDirChange: (value: string) => void;
   onOptionsChange: (next: GeodeButtonsOptions) => void;
   pickFolder: PickFolderFn;
+  geometryDashFound?: boolean;
+  onAppSettingsUpdated?: (settings: AppSettingsView) => void;
 };
 
 const defaultHsv = (): HsvDelta => ({ hueDeg: 0, satDelta: 0, valDelta: 0 });
@@ -488,6 +492,8 @@ export function GeodeButtonsToolPanel({
   onOutputDirChange,
   onOptionsChange,
   pickFolder,
+  geometryDashFound = false,
+  onAppSettingsUpdated,
 }: GeodeButtonsToolPanelProps) {
   const { t } = useTranslation(["tools", "errors"]);
   const [plistPath, setPlistPath] = useState<string>("");
@@ -599,14 +605,21 @@ export function GeodeButtonsToolPanel({
         setTargetsError(t("errors:runtime.filePickerUnavailable"));
         return;
       }
-      const selected = await open({
-        multiple: false,
-        directory: false,
-        title: t("geodeButtons.selectTemplatePngDialog"),
-        filters: [{ name: "PNG", extensions: ["png"] }],
-      });
-      if (typeof selected === "string" && selected.trim()) {
-        assign(selected);
+      try {
+        const selected = await pickUserFile({
+          title: t("geodeButtons.selectTemplatePngDialog"),
+          extensions: ["png"],
+          filterName: "PNG",
+        });
+        if (selected) {
+          assign(selected);
+        }
+      } catch (err: unknown) {
+        setTargetsError(
+          err instanceof Error
+            ? err.message
+            : t("errors:runtime.filePickerUnavailable"),
+        );
       }
     },
     [t],
@@ -633,17 +646,24 @@ export function GeodeButtonsToolPanel({
       setTargetsError(t("errors:runtime.filePickerUnavailable"));
       return;
     }
-    const selected = await open({
-      multiple: false,
-      directory: false,
-      title: t("geodeButtons.selectInputGamesheetDialog"),
-      filters: [{ name: "Plist", extensions: ["plist"] }],
-    });
-    if (typeof selected !== "string" || !selected.trim()) {
-      return;
+    try {
+      const selected = await pickUserFile({
+        title: t("geodeButtons.selectInputGamesheetDialog"),
+        extensions: ["plist"],
+        filterName: "Plist",
+      });
+      if (!selected) {
+        return;
+      }
+      setUseCustomSheet(true);
+      applyPlistSelection(selected);
+    } catch (err: unknown) {
+      setTargetsError(
+        err instanceof Error
+          ? err.message
+          : t("errors:runtime.filePickerUnavailable"),
+      );
     }
-    setUseCustomSheet(true);
-    applyPlistSelection(selected);
   }, [applyPlistSelection, t]);
 
   useEffect(() => {
@@ -653,14 +673,16 @@ export function GeodeButtonsToolPanel({
         if (!alive) return;
         if (resolved?.trim()) {
           onInputDirChange(resolved);
-        } else {
-          setTargetsError(
-            t("errors:geodeButtons.gameFilesNotFound"),
-          );
+        } else if (!mobileShell) {
+          setTargetsError(t("errors:geodeButtons.gameFilesNotFound"));
         }
       })
       .catch((err: unknown) => {
         if (!alive) return;
+        if (mobileShell) {
+          // Banner handles mobile Geode / storage messaging.
+          return;
+        }
         setTargetsError(
           err instanceof Error
             ? err.message
@@ -670,7 +692,28 @@ export function GeodeButtonsToolPanel({
     return () => {
       alive = false;
     };
-  }, [onInputDirChange, t]);
+  }, [mobileShell, onInputDirChange, t]);
+
+  useEffect(() => {
+    if (!mobileShell || !geometryDashFound || inputDir.trim()) {
+      return;
+    }
+    let alive = true;
+    getGeodeButtonsDefaultInputDir()
+      .then((resolved) => {
+        if (!alive || !resolved?.trim()) {
+          return;
+        }
+        onInputDirChange(resolved);
+        setTargetsError(null);
+      })
+      .catch(() => {
+        // Keep existing error from the first resolve attempt.
+      });
+    return () => {
+      alive = false;
+    };
+  }, [geometryDashFound, inputDir, mobileShell, onInputDirChange]);
 
   useEffect(() => {
     if (useCustomSheet) {
@@ -904,6 +947,24 @@ export function GeodeButtonsToolPanel({
     <ToolPage accent="cyan" wide>
       <ToolPageHeader toolId="geodeButtons" />
 
+      {mobileShell ? (
+        <AndroidGeodeAccessBanner
+          geometryDashFound={geometryDashFound}
+          onSettingsUpdated={(settings) => {
+            onAppSettingsUpdated?.(settings);
+            if (settings.geometryDashFound) {
+              setTargetsError(null);
+            }
+          }}
+        />
+      ) : null}
+
+      {targetsError ? (
+        <p className="tm-tool-inline-error" role="alert">
+          {targetsError}
+        </p>
+      ) : null}
+
       <ToolSection
         title={t("common.sourceAndOutput")}
         subtitle={t("geodeButtons.sourceDescription")}
@@ -929,12 +990,12 @@ export function GeodeButtonsToolPanel({
           label={t("common.outputDirectory")}
           value={outputDir}
           onChange={onOutputDirChange}
-          pickFolder={pickFolder}
+          pickFolder={(assign, options) =>
+            pickFolder(assign, { ...options, importToSandbox: false })
+          }
           placeholder="C:/path/to/output"
         />
       </ToolSection>
-
-      {targetsError ? <p className="tm-tool-inline-error">{targetsError}</p> : null}
 
       <div
         className={`tm-geode-workspace${

@@ -55,6 +55,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "기본 Resources와 Geode 경로에 사용되는 Steam 설치",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "찾을 수 없음",
     manualOverride: "수동 지정",
     autoDetected: "자동 감지됨",
@@ -64,7 +65,8 @@ const settings = {
     installLocation: "설치 위치",
     browseHint: "Geometry Dash 폴더를 찾아보거나, Steam으로 설치한 뒤 다시 감지하세요.",
     androidHint:
-      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "경로 적용",
     clearOverride: "수동 지정 해제",
     redetect: "다시 감지",

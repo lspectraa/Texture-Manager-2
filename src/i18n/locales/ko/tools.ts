@@ -68,6 +68,8 @@ const tools = {
     versionTargetDescription: "대상 게임 버전과 처리 동시성을 선택하세요",
     previousGameVersion: "이전 게임 버전",
     concurrentGamesheets: "동시 게임시트 수",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "글로우 매개변수",

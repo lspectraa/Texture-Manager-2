@@ -183,8 +183,15 @@ export function isUpcomingTool(toolId: AppToolId): boolean {
   return getToolMeta(toolId)?.upcoming === true;
 }
 
-/** Tools that require desktop GPU / OS features and are omitted from the mobile shell. */
-const DESKTOP_ONLY_TOOLS: ReadonlySet<AppToolId> = new Set(["upscaler"]);
+/**
+ * Tools omitted from the mobile shell.
+ * - `upscaler`: desktop Vulkan sidecars
+ * - `convertToNewVersion`: needs Geometry Dash `Resources` (not accessible on Android)
+ */
+const DESKTOP_ONLY_TOOLS: ReadonlySet<AppToolId> = new Set([
+  "upscaler",
+  "convertToNewVersion",
+]);
 
 export function isDesktopOnlyTool(toolId: AppToolId): boolean {
   return DESKTOP_ONLY_TOOLS.has(toolId);

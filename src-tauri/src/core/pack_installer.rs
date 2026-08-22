@@ -289,6 +289,13 @@ where
         return Err(geometry_dash_required_error());
     }
 
+    #[cfg(target_os = "android")]
+    if options.convert_to_latest_version {
+        return Err(AppError::InvalidOperation(
+            "Convert to Latest Version is not available on Android (Geometry Dash Resources are inaccessible)",
+        ));
+    }
+
     if options.convert_to_latest_version && options.game_version.trim().is_empty() {
         return Err(AppError::InvalidOperation(
             "previous game version is required when Convert to Latest Version is enabled",
@@ -878,6 +885,13 @@ where
 {
     if !layout.geometry_dash_found() {
         return Err(geometry_dash_required_error());
+    }
+
+    #[cfg(target_os = "android")]
+    if matches!(kind, PackOperationKind::ConvertToNewVersion) {
+        return Err(AppError::InvalidOperation(
+            "Convert to Latest Version is not available on Android (Geometry Dash Resources are inaccessible)",
+        ));
     }
 
     let dir = resolve_installed_pack_dir(pack_dir, layout)?;

@@ -1,4 +1,4 @@
-import { FolderInput, FolderOutput } from "lucide-react";
+import { FolderInput } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { allocateOutputDir } from "../../../services/tauriMobileFs";
 import { isMobileShell } from "../../../utils/platform";
@@ -34,18 +34,15 @@ export function ToolPathsSection({
   const { t } = useTranslation("tools");
   const mobile = isMobileShell();
 
-  const resolveOutputFolder: PickFolderFn = (assign) => {
+  const resolveOutputFolder: PickFolderFn = (assign, options) => {
     if (pickOutputFolder) {
-      return pickOutputFolder(assign);
+      return pickOutputFolder(assign, options);
     }
-    if (mobile) {
-      return allocateOutputDir(outputToolId).then((dir) => {
-        if (dir.trim()) {
-          assign(dir);
-        }
-      });
-    }
-    return pickFolder(assign);
+    // Prefer a real user-chosen folder (writable with all-files access on Android).
+    return pickFolder(assign, {
+      ...options,
+      importToSandbox: false,
+    });
   };
 
   return (
@@ -67,6 +64,7 @@ export function ToolPathsSection({
             return;
           }
           if (mobile) {
+            // Default output into app sandbox so a run can complete without a second pick.
             void allocateOutputDir(outputToolId).then((dir) => {
               if (dir.trim()) {
                 onOutputDirChange(dir);
@@ -86,10 +84,9 @@ export function ToolPathsSection({
         pickFolder={resolveOutputFolder}
         placeholder={outputPlaceholder}
       />
-      <p className="tm-tool-section-note">
-        <FolderOutput size={14} aria-hidden />
-        {mobile ? t("common.mobileOutputNote") : t("common.outputMirroringNote")}
-      </p>
+      {!mobile ? (
+        <p className="tm-tool-section-note">{t("common.outputMirroringNote")}</p>
+      ) : null}
     </ToolSection>
   );
 }

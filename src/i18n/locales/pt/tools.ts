@@ -69,6 +69,8 @@ const tools = {
       "Escolha a versão de destino do jogo e a concorrência de processamento",
     previousGameVersion: "Versão anterior do jogo",
     concurrentGamesheets: "Gamesheets simultâneos",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Parâmetros do brilho",

@@ -77,6 +77,8 @@ const tools: AppLocaleResources["tools"] = {
       "Elige la versión de destino del juego y la cantidad de procesos simultáneos",
     previousGameVersion: "Versión anterior del juego",
     concurrentGamesheets: "Gamesheets simultáneos",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Parámetros de brillo",

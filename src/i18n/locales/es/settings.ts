@@ -56,6 +56,7 @@ const settings: AppLocaleResources["settings"] = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "La carpeta de Geometry Dash usada para archivos del juego y Geode",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "No encontrado",
     manualOverride: "Configuración manual",
     autoDetected: "Detectado automáticamente",
@@ -66,7 +67,8 @@ const settings: AppLocaleResources["settings"] = {
     browseHint:
       "Busca la carpeta de Geometry Dash o instálalo mediante Steam y vuelve a detectarlo.",
     androidHint:
-      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "Aplicar ruta",
     clearOverride: "Borrar configuración manual",
     redetect: "Volver a detectar",

@@ -28,6 +28,7 @@ export default defineConfig(async () => ({
     hmr: isMobileDev
       ? {
           protocol: "ws",
+          // Client URL is rewritten in index.html (10.0.2.2 on Android emulator).
           port: 1421,
           clientPort: 1421,
         }

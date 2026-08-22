@@ -7,7 +7,7 @@ const tools = {
     outputMirroringNote:
       "If output is empty, choosing an input folder uses that same folder for output.",
     mobileOutputNote:
-      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
+      "Browse picks a real folder when All files access is granted. Leaving output empty after choosing input uses app storage; export a zip from Run Output when done.",
     runOperation: "Run Operation",
     running: "Running…",
     range1To64: "1–64",
@@ -66,6 +66,8 @@ const tools = {
       "Choose the pack’s current game version and how many sheets to work on at once.",
     previousGameVersion: "Previous game version",
     concurrentGamesheets: "Sheets at once",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Glow Parameters",

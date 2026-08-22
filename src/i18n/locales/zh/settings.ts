@@ -53,6 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "用于游戏文件和 Geode 的 Geometry Dash 文件夹",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "未找到",
     manualOverride: "手动指定",
     autoDetected: "自动检测",
@@ -62,7 +63,8 @@ const settings = {
     installLocation: "安装位置",
     browseHint: "浏览到你的 Geometry Dash 文件夹，或通过 Steam 安装后重新检测。",
     androidHint:
-      "Geometry Dash is not installed on the phone. Batch tools import files into the app sandbox instead.",
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "应用路径",
     clearOverride: "清除手动指定",
     redetect: "重新检测",

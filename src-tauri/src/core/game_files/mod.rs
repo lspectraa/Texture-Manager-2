@@ -25,8 +25,13 @@ const UNRESOLVED_GD_DIR_NAME: &str = "_unresolved_geometry_dash";
 /// Clear user-facing error when a tool needs Geometry Dash but it is missing.
 pub fn geometry_dash_required_error() -> AppError {
     AppError::IoError(
-        "Geometry Dash is not configured. Open Settings and set or detect the install path."
-            .to_string(),
+        if cfg!(target_os = "android") {
+            "Geode folder not found. Open Settings, grant all-files access if needed, then Re-detect Android/media/com.geode.launcher/game/geode."
+                .to_string()
+        } else {
+            "Geometry Dash is not configured. Open Settings and set or detect the install path."
+                .to_string()
+        },
     )
 }
 
@@ -35,6 +40,8 @@ pub struct GameFilesLayout {
     /// User-owned cache/legacy root (`~/TextureManager2/game-files`).
     pub root: PathBuf,
     /// Geometry Dash install root (Steam `.../common/Geometry Dash`).
+    /// On Android this is the Geode media `game` folder
+    /// (`…/Android/media/com.geode.launcher/game`).
     pub geometry_dash_dir: PathBuf,
     /// Vanilla textures: `{GD}/Resources` (also exposed as `current` for UI defaults).
     pub resources: PathBuf,
@@ -54,7 +61,18 @@ impl GameFilesLayout {
     }
 
     pub fn geometry_dash_found(&self) -> bool {
-        looks_like_geometry_dash_dir(&self.geometry_dash_dir)
+        if looks_like_geometry_dash_dir(&self.geometry_dash_dir) {
+            return true;
+        }
+        // Android: vanilla Resources are inaccessible; Geode media alone is enough.
+        #[cfg(target_os = "android")]
+        {
+            return looks_like_geode_dir(&self.geometry_dash_dir.join("geode"));
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            false
+        }
     }
 
     /// `{GD}/geode/config`
@@ -69,18 +87,13 @@ impl GameFilesLayout {
 
     /// `{GD}/geode/config/geode.texture-loader/packs`
     ///
-    /// On Android there is no live Geode install — packs live under the sandbox.
+    /// On Android, `geometry_dash_dir` is the Geode media `game` folder
+    /// (`…/Android/media/com.geode.launcher/game`), so this resolves under the
+    /// live Geode tree the same way as desktop.
     pub fn texture_loader_packs(&self) -> PathBuf {
-        #[cfg(target_os = "android")]
-        {
-            return self.root.join("packs");
-        }
-        #[cfg(not(target_os = "android"))]
-        {
-            self.geode_config()
-                .join("geode.texture-loader")
-                .join("packs")
-        }
+        self.geode_config()
+            .join("geode.texture-loader")
+            .join("packs")
     }
 
     pub fn to_dto(&self) -> GameFilesLayoutDto {
@@ -288,6 +301,139 @@ pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
         || resources.join("GJ_GameSheet.plist").is_file();
 
     has_binary || has_textures
+}
+
+/// True when `path` looks like a Geode data root (`config` / `resources` / `mods` / `unzipped`).
+///
+/// On Android this is `…/Android/media/com.geode.launcher/game/geode` on internal storage
+/// (`/storage/emulated/0/...`). An existing `geode` directory counts even before first launch
+/// creates the usual subfolders.
+pub fn looks_like_geode_dir(path: &Path) -> bool {
+    if path.as_os_str().is_empty() {
+        return false;
+    }
+    if ensure_no_parent_dir_components(path).is_err() {
+        return false;
+    }
+    if !path.is_dir() {
+        return false;
+    }
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .eq_ignore_ascii_case("geode");
+    if name {
+        return true;
+    }
+    path.join("config").is_dir()
+        || path.join("resources").is_dir()
+        || path.join("mods").is_dir()
+        || path.join("unzipped").is_dir()
+}
+
+/// Geode launcher shared media tree on Android (`…/game`), parent of `geode/`.
+#[cfg(target_os = "android")]
+const ANDROID_GEODE_PACKAGE_IDS: &[&str] = &["com.geode.launcher", "com.geode.launcher.play"];
+
+#[cfg(target_os = "android")]
+fn android_geode_media_candidates() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(ext) = std::env::var("EXTERNAL_STORAGE") {
+        let trimmed = ext.trim();
+        if !trimmed.is_empty() {
+            push_unique(&mut roots, PathBuf::from(trimmed));
+        }
+    }
+    push_unique(&mut roots, PathBuf::from("/storage/emulated/0"));
+    push_unique(&mut roots, PathBuf::from("/sdcard"));
+
+    for root in roots {
+        for package in ANDROID_GEODE_PACKAGE_IDS {
+            push_unique(
+                &mut out,
+                root.join("Android")
+                    .join("media")
+                    .join(package)
+                    .join("game")
+                    .join("geode"),
+            );
+        }
+    }
+    out
+}
+
+/// Detect the Android Geometry Dash / Geode `game` folder (parent of `geode/`).
+///
+/// Looks under phone internal storage, e.g.
+/// `/storage/emulated/0/Android/media/com.geode.launcher/game/geode`.
+#[cfg(target_os = "android")]
+pub fn detect_android_geometry_dash_dir() -> Option<PathBuf> {
+    for geode in android_geode_media_candidates() {
+        if looks_like_geode_dir(&geode) {
+            return geode.parent().map(|parent| parent.to_path_buf());
+        }
+        // Parent `game` folder with a `geode` child that exists but failed the
+        // stricter check above (e.g. empty after install).
+        if let Some(game) = geode.parent() {
+            if geode.exists() || game.join("geode").is_dir() {
+                return Some(game.to_path_buf());
+            }
+        }
+    }
+    None
+}
+
+/// Diagnostic listing of Geode candidate paths on Android internal storage.
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidGeodePathProbe {
+    pub path: String,
+    pub exists: bool,
+    pub is_dir: bool,
+    pub looks_like_geode: bool,
+}
+
+#[cfg(target_os = "android")]
+pub fn probe_android_geode_paths() -> Vec<AndroidGeodePathProbe> {
+    android_geode_media_candidates()
+        .into_iter()
+        .map(|path| AndroidGeodePathProbe {
+            exists: path.exists(),
+            is_dir: path.is_dir(),
+            looks_like_geode: looks_like_geode_dir(&path),
+            path: path.to_string_lossy().to_string(),
+        })
+        .collect()
+}
+
+/// Accept a user path that is either a GD install root or (on Android) the `geode` folder.
+fn normalize_geometry_dash_user_path(path: PathBuf) -> PathBuf {
+    #[cfg(target_os = "android")]
+    {
+        if looks_like_geode_dir(&path) {
+            if let Some(parent) = path.parent() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+    path
+}
+
+fn accepts_geometry_dash_dir(path: &Path) -> bool {
+    if looks_like_geometry_dash_dir(path) {
+        return true;
+    }
+    #[cfg(target_os = "android")]
+    {
+        return looks_like_geode_dir(&path.join("geode"));
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        false
+    }
 }
 
 fn home_dir() -> Option<PathBuf> {
@@ -616,9 +762,9 @@ pub fn resolve_geometry_dash_dir_with_override(
     if let Ok(env_override) = std::env::var("TM_GEOMETRY_DASH_DIR") {
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
-            let path = PathBuf::from(trimmed);
+            let path = normalize_geometry_dash_user_path(PathBuf::from(trimmed));
             ensure_user_absolute_path(&path)?;
-            if looks_like_geometry_dash_dir(&path) {
+            if accepts_geometry_dash_dir(&path) {
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
@@ -631,15 +777,22 @@ pub fn resolve_geometry_dash_dir_with_override(
     if let Some(override_path) = settings_override {
         let trimmed = override_path.trim();
         if !trimmed.is_empty() {
-            let path = PathBuf::from(trimmed);
+            let path = normalize_geometry_dash_user_path(PathBuf::from(trimmed));
             ensure_user_absolute_path(&path)?;
-            if looks_like_geometry_dash_dir(&path) {
+            if accepts_geometry_dash_dir(&path) {
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
                 "Configured Geometry Dash folder does not look like an install: {}",
                 shorten_path_for_display(&path)
             )));
+        }
+    }
+
+    #[cfg(target_os = "android")]
+    {
+        if let Some(dir) = detect_android_geometry_dash_dir() {
+            return Ok(dir);
         }
     }
 
@@ -658,7 +811,7 @@ pub fn resolve_geometry_dash_dir_with_override(
 
     Err(AppError::IoError(
         if cfg!(target_os = "android") {
-            "Geometry Dash auto-detect is not available on Android. Import packs into the app instead."
+            "Geode folder not found. Install Geometry Dash via Geode Launcher, or set Android/media/com.geode.launcher/game/geode in Settings."
                 .to_string()
         } else {
             "Geometry Dash installation not found. Set the path in Settings or TM_GEOMETRY_DASH_DIR."
@@ -730,11 +883,17 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
     {
         resolve_geometry_dash_dir_with_override(override_path.as_deref())
             .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
-    } else if cfg!(target_os = "android") {
-        root.join(UNRESOLVED_GD_DIR_NAME)
     } else {
-        // Populate the detection cache so the first Settings IPC does not walk Steam again.
-        detect_geometry_dash_dir().unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+        #[cfg(target_os = "android")]
+        {
+            detect_android_geometry_dash_dir()
+                .unwrap_or_else(|| root.join(UNRESOLVED_GD_DIR_NAME))
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            // Populate the detection cache so the first Settings IPC does not walk Steam again.
+            detect_geometry_dash_dir().unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+        }
     };
 
     let layout = layout_from_parts(root, geometry_dash_dir);
@@ -1388,6 +1547,31 @@ mod tests {
             current_split: root.join("split-cache"),
             legacy: root.join("legacy"),
         }
+    }
+
+    #[test]
+    fn looks_like_geode_dir_requires_known_subdir() {
+        let root = temp_game_files_root("geode_shape");
+        let empty = root.join("empty_geode");
+        fs::create_dir_all(&empty).expect("empty");
+        assert!(!looks_like_geode_dir(&empty));
+
+        let named_geode = root.join("geode");
+        fs::create_dir_all(&named_geode).expect("named");
+        assert!(
+            looks_like_geode_dir(&named_geode),
+            "a directory literally named geode counts on Android media trees"
+        );
+
+        let with_config = root.join("with_config");
+        fs::create_dir_all(with_config.join("config")).expect("config");
+        assert!(looks_like_geode_dir(&with_config));
+
+        let with_resources = root.join("with_resources");
+        fs::create_dir_all(with_resources.join("resources")).expect("resources");
+        assert!(looks_like_geode_dir(&with_resources));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
