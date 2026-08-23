@@ -38,6 +38,9 @@ const navigation: AppLocaleResources["navigation"] = {
     toolsAvailableAria: "Доступно инструментов: {{count}}",
     comingSoonCount: "+{{count}} скоро",
     cardComingSoon: "Скоро",
+    aboutTitle: "О программе",
+    aboutSubtitle: "Авторские права, лицензия и ссылки",
+    aboutCardLabel: "Авторские права и сведения",
   },
   sections: {
     design: {

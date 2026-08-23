@@ -1,6 +1,7 @@
-import { ArrowRight, Clock3 } from "lucide-react";
+import { ArrowRight, Clock3, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { COPYRIGHT_HOLDER, COPYRIGHT_YEAR } from "../config/appMeta";
 import {
   AppToolId,
   MOBILE_TOOL_COUNT,
@@ -23,6 +24,8 @@ import { TranslationQualityNotice } from "./TranslationQualityNotice";
 
 type HomeScreenProps = {
   onSelectTool: (toolId: AppToolId) => void;
+  /** Opens the About / copyright dialog (shown on mobile home footer). */
+  onAboutClick?: () => void;
 };
 
 function readSplashGroup(t: (key: string, options: { returnObjects: true }) => unknown, group: HomeSplashGroup): string[] {
@@ -33,9 +36,10 @@ function readSplashGroup(t: (key: string, options: { returnObjects: true }) => u
   return value.map((item) => String(item));
 }
 
-export function HomeScreen({ onSelectTool }: HomeScreenProps) {
+export function HomeScreen({ onSelectTool, onAboutClick }: HomeScreenProps) {
   const { t, i18n } = useTranslation("navigation");
   const mobileShell = isMobileShell();
+  const showAbout = Boolean(mobileShell && onAboutClick);
   const visibleToolCount = mobileShell ? MOBILE_TOOL_COUNT : TOOL_COUNT;
   const titles = useMemo(() => {
     const collected = collectHomeSplashTitles(homeSplashGroupsForDate(new Date()), (group) =>
@@ -181,6 +185,51 @@ export function HomeScreen({ onSelectTool }: HomeScreenProps) {
             </section>
           );
         })}
+
+        {showAbout ? (
+          <section
+            className="tm-home-section tm-home-section-sky tm-home-section-about"
+            aria-labelledby="home-section-about"
+          >
+            <div className="tm-home-section-head">
+              <span className="tm-home-section-icon" aria-hidden>
+                <Info size={18} strokeWidth={1.85} />
+              </span>
+              <div>
+                <h3 id="home-section-about" className="tm-home-section-title">
+                  {t("homeScreen.aboutTitle")}
+                </h3>
+                <p className="tm-home-section-subtitle">{t("homeScreen.aboutSubtitle")}</p>
+              </div>
+            </div>
+            <div className="tm-home-card-grid tm-home-card-grid-featured" role="list">
+              <button
+                type="button"
+                className="tm-home-card tm-home-card-sky tm-home-card-featured tm-home-card-about"
+                onClick={onAboutClick}
+                aria-label={t("copyrightAria")}
+                role="listitem"
+              >
+                <GlassFrost className="tm-home-card-frost" />
+                <span className="tm-home-card-icon" aria-hidden>
+                  <Info size={20} strokeWidth={1.75} />
+                </span>
+                <span className="tm-home-card-body">
+                  <span className="tm-home-card-label">{t("homeScreen.aboutCardLabel")}</span>
+                  <span className="tm-home-card-desc">
+                    {t("copyrightTitle", {
+                      holder: COPYRIGHT_HOLDER,
+                      year: COPYRIGHT_YEAR,
+                    })}
+                  </span>
+                </span>
+                <span className="tm-home-card-action" aria-hidden>
+                  <ArrowRight size={18} strokeWidth={2} />
+                </span>
+              </button>
+            </div>
+          </section>
+        ) : null}
       </div>
     </div>
   );

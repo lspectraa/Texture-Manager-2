@@ -48,6 +48,8 @@ const common = {
     thirdPartyNcnn: "ncnn — BSD-3-Clause. Copyright (C) 2017 Tencent.",
     thirdPartyLink: "Voir les mentions tierces",
     thirdPartyHint: "Ouvre NOTICE sur GitHub",
+    linksHeading: "Liens",
+    linksSubtitle: "Code source, vidéos et communauté",
     version: "Version",
     github: "Projet sur GitHub",
     githubHint: "Code source et tickets",

@@ -50,6 +50,8 @@ const common: AppLocaleResources["common"] = {
     thirdPartyNcnn: "ncnn — BSD-3-Clause. Copyright (C) 2017 Tencent.",
     thirdPartyLink: "Ver avisos de terceros",
     thirdPartyHint: "Abre NOTICE en GitHub",
+    linksHeading: "Enlaces",
+    linksSubtitle: "Código, vídeos y comunidad",
     version: "Versión",
     github: "Proyecto en GitHub",
     githubHint: "Código fuente e incidencias",

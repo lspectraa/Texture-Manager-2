@@ -36,6 +36,9 @@ const navigation = {
     toolsAvailableAria: "有 {{count}} 个工具可用",
     comingSoonCount: "还有 {{count}} 个即将推出",
     cardComingSoon: "即将推出",
+    aboutTitle: "关于",
+    aboutSubtitle: "版权、许可与链接",
+    aboutCardLabel: "版权与关于",
   },
   sections: {
     design: {

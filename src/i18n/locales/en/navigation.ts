@@ -73,6 +73,9 @@ const navigation = {
     toolsAvailableAria: "{{count}} tools available",
     comingSoonCount: "+{{count}} coming soon",
     cardComingSoon: "Coming soon",
+    aboutTitle: "About",
+    aboutSubtitle: "Copyright, license, and links",
+    aboutCardLabel: "Copyright & about",
   },
   sections: {
     design: {

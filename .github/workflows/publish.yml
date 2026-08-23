@@ -61,9 +61,98 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Desktop builds of Texture Manager 2 (Windows MSI + macOS DMG for Apple Silicon and Intel)."
+          releaseBody: "Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: false
           args: ${{ matrix.args }}
+
+  publish-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+          link-to-sdk: true
+
+      - name: Install Rust stable (Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          key: android-aarch64
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Sync version from package.json
+        run: npm run sync:version
+
+      - name: Configure Android release signing (optional)
+        working-directory: src-tauri/gen/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "No ANDROID_KEYSTORE_BASE64 secret; release APK will be debug-signed for sideload."
+            exit 0
+          fi
+          if [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is set but ANDROID_KEY_ALIAS / ANDROID_KEYSTORE_PASSWORD are missing."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tm2-release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/tm2-release.jks"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "password=$ANDROID_KEYSTORE_PASSWORD"
+          } > keystore.properties
+          echo "Wrote keystore.properties for release signing."
+
+      - name: Build Android APK and attach to draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+        with:
+          # Use project CLI without the desktop upscaler fetch wrapper.
+          tauriScript: npx tauri
+          mobile: android
+          # Phone-focused arm64 APK (sideload from GitHub Releases).
+          args: --apk --target aarch64
+          tagName: v__VERSION__
+          releaseName: "Texture Manager 2 v__VERSION__"
+          releaseBody: "Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
+          releaseDraft: true
+          prerelease: false
+          # Desktop job owns updater JSON; Android has no updater artifacts.
+          includeUpdaterJson: false
+          uploadUpdaterSignatures: false
+          releaseAssetNamePattern: "[name]-[version]-android-[arch][ext]"

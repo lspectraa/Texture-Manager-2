@@ -36,6 +36,9 @@ const navigation = {
     toolsAvailableAria: "{{count}} ferramentas disponíveis",
     comingSoonCount: "+{{count}} em breve",
     cardComingSoon: "Em breve",
+    aboutTitle: "Sobre",
+    aboutSubtitle: "Copyright, licença e links",
+    aboutCardLabel: "Copyright e sobre",
   },
   sections: {
     design: {

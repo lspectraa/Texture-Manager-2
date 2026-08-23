@@ -1,52 +1,13 @@
 import { useEffect, useId } from "react";
-import {
-  Code2,
-  Cpu,
-  ExternalLink,
-  MessageCircle,
-  Play,
-  Scale,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import {
-  APP_LINKS,
-  APP_LICENSE_SPDX,
-  APP_VERSION,
-  COPYRIGHT_HOLDER,
-  COPYRIGHT_YEAR,
-} from "../config/appMeta";
-import { openExternalUrl } from "../utils/openExternalUrl";
+import { AboutContent } from "./AboutContent";
 import { GlassFrost } from "./GlassFrost";
 
 type CopyrightDialogProps = {
   open: boolean;
   onClose: () => void;
 };
-
-const LINK_ITEMS = [
-  {
-    id: "github",
-    labelKey: "about.github",
-    hintKey: "about.githubHint",
-    url: APP_LINKS.github,
-    icon: Code2,
-  },
-  {
-    id: "youtube",
-    labelKey: "about.youtube",
-    hintKey: "about.youtubeHint",
-    url: APP_LINKS.youtube,
-    icon: Play,
-  },
-  {
-    id: "discord",
-    labelKey: "about.discord",
-    hintKey: "about.discordHint",
-    url: APP_LINKS.discord,
-    icon: MessageCircle,
-  },
-] as const;
 
 export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
   const { t } = useTranslation("common");
@@ -105,155 +66,7 @@ export function CopyrightDialog({ open, onClose }: CopyrightDialogProps) {
         </div>
 
         <div className="tm-copyright-dialog-body">
-          <p className="tm-copyright-dialog-notice">
-            {t("about.copyright", {
-              year: COPYRIGHT_YEAR,
-              holder: COPYRIGHT_HOLDER,
-            })}
-          </p>
-          <p className="tm-copyright-dialog-copy">{t("about.description")}</p>
-
-          <div className="tm-copyright-dialog-panels">
-            <section
-              className="tm-copyright-dialog-license"
-              aria-label={t("about.licenseHeading")}
-            >
-              <div className="tm-copyright-dialog-license-head">
-                <span className="tm-copyright-dialog-license-icon" aria-hidden>
-                  <Scale size={16} strokeWidth={1.85} />
-                </span>
-                <div className="tm-copyright-dialog-license-titles">
-                  <p className="tm-copyright-dialog-license-heading">
-                    {t("about.licenseHeading")}
-                  </p>
-                  <p className="tm-copyright-dialog-license-name">
-                    {t("about.licenseName")}
-                  </p>
-                </div>
-                <span className="tm-copyright-dialog-license-spdx">
-                  {APP_LICENSE_SPDX}
-                </span>
-              </div>
-              <p className="tm-copyright-dialog-license-summary">
-                {t("about.licenseSummary")}
-              </p>
-              <button
-                type="button"
-                className="tm-copyright-dialog-link tm-copyright-dialog-license-link"
-                onClick={() => {
-                  void openExternalUrl(APP_LINKS.license);
-                }}
-              >
-                <span className="tm-copyright-dialog-link-copy">
-                  <span className="tm-copyright-dialog-link-label">
-                    {t("about.licenseLink")}
-                  </span>
-                  <span className="tm-copyright-dialog-link-hint">
-                    {t("about.licenseHint")}
-                  </span>
-                </span>
-                <ExternalLink
-                  className="tm-copyright-dialog-link-external"
-                  size={14}
-                  strokeWidth={2}
-                  aria-hidden
-                />
-              </button>
-            </section>
-
-            <section
-              className="tm-copyright-dialog-license"
-              aria-label={t("about.thirdPartyHeading")}
-            >
-              <div className="tm-copyright-dialog-license-head">
-                <span className="tm-copyright-dialog-license-icon" aria-hidden>
-                  <Cpu size={16} strokeWidth={1.85} />
-                </span>
-                <div className="tm-copyright-dialog-license-titles">
-                  <p className="tm-copyright-dialog-license-heading">
-                    {t("about.thirdPartyHeading")}
-                  </p>
-                  <p className="tm-copyright-dialog-license-name">
-                    {t("about.thirdPartyName")}
-                  </p>
-                </div>
-                <span className="tm-copyright-dialog-license-spdx">MIT / BSD-3</span>
-              </div>
-              <p className="tm-copyright-dialog-license-summary">
-                {t("about.thirdPartySummary")}
-              </p>
-              <ul className="tm-copyright-dialog-third-party-list">
-                <li>{t("about.thirdPartyWaifu2x")}</li>
-                <li>{t("about.thirdPartyRealesrgan")}</li>
-                <li>{t("about.thirdPartyNcnn")}</li>
-              </ul>
-              <button
-                type="button"
-                className="tm-copyright-dialog-link tm-copyright-dialog-license-link"
-                onClick={() => {
-                  void openExternalUrl(APP_LINKS.thirdPartyNotice);
-                }}
-              >
-                <span className="tm-copyright-dialog-link-copy">
-                  <span className="tm-copyright-dialog-link-label">
-                    {t("about.thirdPartyLink")}
-                  </span>
-                  <span className="tm-copyright-dialog-link-hint">
-                    {t("about.thirdPartyHint")}
-                  </span>
-                </span>
-                <ExternalLink
-                  className="tm-copyright-dialog-link-external"
-                  size={14}
-                  strokeWidth={2}
-                  aria-hidden
-                />
-              </button>
-            </section>
-          </div>
-
-          <div className="tm-copyright-dialog-links">
-            {LINK_ITEMS.map((item) => {
-              const Icon = item.icon;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className="tm-copyright-dialog-link"
-                  onClick={() => {
-                    void openExternalUrl(item.url);
-                  }}
-                >
-                  <span className="tm-copyright-dialog-link-icon" aria-hidden>
-                    <Icon size={17} strokeWidth={1.85} />
-                  </span>
-                  <span className="tm-copyright-dialog-link-copy">
-                    <span className="tm-copyright-dialog-link-label">
-                      {t(item.labelKey)}
-                    </span>
-                    <span className="tm-copyright-dialog-link-hint">
-                      {t(item.hintKey)}
-                    </span>
-                  </span>
-                  <ExternalLink
-                    className="tm-copyright-dialog-link-external"
-                    size={14}
-                    strokeWidth={2}
-                    aria-hidden
-                  />
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="tm-copyright-dialog-footer">
-          <span className="tm-copyright-dialog-version-label">
-            {t("about.version")}
-          </span>
-          <span className="tm-copyright-dialog-version-value">
-            v{APP_VERSION}
-          </span>
+          <AboutContent />
         </div>
       </div>
     </div>

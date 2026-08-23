@@ -17,7 +17,7 @@ import {
 } from "../../config/toolNavigation";
 import { GlassFrost } from "../GlassFrost";
 
-export type MobileNavTarget = "home" | "settings" | AppToolId;
+export type MobileNavTarget = "home" | "settings" | "about" | AppToolId;
 
 type MobileBottomDockProps = {
   selectedTool: MobileNavTarget;
@@ -29,7 +29,7 @@ type MobileBottomDockProps = {
 function currentSection(
   selectedTool: MobileNavTarget,
 ): ToolNavSection | undefined {
-  if (selectedTool === "home" || selectedTool === "settings") {
+  if (selectedTool === "home" || selectedTool === "settings" || selectedTool === "about") {
     return undefined;
   }
   return getToolSection(selectedTool);

@@ -62,6 +62,7 @@ import { MobileBottomDock } from "./components/mobile/MobileBottomDock";
 import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
 import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
+import { AboutToolPanel } from "./components/tools/AboutToolPanel";
 import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
@@ -119,6 +120,7 @@ import type { PickFolderOptions } from "./components/tools/types";
 type PrimaryTool =
   | "home"
   | "settings"
+  | "about"
   | "iconEditor"
   | "splitter"
   | "porter"
@@ -1052,7 +1054,7 @@ function App() {
   }, [report, t]);
 
   const navigateTool = (tool: PrimaryTool): void => {
-    if (tool !== "home" && tool !== "settings") {
+    if (tool !== "home" && tool !== "settings" && tool !== "about") {
       if (isUpcomingTool(tool) || (mobileShell && isDesktopOnlyTool(tool))) {
         return;
       }
@@ -1125,9 +1127,11 @@ function App() {
   const isParticleEditor = selectedTool === "particleEditor";
   const isHome = selectedTool === "home";
   const isSettings = selectedTool === "settings";
+  const isAbout = selectedTool === "about";
   const isGeodeButtons = selectedTool === "geodeButtons";
   const isPackInstaller = selectedTool === "texturePackInstaller";
-  const isToolPanel = !isIconEditor && !isParticleEditor && !isHome && !isSettings;
+  const isToolPanel =
+    !isIconEditor && !isParticleEditor && !isHome && !isSettings && !isAbout;
   const showRunAction = isToolPanel && !isPackInstaller;
   const showOperationAndReport =
     !isIconEditor &&
@@ -1135,6 +1139,7 @@ function App() {
     !isHome &&
     !isGeodeButtons &&
     !isSettings &&
+    !isAbout &&
     !isPackInstaller;
   const showPackMetadataRail = isPackInstaller;
   const showRightRail = showOperationAndReport || showPackMetadataRail;
@@ -1159,8 +1164,11 @@ function App() {
             onSelectTool={(toolId) => {
               navigateTool(toolId);
             }}
+            onAboutClick={() => navigateTool("about")}
           />
         );
+      case "about":
+        return <AboutToolPanel />;
       case "settings":
         return (
           <SettingsToolPanel
@@ -1675,7 +1683,7 @@ function App() {
 
       <section
         className={`tm-layout ${
-          isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings ? "tm-layout-icon-editor" : ""
+          isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings || isAbout ? "tm-layout-icon-editor" : ""
         }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
           showRightRail && isReportCollapsed ? " tm-layout-report-collapsed" : ""
         }${
@@ -1730,7 +1738,7 @@ function App() {
             onExpand={navPanelTransition.expand}
             onCollapse={navPanelTransition.collapse}
             onNavigate={(tool) => {
-              if (tool !== "home" && tool !== "settings" && isUpcomingTool(tool)) {
+              if (tool !== "home" && tool !== "settings" && tool !== "about" && isUpcomingTool(tool)) {
                 return;
               }
               setSelectedTool(tool);
@@ -1750,7 +1758,7 @@ function App() {
           <section
             className={`tm-panel tm-glass-card${
               isIconEditor ? " tm-panel-icon-editor" : ""
-            }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
+            }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings || isAbout ? " tm-panel-tool" : ""}${
               isGeodeButtons ? " tm-panel-geode" : ""
             }${isPackInstaller ? " tm-panel-pack-installer" : ""}${
               mobileShell ? " tm-panel--mobile-flat" : ""

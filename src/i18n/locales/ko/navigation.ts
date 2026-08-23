@@ -36,6 +36,9 @@ const navigation = {
     toolsAvailableAria: "{{count}}개의 도구 사용 가능",
     comingSoonCount: "+{{count}}개 곧 제공",
     cardComingSoon: "곧 제공",
+    aboutTitle: "정보",
+    aboutSubtitle: "저작권, 라이선스 및 링크",
+    aboutCardLabel: "저작권 및 정보",
   },
   sections: {
     design: {
