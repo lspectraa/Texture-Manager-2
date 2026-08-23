@@ -3283,6 +3283,21 @@ export function IconEditorToolPanel() {
 
   const anyMobileSheetOpen =
     mobileFramesOpen || mobileInspectorOpen || mobileColorsOpen;
+  const [sharedBackdropOpen, setSharedBackdropOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileShell) {
+      setSharedBackdropOpen(false);
+      return;
+    }
+    if (anyMobileSheetOpen) {
+      setSharedBackdropOpen(true);
+      return;
+    }
+    const timeout = window.setTimeout(() => setSharedBackdropOpen(false), 360);
+    return () => window.clearTimeout(timeout);
+  }, [anyMobileSheetOpen, mobileShell]);
+
   const mobileChromeRef = useRef<HTMLDivElement | null>(null);
   const [floatingChromeBox, setFloatingChromeBox] = useState<{
     top: number;
@@ -3380,6 +3395,29 @@ export function IconEditorToolPanel() {
       data-inspector-open={mobileShell && mobileInspectorOpen ? "true" : undefined}
       data-colors-open={mobileShell && mobileColorsOpen ? "true" : undefined}
     >
+      {mobileShell && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className={`tm-mobile-sheet-root tm-icon-editor-shared-backdrop${
+                sharedBackdropOpen ? " is-open" : ""
+              }`}
+              aria-hidden={!sharedBackdropOpen}
+            >
+              <button
+                type="button"
+                className={`tm-mobile-sheet-backdrop${sharedBackdropOpen ? " is-open" : ""}`}
+                aria-label={t("navigation:mobile.closeDrawerAria")}
+                tabIndex={sharedBackdropOpen ? 0 : -1}
+                onClick={() => {
+                  if (anyMobileSheetOpen) {
+                    closeMobileSurface();
+                  }
+                }}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
       <header className="tm-icon-editor-top-bar">
         <div className="tm-icon-editor-top-bar-track">
           <div className="tm-icon-editor-top-bar-primary">
@@ -4960,6 +4998,7 @@ export function IconEditorToolPanel() {
                 title={t("viewport.colorsTab")}
                 className="tm-icon-editor-sheet tm-icon-editor-sheet-colors"
                 size="half"
+                showBackdrop={false}
               >
                 <div className="tm-icon-editor-colors-scroll">
                   <div
@@ -5089,6 +5128,7 @@ function IconEditorPanelShell({
         title={title}
         className="tm-icon-editor-sheet"
         size={sheetSize}
+        showBackdrop={false}
       >
         {children}
       </MobileSheet>

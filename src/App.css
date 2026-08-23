@@ -14316,7 +14316,7 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   width: min(100% - 24px, 420px);
 }
 
-/* Shared mobile bottom sheet */
+/* Shared mobile bottom sheet (Icon Editor + Particle Editor) */
 .tm-mobile-sheet-root {
   position: fixed;
   inset: 0;
@@ -14325,6 +14325,15 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 }
 
 .tm-mobile-sheet-root.is-open {
+  pointer-events: auto;
+}
+
+.tm-mobile-sheet-root--no-backdrop {
+  /* Panel still receives clicks; dimming lives on a sibling shared root. */
+  pointer-events: none;
+}
+
+.tm-mobile-sheet-root--no-backdrop.is-open .tm-mobile-sheet.is-open {
   pointer-events: auto;
 }
 
@@ -14337,7 +14346,7 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   background: rgba(6, 10, 22, 0.46);
   opacity: 0;
   pointer-events: none;
-  transition: opacity 220ms var(--tm-shell-slide-ease);
+  transition: opacity 280ms var(--tm-shell-slide-ease);
 }
 
 .tm-mobile-sheet-backdrop.is-open {
@@ -14345,6 +14354,12 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   pointer-events: auto;
 }
 
+/*
+ * Slide only (no opacity on the card) so open/close reads as a real motion.
+ * Beat .tm-glass-frost / glass host transforms with translate3d + !important-free
+ * higher-specificity selectors. Use 100% of the sheet height for the offstage pose.
+ */
+.tm-mobile-sheet.tm-glass-card,
 .tm-mobile-sheet {
   position: absolute;
   left: 8px;
@@ -14356,23 +14371,36 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   border-radius: 18px;
   overflow: hidden;
   padding: 0;
-  transform: translateY(calc(100% + 24px));
-  opacity: 0;
+  opacity: 1;
   pointer-events: none;
-  transition:
-    transform 220ms var(--tm-shell-slide-ease),
-    opacity 220ms var(--tm-shell-slide-ease);
+  /* Viewport-based offstage pose so variable-height sheets always slide fully away. */
+  transform: translate3d(0, 100dvh, 0);
+  transition: transform 320ms cubic-bezier(0.32, 0.72, 0, 1);
+  will-change: transform;
 }
 
+.tm-mobile-sheet.tm-glass-card.is-open,
 .tm-mobile-sheet.is-open {
-  transform: translateY(0);
-  opacity: 1;
+  transform: translate3d(0, 0, 0);
   pointer-events: auto;
 }
 
 .tm-mobile-sheet-root--half .tm-mobile-sheet {
   height: min(50dvh, 480px);
   max-height: min(50dvh, 480px);
+}
+
+/* Icon Editor: one dimmer shared across Frames / Inspector / Colors. */
+.tm-mobile-sheet-root.tm-icon-editor-shared-backdrop {
+  z-index: 54;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-mobile-sheet-backdrop,
+  .tm-mobile-sheet.tm-glass-card,
+  .tm-mobile-sheet {
+    transition: none;
+  }
 }
 
 .tm-mobile-sheet-head {
