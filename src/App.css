@@ -3899,6 +3899,12 @@ body {
   cursor: default;
 }
 
+[data-shell="mobile"] .tm-glow-preview {
+  /* Action chips sit on top of the stage; give the icon vertical room underneath. */
+  min-height: 280px;
+  padding-top: 58px;
+}
+
 .tm-geode-family-title {
   margin-top: 8px;
   font-weight: 700;
@@ -12562,6 +12568,97 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * Prefer soft radial fills over CSS `filter: blur` on mobile WebView — software /
+ * limited GPU paths can't composite blur and leave hard circular blobs.
+ */
+[data-shell="mobile"] .tm-bg-orb {
+  filter: none;
+  opacity: 0.92;
+  /* Spread the orb so an unblurred radial still reads as a diffuse glow. */
+  width: 72vw;
+  height: 72vw;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--tm-orb-a) 70%, transparent) 0%,
+    color-mix(in srgb, var(--tm-orb-a) 28%, transparent) 32%,
+    transparent 68%
+  );
+}
+
+[data-shell="mobile"] .tm-bg-orb-a {
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--tm-orb-a) 75%, transparent) 0%,
+    color-mix(in srgb, var(--tm-orb-a) 30%, transparent) 34%,
+    transparent 70%
+  );
+}
+
+[data-shell="mobile"] .tm-bg-orb-b {
+  width: 68vw;
+  height: 68vw;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--tm-orb-b) 72%, transparent) 0%,
+    color-mix(in srgb, var(--tm-orb-b) 28%, transparent) 34%,
+    transparent 70%
+  );
+}
+
+[data-shell="mobile"] .tm-bg-orb-c {
+  width: 84vw;
+  height: 84vw;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--tm-orb-c) 68%, transparent) 0%,
+    color-mix(in srgb, var(--tm-orb-c) 26%, transparent) 36%,
+    transparent 72%
+  );
+}
+
+[data-shell="mobile"] .tm-bg-orb-d {
+  width: 60vw;
+  height: 60vw;
+  background: radial-gradient(
+    circle at center,
+    color-mix(in srgb, var(--tm-orb-d) 70%, transparent) 0%,
+    color-mix(in srgb, var(--tm-orb-d) 26%, transparent) 34%,
+    transparent 70%
+  );
+}
+
+/* Solid frosted fills — backdrop-filter is unreliable in Android WebView. */
+[data-shell="mobile"] .tm-glass-frost {
+  transform: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background:
+    var(--tm-glass-streak),
+    var(--tm-glass-streak-2),
+    var(--tm-glass-specular),
+    var(--tm-glass-edge),
+    radial-gradient(90% 55% at 8% -6%, rgba(140, 190, 255, 0.12), transparent 50%),
+    linear-gradient(
+      160deg,
+      var(--tm-glass-sheen-0) 0%,
+      var(--tm-glass-sheen-1) 38%,
+      var(--tm-glass-sheen-2) 100%
+    ),
+    color-mix(in srgb, var(--tm-glass-fill-strong) 88%, var(--tm-bg-1));
+}
+
+[data-shell="mobile"] .tm-mobile-dock.tm-glass-card .tm-glass-frost,
+[data-shell="mobile"] .tm-mobile-sheet.tm-glass-card .tm-glass-frost,
+[data-shell="mobile"] .tm-report.tm-glass-card .tm-glass-frost {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(28, 44, 78, 0.94) 0%,
+      rgba(14, 24, 48, 0.97) 100%
+    );
+}
+
 [data-shell="mobile"] *,
 [data-shell="mobile"] *::before,
 [data-shell="mobile"] *::after {
@@ -12883,16 +12980,20 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   --tm-mobile-dock-collapsed-size: calc(
     4px + 24px + var(--tm-mobile-dock-row-height) + max(8px, env(safe-area-inset-bottom, 0px))
   );
-  position: absolute;
+  /* Fixed to the viewport — absolute-inside-fullscreen chrome collapses under
+     Android WebView software / edge-to-edge compositing quirks. */
+  position: fixed;
   left: 0;
   right: 0;
   bottom: 0;
-  z-index: 1;
+  z-index: 50;
   display: flex;
   flex-direction: column;
   align-items: stretch;
+  flex-shrink: 0;
+  height: auto;
   min-height: var(--tm-mobile-dock-collapsed-size);
-  max-height: min(88dvh, 760px);
+  max-height: min(88vh, 88dvh, 760px);
   padding:
     4px
     max(10px, env(safe-area-inset-right, 0px))

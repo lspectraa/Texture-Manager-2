@@ -1,4 +1,7 @@
 # Android emulator-friendly Tauri dev:
+# - launches an AVD automatically when no device is online (ANDROID_AVD to pick one)
+# - defaults to -gpu swiftshader_indirect so WebView isn't a black surface on broken host GPU
+# - clears leftover WebView --disable-gpu flags from older black-screen workarounds
 # - adb reverse maps device localhost:1420/1421 -> host (physical devices + fallback)
 # - HMR in the WebView uses 10.0.2.2 on Android emulators (see index.html shim)
 # - --host 127.0.0.1 so CLI wait and the on-device proxy use the same reachable URL
@@ -41,6 +44,11 @@ if (-not (Test-Path $adb)) {
   throw "adb not found at $adb"
 }
 
+$emulator = Join-Path $env:ANDROID_HOME "emulator\emulator.exe"
+if (-not (Test-Path $emulator)) {
+  throw "Android emulator not found at $emulator"
+}
+
 function Assert-PortFree([int] $Port) {
   $listeners = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
   if (-not $listeners) {
@@ -58,12 +66,80 @@ function Assert-PortFree([int] $Port) {
   throw ("Port {0} is already in use by: {1}. Stop that process, then retry `npm run android:dev`." -f $Port, ($names -join ", "))
 }
 
-Write-Host "Waiting for an Android device/emulator..."
-& $adb wait-for-device
-$devices = & $adb devices | Select-String -Pattern "device$" | ForEach-Object { ($_ -split "\s+")[0] }
-if (-not $devices) {
-  throw "No Android device online. Start your emulator, then retry."
+function Get-OnlineAdbDevices {
+  & $adb devices |
+    Select-String -Pattern "device$" |
+    ForEach-Object { ($_ -split "\s+")[0] } |
+    Where-Object { $_ -and $_ -ne "List" }
 }
+
+function Wait-ForAndroidBoot([int] $TimeoutSeconds = 180) {
+  Write-Host "Waiting for Android device/emulator..."
+  & $adb wait-for-device
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  while ((Get-Date) -lt $deadline) {
+    $devices = @(Get-OnlineAdbDevices)
+    if ($devices.Count -gt 0) {
+      $boot = (& $adb shell getprop sys.boot_completed 2>$null | Out-String).Trim()
+      if ($boot -eq "1") {
+        return $devices
+      }
+    }
+    Start-Sleep -Seconds 2
+  }
+
+  throw "Timed out waiting for Android to finish booting after ${TimeoutSeconds}s."
+}
+
+function Start-AndroidEmulatorIfNeeded {
+  $existing = @(Get-OnlineAdbDevices)
+  if ($existing.Count -gt 0) {
+    Write-Host ("Using already-online device(s): {0}" -f ($existing -join ", "))
+    return
+  }
+
+  $avds = @(& $emulator -list-avds 2>$null | Where-Object { $_.Trim() })
+  if ($avds.Count -eq 0) {
+    throw "No Android Virtual Devices found. Create one in Android Studio, then retry."
+  }
+
+  $preferred = $env:ANDROID_AVD
+  if ($preferred) {
+    if ($avds -notcontains $preferred) {
+      throw ("ANDROID_AVD '{0}' not found. Available: {1}" -f $preferred, ($avds -join ", "))
+    }
+    $avd = $preferred
+  } else {
+    $avd = $avds[0]
+  }
+
+  # Host GPU + MESA on some Windows setups paints a black WebView while a11y still
+  # has content. SwiftShader is slower but composites Chromium reliably.
+  $gpuMode = if ($env:ANDROID_EMULATOR_GPU) { $env:ANDROID_EMULATOR_GPU } else { "swiftshader_indirect" }
+
+  Write-Host "No device online. Launching emulator AVD '$avd' (-gpu $gpuMode)..."
+  if ($avds.Count -gt 1 -and -not $preferred) {
+    Write-Host ("(Set ANDROID_AVD to pick a different AVD. Available: {0})" -f ($avds -join ", "))
+  }
+
+  Start-Process -FilePath $emulator -ArgumentList @(
+    "-avd", $avd,
+    "-gpu", $gpuMode
+  ) -WindowStyle Normal | Out-Null
+}
+
+function Set-WebViewSoftwareFlags {
+  # Clear any leftover GPU-disable flags from earlier black-screen workarounds.
+  # With SwiftShader emulator GPU, Chromium should composite normally; forcing
+  # software WebView painting collapses the dock and hardens background orbs.
+  & $adb shell "rm -f /data/local/tmp/webview-command-line" 2>$null
+}
+
+Start-AndroidEmulatorIfNeeded
+$devices = Wait-ForAndroidBoot
+Write-Host ("Android ready: {0}" -f ($devices -join ", "))
+Set-WebViewSoftwareFlags
 
 Write-Host "Checking Vite ports 1420 / 1421..."
 Assert-PortFree 1420

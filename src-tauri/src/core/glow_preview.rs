@@ -1,8 +1,13 @@
 //! Live preview for Glow Maker: random UHD icon from GD `Resources/icons` + glow-under-icon composite.
+//!
+//! When Geometry Dash icons are unavailable (no install, empty `Resources/icons`, or mobile),
+//! falls back to the curated sheets under `src-tauri/resources/preview-icons`.
 
 use std::collections::BTreeMap;
+use std::fs;
 use std::io::Cursor;
-use std::sync::Mutex;
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
 
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine as _;
@@ -27,6 +32,8 @@ use crate::core::splitter::split_sheet_candidate_memory;
 
 #[derive(Clone)]
 struct PreviewIconSample {
+    /// Gamesheet stem (`player_30-uhd`), used to avoid re-picking on refresh.
+    sheet_stem: String,
     primary: RgbaImage,
     primary_frame: String,
     sprites: BTreeMap<String, RgbaImage>,
@@ -158,6 +165,7 @@ fn sample_from_sheet_candidate(
         ))?;
 
     Ok(PreviewIconSample {
+        sheet_stem: pair.stem.clone(),
         primary,
         primary_frame,
         sprites: split.sprites,
@@ -379,12 +387,14 @@ fn sample_with_visible_primary(mut sample: PreviewIconSample) -> Option<PreviewI
 }
 
 fn sample_from_icon_editor_sprites(
+    sheet_stem: String,
     plist_root: Value,
     sprites: BTreeMap<String, RgbaImage>,
 ) -> Option<PreviewIconSample> {
     let primary_frame = pick_preview_frame_name(&sprites, PrimaryFramePick::First).ok()?;
     let primary = sprites.get(&primary_frame)?.clone();
     sample_with_visible_primary(PreviewIconSample {
+        sheet_stem,
         primary,
         primary_frame,
         sprites,
@@ -414,11 +424,18 @@ fn load_preview_icon_from_plist_path(
     }
 
     // Fallback: Icon Editor crops against each PNG candidate.
+    let sheet_stem = plist_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("")
+        .to_string();
     for png_path in &png_candidates {
         if let Ok((root, sprites)) =
             icon_editor_load_sheet_sprites_from_atlas(plist_path, png_path, plist_root.clone())
         {
-            if let Some(visible) = sample_from_icon_editor_sprites(root, sprites) {
+            if let Some(visible) =
+                sample_from_icon_editor_sprites(sheet_stem.clone(), root, sprites)
+            {
                 return Ok(visible);
             }
         }
@@ -426,6 +443,7 @@ fn load_preview_icon_from_plist_path(
 
     // Last resort: blank preview (do not pick an arbitrary multi-part piece).
     Ok(PreviewIconSample {
+        sheet_stem,
         primary: blank_preview_rgba(),
         primary_frame: String::new(),
         sprites: BTreeMap::new(),
@@ -433,9 +451,237 @@ fn load_preview_icon_from_plist_path(
     })
 }
 
-fn load_random_uhd_preview_icon(
+/// Files shipped with the app for Glow Maker / Particle Editor previews when GD icons are missing.
+const BUNDLED_PREVIEW_ICON_FILES: &[(&str, &[u8])] = &[
+    (
+        "bird_20-uhd.plist",
+        include_bytes!("../../resources/preview-icons/bird_20-uhd.plist"),
+    ),
+    (
+        "bird_20-uhd.png",
+        include_bytes!("../../resources/preview-icons/bird_20-uhd.png"),
+    ),
+    (
+        "player_30-uhd.plist",
+        include_bytes!("../../resources/preview-icons/player_30-uhd.plist"),
+    ),
+    (
+        "player_30-uhd.png",
+        include_bytes!("../../resources/preview-icons/player_30-uhd.png"),
+    ),
+    (
+        "player_31-uhd.plist",
+        include_bytes!("../../resources/preview-icons/player_31-uhd.plist"),
+    ),
+    (
+        "player_31-uhd.png",
+        include_bytes!("../../resources/preview-icons/player_31-uhd.png"),
+    ),
+    (
+        "player_88-uhd.plist",
+        include_bytes!("../../resources/preview-icons/player_88-uhd.plist"),
+    ),
+    (
+        "player_88-uhd.png",
+        include_bytes!("../../resources/preview-icons/player_88-uhd.png"),
+    ),
+    (
+        "player_ball_10-uhd.plist",
+        include_bytes!("../../resources/preview-icons/player_ball_10-uhd.plist"),
+    ),
+    (
+        "player_ball_10-uhd.png",
+        include_bytes!("../../resources/preview-icons/player_ball_10-uhd.png"),
+    ),
+    (
+        "ship_22-uhd.plist",
+        include_bytes!("../../resources/preview-icons/ship_22-uhd.plist"),
+    ),
+    (
+        "ship_22-uhd.png",
+        include_bytes!("../../resources/preview-icons/ship_22-uhd.png"),
+    ),
+    (
+        "ship_30-uhd.plist",
+        include_bytes!("../../resources/preview-icons/ship_30-uhd.plist"),
+    ),
+    (
+        "ship_30-uhd.png",
+        include_bytes!("../../resources/preview-icons/ship_30-uhd.png"),
+    ),
+];
+
+const BUNDLED_PREVIEW_ICONS_CACHE_KEY: &str = "__bundled_preview_icons__";
+
+fn preview_icons_dir_has_pairs(dir: &Path) -> bool {
+    dir.is_dir()
+        && discover_sheet_pairs(dir)
+            .map(|pairs| !pairs.is_empty())
+            .unwrap_or(false)
+}
+
+fn candidate_bundled_preview_icon_dirs() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    out.push(manifest.join("resources").join("preview-icons"));
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            out.push(dir.join("resources").join("preview-icons"));
+            out.push(dir.join("preview-icons"));
+            if let Some(contents) = dir.parent() {
+                out.push(
+                    contents
+                        .join("Resources")
+                        .join("resources")
+                        .join("preview-icons"),
+                );
+                out.push(contents.join("Resources").join("preview-icons"));
+            }
+        }
+    }
+    out
+}
+
+fn extract_bundled_preview_icons(dest: &Path) -> Result<(), AppError> {
+    fs::create_dir_all(dest).map_err(|err| {
+        AppError::IoError(format!(
+            "failed to create bundled preview icons dir {}: {err}",
+            dest.display()
+        ))
+    })?;
+    for (name, bytes) in BUNDLED_PREVIEW_ICON_FILES {
+        let path = dest.join(name);
+        if path.is_file() {
+            if let Ok(existing) = fs::read(&path) {
+                if existing.as_slice() == *bytes {
+                    continue;
+                }
+            }
+        }
+        fs::write(&path, bytes).map_err(|err| {
+            AppError::IoError(format!(
+                "failed to write bundled preview icon {}: {err}",
+                path.display()
+            ))
+        })?;
+    }
+    Ok(())
+}
+
+fn resolve_bundled_preview_icons_dir() -> Result<&'static Path, AppError> {
+    static DIR: OnceLock<PathBuf> = OnceLock::new();
+    if let Some(existing) = DIR.get() {
+        return Ok(existing.as_path());
+    }
+
+    let resolved = {
+        let mut found = None;
+        for candidate in candidate_bundled_preview_icon_dirs() {
+            if preview_icons_dir_has_pairs(&candidate) {
+                found = Some(candidate);
+                break;
+            }
+        }
+        if let Some(path) = found {
+            path
+        } else {
+            let extracted = std::env::temp_dir().join("tm2-bundled-preview-icons");
+            extract_bundled_preview_icons(&extracted)?;
+            if !preview_icons_dir_has_pairs(&extracted) {
+                return Err(AppError::InvalidOperation(
+                    "bundled preview icons are missing or unreadable",
+                ));
+            }
+            extracted
+        }
+    };
+
+    Ok(DIR.get_or_init(|| resolved).as_path())
+}
+
+/// Curated fallback pool: use every shipped sheet for glow/particle, ships only for ship drag.
+fn bundled_uhd_icon_sheet_pairs(
+    icons_dir: &Path,
+    audience: PreviewIconAudience,
+) -> Result<Vec<SheetCandidate>, AppError> {
+    let pairs: Vec<SheetCandidate> = discover_sheet_pairs(icons_dir)?
+        .into_iter()
+        .filter(|pair| {
+            let stem = pair.stem.to_ascii_lowercase();
+            if !stem.ends_with("-uhd") {
+                return false;
+            }
+            match audience {
+                PreviewIconAudience::ParticleShip => stem.starts_with("ship_"),
+                PreviewIconAudience::GlowMaker | PreviewIconAudience::ParticleSilhouette => true,
+            }
+        })
+        .collect();
+    Ok(pairs)
+}
+
+fn pick_sheet_pair_excluding<'a>(
+    pairs: &'a [SheetCandidate],
+    exclude_stem: Option<&str>,
+) -> Option<&'a SheetCandidate> {
+    if pairs.is_empty() {
+        return None;
+    }
+    let exclude = exclude_stem
+        .map(str::trim)
+        .filter(|stem| !stem.is_empty())
+        .map(|stem| stem.to_ascii_lowercase());
+    let alternative_indices: Vec<usize> = pairs
+        .iter()
+        .enumerate()
+        .filter(|(_, pair)| {
+            exclude
+                .as_deref()
+                .map(|ex| pair.stem.to_ascii_lowercase() != ex)
+                .unwrap_or(true)
+        })
+        .map(|(idx, _)| idx)
+        .collect();
+    // If every sheet was excluded (pool of one), allow a repeat.
+    let indices = if alternative_indices.is_empty() {
+        (0..pairs.len()).collect::<Vec<_>>()
+    } else {
+        alternative_indices
+    };
+    let pick = indices[rand::rng().random_range(0..indices.len())];
+    Some(&pairs[pick])
+}
+
+fn load_random_bundled_preview_icon(
+    audience: PreviewIconAudience,
+    exclude_stem: Option<&str>,
+) -> Result<PreviewIconSample, AppError> {
+    let icons_dir = resolve_bundled_preview_icons_dir()?;
+    let pairs = bundled_uhd_icon_sheet_pairs(icons_dir, audience)?;
+    if pairs.is_empty() {
+        let detail = match audience {
+            PreviewIconAudience::ParticleShip => {
+                "No bundled ship_-uhd preview icons available"
+            }
+            PreviewIconAudience::GlowMaker | PreviewIconAudience::ParticleSilhouette => {
+                "No bundled -uhd preview icons available"
+            }
+        };
+        return Err(AppError::InvalidOperation(detail));
+    }
+
+    let pair = pick_sheet_pair_excluding(&pairs, exclude_stem).ok_or(AppError::InvalidOperation(
+        "No bundled preview icon sheets available",
+    ))?;
+    // Bundled sheets are not part of the GD sprite index.
+    sample_from_sheet_candidate(pair, PrimaryFramePick::Random)
+}
+
+fn load_random_uhd_preview_icon_from_game(
     layout: &GameFilesLayout,
     audience: PreviewIconAudience,
+    exclude_stem: Option<&str>,
 ) -> Result<PreviewIconSample, AppError> {
     if !layout.geometry_dash_found() {
         return Err(AppError::InvalidOperation(
@@ -463,9 +709,24 @@ fn load_random_uhd_preview_icon(
         return Err(AppError::InvalidOperation(detail));
     }
 
-    let sheet_idx = rand::rng().random_range(0..pairs.len());
-    let pair = &pairs[sheet_idx];
+    let pair = pick_sheet_pair_excluding(&pairs, exclude_stem).ok_or(AppError::InvalidOperation(
+        "No eligible preview icon sheets available",
+    ))?;
     sample_from_sheet_candidate_indexed(layout, pair, PrimaryFramePick::Random)
+}
+
+fn load_random_uhd_preview_icon(
+    layout: &GameFilesLayout,
+    audience: PreviewIconAudience,
+    exclude_stem: Option<&str>,
+) -> Result<(PreviewIconSample, String), AppError> {
+    match load_random_uhd_preview_icon_from_game(layout, audience, exclude_stem) {
+        Ok(sample) => Ok((sample, layout.resources.to_string_lossy().to_string())),
+        Err(_) => {
+            let sample = load_random_bundled_preview_icon(audience, exclude_stem)?;
+            Ok((sample, BUNDLED_PREVIEW_ICONS_CACHE_KEY.to_string()))
+        }
+    }
 }
 
 fn preview_icon_sample(
@@ -479,20 +740,34 @@ fn preview_icon_sample(
         return load_preview_icon_from_plist_path(&path);
     }
 
-    let resources_key = layout.resources.to_string_lossy().to_string();
     let mut guard = preview_sample_cache(audience)
         .lock()
         .map_err(|_| AppError::InvalidOperation("glow preview cache lock poisoned"))?;
 
     if !refresh {
         if let Some(cached) = guard.as_ref() {
-            if cached.resources_key == resources_key {
+            let game_key = layout.resources.to_string_lossy();
+            let game_icons_ready =
+                layout.geometry_dash_found() && layout.resources.join("icons").is_dir();
+            let same_game_root = cached.resources_key == game_key;
+            let bundled_still_needed =
+                cached.resources_key == BUNDLED_PREVIEW_ICONS_CACHE_KEY && !game_icons_ready;
+            if same_game_root || bundled_still_needed {
                 return Ok(cached.sample.clone());
             }
         }
     }
 
-    let sample = load_random_uhd_preview_icon(layout, audience)?;
+    let exclude_stem = if refresh {
+        guard
+            .as_ref()
+            .map(|cached| cached.sample.sheet_stem.as_str())
+            .filter(|stem| !stem.is_empty())
+    } else {
+        None
+    };
+
+    let (sample, resources_key) = load_random_uhd_preview_icon(layout, audience, exclude_stem)?;
     *guard = Some(CachedPreviewSample {
         resources_key,
         sample: sample.clone(),
@@ -613,6 +888,8 @@ fn rgba_to_png_data_url(img: &RgbaImage) -> Result<String, AppError> {
 /// When `icon_plist_path` is set, that gamesheet (plist + sibling PNG) is used
 /// instead of a random icon from `Resources/icons`. When `refresh` is true and
 /// no custom path is set, discard the cached sample and pick a new random icon.
+/// If Geometry Dash icons are unavailable, picks randomly from the bundled
+/// `resources/preview-icons` placeholders.
 pub fn glow_maker_preview_data_url(
     layout: &GameFilesLayout,
     options: &GlowMakerOptions,
@@ -642,7 +919,9 @@ pub fn glow_maker_preview_data_url(
 /// When `icon_plist_path` is set, that gamesheet is used instead of a random
 /// pick. Otherwise, when `kind` is `Some("ship")`, only ship sheets are
 /// considered; the general particle silhouette pool is used otherwise (robots,
-/// spiders, waves, swings, and UFOs are never picked).
+/// spiders, waves, swings, and UFOs are never picked from the full GD library).
+/// When GD icons are missing, falls back to the bundled `preview-icons` set
+/// (ships only when `kind` is `"ship"`).
 pub fn random_uhd_icon_preview_data_url(
     layout: &GameFilesLayout,
     refresh: bool,
@@ -757,6 +1036,78 @@ mod tests {
     }
 
     #[test]
+    fn bundled_preview_icons_resolve_and_load() {
+        let dir = resolve_bundled_preview_icons_dir().expect("bundled preview icons dir");
+        let glow_pairs = bundled_uhd_icon_sheet_pairs(dir, PreviewIconAudience::GlowMaker)
+            .expect("glow bundled pairs");
+        assert!(
+            glow_pairs.len() >= 7,
+            "expected curated placeholder set, got {}",
+            glow_pairs.len()
+        );
+        let ship_pairs = bundled_uhd_icon_sheet_pairs(dir, PreviewIconAudience::ParticleShip)
+            .expect("ship bundled pairs");
+        assert!(
+            ship_pairs.iter().all(|p| p.stem.to_ascii_lowercase().starts_with("ship_")),
+            "ship audience must only include ship sheets"
+        );
+        assert!(ship_pairs.len() >= 2);
+
+        let sample = load_random_bundled_preview_icon(PreviewIconAudience::GlowMaker, None)
+            .expect("load bundled glow preview");
+        assert!(rgba_has_visible_pixels(&sample.primary) || sample.sprites.len() > 1);
+
+        let ship = load_random_bundled_preview_icon(PreviewIconAudience::ParticleShip, None)
+            .expect("load bundled ship preview");
+        assert!(
+            ship.primary_frame.to_ascii_lowercase().contains("ship")
+                || ship
+                    .sprites
+                    .keys()
+                    .any(|k| k.to_ascii_lowercase().contains("ship")),
+            "ship preview should come from a ship sheet"
+        );
+    }
+
+    #[test]
+    fn refresh_skips_current_bundled_sheet_stem() {
+        let dir = resolve_bundled_preview_icons_dir().expect("bundled preview icons dir");
+        let pairs = bundled_uhd_icon_sheet_pairs(dir, PreviewIconAudience::GlowMaker)
+            .expect("glow bundled pairs");
+        assert!(pairs.len() >= 2, "need at least two placeholders to test exclusion");
+
+        let first = load_random_bundled_preview_icon(PreviewIconAudience::GlowMaker, None)
+            .expect("first pick");
+        assert!(!first.sheet_stem.is_empty());
+
+        for _ in 0..24 {
+            let next = load_random_bundled_preview_icon(
+                PreviewIconAudience::GlowMaker,
+                Some(first.sheet_stem.as_str()),
+            )
+            .expect("excluded pick");
+            assert_ne!(
+                next.sheet_stem.to_ascii_lowercase(),
+                first.sheet_stem.to_ascii_lowercase(),
+                "refresh must not re-pick the same sheet when alternatives exist"
+            );
+        }
+    }
+
+    #[test]
+    fn pick_sheet_pair_excluding_falls_back_when_only_one() {
+        let only = SheetCandidate {
+            stem: "ship_22-uhd".to_string(),
+            relative_dir: std::path::PathBuf::new(),
+            plist_path: std::path::PathBuf::from("ship_22-uhd.plist"),
+            png_path: std::path::PathBuf::from("ship_22-uhd.png"),
+        };
+        let pairs = vec![only];
+        let picked = pick_sheet_pair_excluding(&pairs, Some("ship_22-uhd")).expect("fallback");
+        assert_eq!(picked.stem, "ship_22-uhd");
+    }
+
+    #[test]
     fn preview_glow_pixels_match_render_icon_glow_from_primary() {
         let options = clamp_glow_options(&default_options(false, true));
         let source = tiny_primary();
@@ -825,6 +1176,7 @@ mod tests {
         sprites.insert("bird_01_capsule_001.png".to_string(), tiny_primary());
         sprites.insert("bird_01_dome_001.png".to_string(), tiny_primary());
         let sample = PreviewIconSample {
+            sheet_stem: "bird_01-uhd".to_string(),
             primary: tiny_primary(),
             primary_frame: "bird_01_capsule_001.png".to_string(),
             sprites,
@@ -858,6 +1210,7 @@ mod tests {
         });
 
         let sample = PreviewIconSample {
+            sheet_stem: "player_01-uhd".to_string(),
             primary: blank_preview_rgba(),
             primary_frame: "player_01_001.png".to_string(),
             sprites,

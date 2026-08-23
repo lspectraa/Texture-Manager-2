@@ -79,6 +79,7 @@ export const loadParticleEditorTexture = async (
 
 /**
  * Eligible UHD icon from GD Resources/icons (no glow), for preview silhouettes.
+ * Falls back to bundled preview-icon placeholders when game files are missing.
  *
  * Pass `kind: "ship"` to restrict the pool to ship sheets (ship-drag effects).
  * Pass `iconPlistPath` to load a specific icon gamesheet instead of a random pick.

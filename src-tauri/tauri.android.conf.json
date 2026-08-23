@@ -2,7 +2,9 @@
   "bundle": {
     "createUpdaterArtifacts": false,
     "externalBin": [],
-    "resources": [],
+    "resources": [
+      "resources/preview-icons/**/*"
+    ],
     "targets": []
   }
 }

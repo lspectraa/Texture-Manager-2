@@ -58,7 +58,8 @@
       "binaries/realesrgan-ncnn-vulkan"
     ],
     "resources": [
-      "resources/upscaler/**/*"
+      "resources/upscaler/**/*",
+      "resources/preview-icons/**/*"
     ],
     "icon": [
       "icons/32x32.png",
