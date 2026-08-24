@@ -70,7 +70,7 @@ const SHIPPED = ["waifu2x", "realesrgan"];
 function hostPlatform() {
   if (process.platform === "win32") return "windows";
   if (process.platform === "darwin") return "macos";
-  throw new Error(`Unsupported host platform for upscaler binaries: ${process.platform}`);
+  return null;
 }
 
 async function download(url, dest) {
@@ -265,7 +265,18 @@ async function main() {
   mkdirSync(resourcesDir, { recursive: true });
   cleanupUnshipped();
 
-  const platforms = all ? ["windows", "macos"] : [hostPlatform()];
+  const host = hostPlatform();
+  if (!host && !all) {
+    if (ifMissing) {
+      console.log(
+        `Skipping upscaler binaries on ${process.platform}: desktop sidecars are Windows/macOS only.`,
+      );
+      return;
+    }
+    throw new Error(`Unsupported host platform for upscaler binaries: ${process.platform}`);
+  }
+
+  const platforms = all ? ["windows", "macos"] : [host];
   for (const platform of platforms) {
     for (const kind of SHIPPED) {
       if (ifMissing && packageReady(kind, platform)) {

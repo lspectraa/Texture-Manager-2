@@ -24,7 +24,7 @@ open class BuildTask : DefaultTask() {
         if (!release) {
             assertTauriDevCliRunning()
         }
-        val executable = resolveNpmExecutable()
+        val executable = resolveNpxExecutable()
         try {
             runTauriCli(executable)
         } catch (e: Exception) {
@@ -55,7 +55,7 @@ open class BuildTask : DefaultTask() {
         val rootDirRel = rootDirRel ?: throw GradleException("rootDirRel cannot be null")
         val target = target ?: throw GradleException("target cannot be null")
         val release = release ?: throw GradleException("release cannot be null")
-        val args = listOf("run", "--", "tauri", "android", "android-studio-script")
+        val args = listOf("tauri", "android", "android-studio-script")
 
         project.exec {
             workingDir(File(project.projectDir, rootDirRel))
@@ -155,17 +155,17 @@ open class BuildTask : DefaultTask() {
         }
     }
 
-    private fun resolveNpmExecutable(): String {
+    private fun resolveNpxExecutable(): String {
         readNodeJsDirFromLocalProperties()?.let { nodeDir ->
-            val npmCmd = File(nodeDir, "npm.cmd")
-            if (npmCmd.exists()) {
-                return npmCmd.absolutePath
+            val npxCmd = File(nodeDir, "npx.cmd")
+            if (npxCmd.exists()) {
+                return npxCmd.absolutePath
             }
         }
 
         listOfNotNull(
-            System.getenv("NPM_PATH"),
-            System.getenv("NODEJS_HOME")?.let { File(it, "npm.cmd").absolutePath },
+            System.getenv("NPX_PATH"),
+            System.getenv("NODEJS_HOME")?.let { File(it, "npx.cmd").absolutePath },
         ).forEach { candidate ->
             if (File(candidate).exists()) {
                 return candidate
@@ -174,19 +174,19 @@ open class BuildTask : DefaultTask() {
 
         if (Os.isFamily(Os.FAMILY_WINDOWS)) {
             val commonPaths = listOfNotNull(
-                System.getenv("ProgramFiles")?.let { "$it\\nodejs\\npm.cmd" },
-                System.getenv("LocalAppData")?.let { "$it\\Programs\\nodejs\\npm.cmd" },
-                "C:\\Program Files\\nodejs\\npm.cmd",
+                System.getenv("ProgramFiles")?.let { "$it\\nodejs\\npx.cmd" },
+                System.getenv("LocalAppData")?.let { "$it\\Programs\\nodejs\\npx.cmd" },
+                "C:\\Program Files\\nodejs\\npx.cmd",
             )
             for (path in commonPaths) {
                 if (File(path).exists()) {
                     return path
                 }
             }
-            return "npm.cmd"
+            return "npx.cmd"
         }
 
-        return "npm"
+        return "npx"
     }
 
     private fun readLocalProperties(): Properties {
