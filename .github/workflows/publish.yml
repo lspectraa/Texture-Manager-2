@@ -135,24 +135,43 @@ jobs:
           } > keystore.properties
           echo "Wrote keystore.properties for release signing."
 
-      - name: Build Android APK and attach to draft release
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Android APK
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        with:
-          # Use project CLI without the desktop upscaler fetch wrapper.
-          tauriScript: npx tauri
-          mobile: android
-          # Phone-focused arm64 APK (sideload from GitHub Releases).
-          args: --apk --target aarch64
-          tagName: v__VERSION__
-          releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
-          releaseDraft: true
-          prerelease: false
-          # Desktop job owns updater JSON; Android has no updater artifacts.
-          includeUpdaterJson: false
-          uploadUpdaterSignatures: false
-          releaseAssetNamePattern: "[name]-[version]-android-[arch][ext]"
+        # Use `npx tauri` (not `npm run tauri`) to skip the desktop upscaler fetch wrapper.
+        # `@v0` of tauri-action does not support `mobile: android`, so build here directly.
+        run: npx tauri android build --apk --target aarch64
+
+      - name: Resolve version
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK to draft GitHub release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          TITLE="Texture Manager 2 v${VERSION}"
+          NOTES="Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
+          ASSET_NAME="Texture-Manager-2-${VERSION}-android-aarch64.apk"
+
+          mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | sort)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "No APK found under src-tauri/gen/android/app/build/outputs/apk"
+            find src-tauri/gen/android/app/build/outputs -type f | head -n 100 || true
+            exit 1
+          fi
+          APK="${APKS[0]}"
+          echo "Uploading ${APK} as ${ASSET_NAME}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; uploading APK."
+          else
+            echo "Creating draft release ${TAG}."
+            gh release create "$TAG" --draft --title "$TITLE" --notes "$NOTES"
+          fi
+
+          gh release upload "$TAG" "${APK}#${ASSET_NAME}" --clobber
