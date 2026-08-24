@@ -137,11 +137,12 @@ jobs:
 
       - name: Build Android APK
         env:
+          CI: true
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         # Use `npx tauri` (not `npm run tauri`) to skip the desktop upscaler fetch wrapper.
         # `@v0` of tauri-action does not support `mobile: android`, so build here directly.
-        run: npx tauri android build --apk --target aarch64
+        run: npx tauri android build --apk --target aarch64 --ci
 
       - name: Resolve version
         id: ver

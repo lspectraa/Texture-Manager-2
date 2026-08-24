@@ -19,7 +19,11 @@ open class BuildTask : DefaultTask() {
 
     @TaskAction
     fun assemble() {
-        assertTauriDevCliRunning()
+        val release = release ?: throw GradleException("release cannot be null")
+        // Debug builds from Android Studio load the webview from the dev CLI; release/CI builds bundle assets.
+        if (!release) {
+            assertTauriDevCliRunning()
+        }
         val executable = resolveNpmExecutable()
         try {
             runTauriCli(executable)
