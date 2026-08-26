@@ -5,6 +5,7 @@ const onboarding: AppLocaleResources["onboarding"] = {
     language: "Elige tu idioma",
     theme: "Elige tu estilo",
     geometryDash: "Confirma Geometry Dash",
+    androidStorage: "Allow storage access",
   },
   languageAria: "Idioma",
   languageHint:
@@ -12,6 +13,13 @@ const onboarding: AppLocaleResources["onboarding"] = {
   progressAria: "Progreso de la configuración",
   stepAria: "Paso {{number}}: {{id}}",
   pickYourStyle: "Elige tu estilo",
+  androidStorage: {
+    hint:
+      "Texture Manager needs All files access to read Geode’s game folder on internal storage.",
+    looksGood: "Storage access looks good — Geode files can be read.",
+    skipWarning:
+      "You can finish setup now and grant access later from Settings or when a tool needs Geode files.",
+  },
   gd: {
     notFound: "No encontrado",
     manualOverride: "Configuración manual",

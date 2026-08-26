@@ -17,10 +17,12 @@ import { FolderPathField } from "./tools/layout";
 import { GlassFrost } from "./GlassFrost";
 import { LanguageFlag } from "./LanguageFlag";
 import { ThemeStylePicker } from "./ThemeStylePicker";
+import { AndroidStorageAccessPanel } from "./tools/AndroidStorageAccessPanel";
 
-type OnboardingStepId = "language" | "theme" | "geometryDash";
+type OnboardingStepId = "language" | "theme" | "geometryDash" | "androidStorage";
 
-const STEPS: OnboardingStepId[] = ["language", "theme", "geometryDash"];
+const DESKTOP_STEPS: OnboardingStepId[] = ["language", "theme", "geometryDash"];
+const MOBILE_STEPS: OnboardingStepId[] = ["language", "theme", "androidStorage"];
 
 type StatusChipTone = "success" | "warning" | "danger" | "info" | "neutral";
 
@@ -57,11 +59,13 @@ export type OnboardingFlowProps = {
   busy?: boolean;
   error?: string | null;
   pickFolder: PickFolderFn;
-  skipGeometryDash?: boolean;
+  /** Mobile onboarding uses Android storage access instead of Geometry Dash path. */
+  mobileStorageAccess?: boolean;
   onThemeChange: (theme: AppTheme) => void;
   onLanguagePreview?: (language: AppLanguage) => void;
   onGeometryDashPathSelected: (path: string) => void;
   onRedetectGeometryDash: () => void;
+  onSettingsUpdated?: (settings: AppSettingsView) => void;
   onComplete: (choices: { language: AppLanguage; theme: AppTheme }) => void;
 };
 
@@ -70,18 +74,17 @@ export function OnboardingFlow({
   busy = false,
   error = null,
   pickFolder,
-  skipGeometryDash = false,
+  mobileStorageAccess = false,
   onThemeChange,
   onLanguagePreview,
   onGeometryDashPathSelected,
   onRedetectGeometryDash,
+  onSettingsUpdated,
   onComplete,
 }: OnboardingFlowProps) {
   const { t } = useTranslation("onboarding");
   const titleId = useId();
-  const steps = skipGeometryDash
-    ? (["language", "theme"] as OnboardingStepId[])
-    : STEPS;
+  const steps = mobileStorageAccess ? MOBILE_STEPS : DESKTOP_STEPS;
   const [stepIndex, setStepIndex] = useState(0);
   const [language, setLanguage] = useState<AppLanguage>(() => settings.language);
   const [theme, setTheme] = useState<AppTheme>(() => settings.theme);
@@ -120,6 +123,8 @@ export function OnboardingFlow({
         return t("steps.theme");
       case "geometryDash":
         return t("steps.geometryDash");
+      case "androidStorage":
+        return t("steps.androidStorage");
       default: {
         const _exhaustive: never = stepId;
         return _exhaustive;
@@ -274,6 +279,18 @@ export function OnboardingFlow({
                   {t("gd.looksGood")}
                 </p>
               )}
+            </div>
+          ) : null}
+
+          {stepId === "androidStorage" ? (
+            <div className="tm-onboarding-android-storage">
+              <p className="tm-onboarding-hint">{t("androidStorage.hint")}</p>
+              <AndroidStorageAccessPanel
+                geometryDashFound={settings.geometryDashFound}
+                onSettingsUpdated={onSettingsUpdated}
+                showReadyHint
+                className="tm-android-geode-access--onboarding"
+              />
             </div>
           ) : null}
 

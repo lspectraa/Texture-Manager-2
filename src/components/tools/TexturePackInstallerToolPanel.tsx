@@ -48,6 +48,7 @@ import {
   deleteInstalledPack,
   discoverPackInstall,
   getPackPngDataUrl,
+  getPackPngDataUrlFromDir,
   installPackPlan,
   listInstalledPacks,
   readPackMetadata,
@@ -64,13 +65,14 @@ import {
   redactAbsolutePathsInText,
   shortenPathForDisplay,
 } from "../../utils/pathDisplay";
-import { AndroidGeodeAccessBanner } from "./AndroidGeodeAccessBanner";
+import { invokeErrorMessage } from "../../utils/invokeErrorMessage";
 import {
   PackLibraryContextMenu,
   type PackLibraryContextAction,
 } from "./PackLibraryContextMenu";
 import {
   FolderPathField,
+  ToolActionBar,
   ToolCheckboxField,
   ToolNumberField,
   ToolPage,
@@ -304,7 +306,7 @@ export function TexturePackInstallerToolPanel({
   bridge,
   onBridgeChange,
   onSidebarActionsChange,
-  onAppSettingsUpdated,
+  onAppSettingsUpdated: _onAppSettingsUpdated,
   onOpenMobileSideRail,
 }: TexturePackInstallerToolPanelProps) {
   const { t } = useTranslation(["tools", "errors", "common"]);
@@ -349,6 +351,7 @@ export function TexturePackInstallerToolPanel({
     useState<LibraryContextMenuState | null>(null);
   const [libraryDeleteConfirm, setLibraryDeleteConfirm] =
     useState<InstalledPack | null>(null);
+  const [libraryDeleteError, setLibraryDeleteError] = useState<string | null>(null);
   const extrasPanelId = useId();
   const libraryActionPanelId = useId();
   const tempDirRef = useRef<string | null>(null);
@@ -615,12 +618,9 @@ export function TexturePackInstallerToolPanel({
         libraryPackPngPath: undefined,
         libraryPackPngDirty: false,
       });
-      const previewPath = pack.packPngPath;
-      if (previewPath) {
-        const dataUrl = await getPackPngDataUrl(previewPath);
-        if (bridgeRef.current.libraryPack?.id === pack.id) {
-          setBridge({ libraryPack: pack, packPngDataUrl: dataUrl });
-        }
+      const dataUrl = await getPackPngDataUrlFromDir(pack.path);
+      if (bridgeRef.current.libraryPack?.id === pack.id) {
+        setBridge({ libraryPack: pack, packPngDataUrl: dataUrl });
       }
       if (options?.focusRail) {
         window.requestAnimationFrame(() => {
@@ -671,10 +671,7 @@ export function TexturePackInstallerToolPanel({
 
       const previewEntries = await Promise.all(
         packs.map(async (pack) => {
-          if (!pack.packPngPath) {
-            return [pack.id, null] as const;
-          }
-          const dataUrl = await getPackPngDataUrl(pack.packPngPath);
+          const dataUrl = await getPackPngDataUrlFromDir(pack.path);
           return [pack.id, dataUrl] as const;
         }),
       );
@@ -1208,6 +1205,7 @@ export function TexturePackInstallerToolPanel({
           break;
         case "delete":
           void selectLibraryPack(pack);
+          setLibraryDeleteError(null);
           setLibraryDeleteConfirm(pack);
           break;
         default: {
@@ -1225,30 +1223,6 @@ export function TexturePackInstallerToolPanel({
     ],
   );
 
-  const handleMobileLibraryCardAction = useCallback(
-    (pack: InstalledPack, action: "port" | "split" | "delete"): void => {
-      switch (action) {
-        case "port":
-          void selectLibraryPack(pack);
-          setLibraryActionPanel("port");
-          break;
-        case "split":
-          openLibrarySplitPanel(pack);
-          break;
-        case "delete":
-          void selectLibraryPack(pack);
-          setLibraryDeleteConfirm(pack);
-          break;
-        default: {
-          const _exhaustive: never = action;
-          void _exhaustive;
-          break;
-        }
-      }
-    },
-    [openLibrarySplitPanel, selectLibraryPack],
-  );
-
   const confirmDeleteLibraryPack = useCallback(async (): Promise<void> => {
     const pack = libraryDeleteConfirm;
     if (!pack) {
@@ -1261,6 +1235,7 @@ export function TexturePackInstallerToolPanel({
     }
     setBusy("library");
     setStatusMessage(null);
+    setLibraryDeleteError(null);
     try {
       await deleteInstalledPack(pack.path);
       setLibraryDeleteConfirm(null);
@@ -1278,14 +1253,12 @@ export function TexturePackInstallerToolPanel({
       );
       await refreshLibrary();
     } catch (err: unknown) {
-      setStatusTone("error");
-      setStatusMessage(
-        redactAbsolutePathsInText(
-          err instanceof Error
-            ? err.message
-            : t("errors:packInstaller.deleteFailed"),
-        ),
+      const message = redactAbsolutePathsInText(
+        invokeErrorMessage(err, t("errors:packInstaller.deleteFailed")),
       );
+      setLibraryDeleteError(message);
+      setStatusTone("error");
+      setStatusMessage(message);
     } finally {
       setBusy(null);
     }
@@ -1804,7 +1777,7 @@ export function TexturePackInstallerToolPanel({
     mobileShell && onOpenMobileSideRail ? (
       <button
         type="button"
-        className="tm-tool-rail-btn"
+        className="tm-tool-rail-btn tm-tool-rail-btn--output"
         onClick={onOpenMobileSideRail}
         aria-label={t("navigation:mobile.showDrawerAria", {
           panel: t("packInstaller.metadataPanelTitle"),
@@ -1868,12 +1841,7 @@ export function TexturePackInstallerToolPanel({
 
       <ToolPageHeader toolId="texturePackInstaller" />
 
-      {mobileShell ? (
-        <AndroidGeodeAccessBanner
-          geometryDashFound={geometryDashFound}
-          onSettingsUpdated={onAppSettingsUpdated}
-        />
-      ) : !geometryDashFound ? (
+      {mobileShell ? null : !geometryDashFound ? (
         <p className="tm-tool-inline-error" role="alert">
           {t("errors:packInstaller.geometryDashRequired")}
         </p>
@@ -2107,7 +2075,7 @@ export function TexturePackInstallerToolPanel({
             )}
           </ToolSection>
 
-          <div className="tm-pack-actions">
+          <ToolActionBar>
             <button
               type="button"
               className="tm-tool-run-btn"
@@ -2122,7 +2090,7 @@ export function TexturePackInstallerToolPanel({
               {busy === "install" ? t("packInstaller.installing") : t("packInstaller.install")}
             </button>
             {mobileMetadataRailButton}
-          </div>
+          </ToolActionBar>
         </>
       ) : bridge.mode === "create" ? (
         <>
@@ -2198,7 +2166,7 @@ export function TexturePackInstallerToolPanel({
             ) : null}
           </ToolSection>
 
-          <div className="tm-pack-actions">
+          <ToolActionBar>
             <button
               type="button"
               className="tm-tool-run-btn"
@@ -2224,7 +2192,7 @@ export function TexturePackInstallerToolPanel({
                 {t("packInstaller.openFolder")}
               </button>
             ) : null}
-          </div>
+          </ToolActionBar>
         </>
       ) : (
         <>
@@ -2362,36 +2330,6 @@ export function TexturePackInstallerToolPanel({
                           >
                             <MoreHorizontal size={18} aria-hidden />
                           </button>
-                          <div
-                            className="tm-pack-library-card-actions"
-                            aria-label={t("packInstaller.libraryContextMenu")}
-                          >
-                            <button
-                              type="button"
-                              disabled={busy !== null}
-                              onClick={() => handleMobileLibraryCardAction(pack, "port")}
-                            >
-                              <Shuffle size={14} aria-hidden />
-                              {t("packInstaller.libraryActionPort")}
-                            </button>
-                            <button
-                              type="button"
-                              disabled={busy !== null}
-                              onClick={() => handleMobileLibraryCardAction(pack, "split")}
-                            >
-                              <Scissors size={14} aria-hidden />
-                              {t("packInstaller.libraryActionSplit")}
-                            </button>
-                            <button
-                              type="button"
-                              className="is-danger"
-                              disabled={busy !== null}
-                              onClick={() => handleMobileLibraryCardAction(pack, "delete")}
-                            >
-                              <Trash2 size={14} aria-hidden />
-                              {t("packInstaller.libraryActionDelete")}
-                            </button>
-                          </div>
                         </>
                       ) : null}
                     </div>
@@ -2568,7 +2506,7 @@ export function TexturePackInstallerToolPanel({
       )}
 
       {bridge.mode === "library" && mobileMetadataRailButton ? (
-        <div className="tm-pack-actions">{mobileMetadataRailButton}</div>
+        <ToolActionBar>{mobileMetadataRailButton}</ToolActionBar>
       ) : null}
 
       {libraryContextMenu ? (
@@ -2590,6 +2528,7 @@ export function TexturePackInstallerToolPanel({
           onClick={() => {
             if (busy === null) {
               setLibraryDeleteConfirm(null);
+              setLibraryDeleteError(null);
             }
           }}
           role="presentation"
@@ -2607,10 +2546,18 @@ export function TexturePackInstallerToolPanel({
                 name: libraryPackTitle(libraryDeleteConfirm),
               })}
             </p>
+            {libraryDeleteError ? (
+              <p className="tm-tool-inline-error" role="alert">
+                {libraryDeleteError}
+              </p>
+            ) : null}
             <div className="tm-icon-editor-confirm-dialog-actions">
               <button
                 type="button"
-                onClick={() => setLibraryDeleteConfirm(null)}
+                onClick={() => {
+                  setLibraryDeleteConfirm(null);
+                  setLibraryDeleteError(null);
+                }}
                 disabled={busy !== null}
               >
                 {t("common:cancel")}
@@ -2636,7 +2583,7 @@ export function TexturePackInstallerToolPanel({
       {statusMessage &&
       busy !== "install" &&
       busy !== "create" &&
-      busy !== "library" &&
+      (busy !== "library" || statusTone === "error") &&
       busy !== "librarySave" &&
       !(mobileShell && !geometryDashFound && statusTone === "error") ? (
         <div className={`tm-pack-status tm-pack-status-${statusTone}`} role="status">

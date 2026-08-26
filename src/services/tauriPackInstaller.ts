@@ -84,6 +84,22 @@ export const cleanupPackInstallTemp = async (tempDir: string): Promise<void> => 
 };
 
 /**
+ * Load pack.png from a pack directory as a data URL for library thumbnails.
+ */
+export const getPackPngDataUrlFromDir = async (
+  packDir: string,
+): Promise<string | null> => {
+  if (!isTauriRuntime() || !packDir.trim()) {
+    return null;
+  }
+  try {
+    return await invoke<string | null>("pack_png_data_url_from_dir", { packDir });
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Load pack.png (or any PNG) as a data URL for the metadata sidebar.
  * Uses the shared allowlisted PNG reader until a dedicated pack command exists.
  */

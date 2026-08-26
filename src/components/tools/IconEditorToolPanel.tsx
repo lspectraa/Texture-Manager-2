@@ -10,7 +10,8 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
+import { pickUserFile } from "../../services/tauriPicker";
 import html2canvas from "html2canvas";
 import { useTranslation } from "react-i18next";
 import { AppTooltip } from "../AppTooltip";
@@ -1914,13 +1915,12 @@ export function IconEditorToolPanel() {
       setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
       return;
     }
-    const selected = await open({
-      directory: false,
-      multiple: false,
+    const selected = await pickUserFile({
       title: t("dialogs.selectPlistSheet"),
-      filters: [{ name: "Plist", extensions: ["plist"] }],
+      extensions: ["plist"],
+      filterName: "Plist",
     });
-    if (typeof selected !== "string" || !selected.trim()) {
+    if (!selected?.trim()) {
       return;
     }
     await loadSheet(selected);
@@ -2166,13 +2166,12 @@ export function IconEditorToolPanel() {
         setToolbarErrorDetail(t("errors:iconEditor.textureImportUnavailable"));
         return;
       }
-      const selected = await open({
-        directory: false,
-        multiple: false,
+      const selected = await pickUserFile({
         title: t("dialogs.selectReplacementTexture", { role: t(`roles.${role}`) }),
-        filters: [{ name: "PNG", extensions: ["png"] }],
+        extensions: ["png"],
+        filterName: "PNG",
       });
-      if (typeof selected !== "string" || !selected.trim()) {
+      if (!selected?.trim()) {
         return;
       }
       const selectedTexturePath = selected.trim();

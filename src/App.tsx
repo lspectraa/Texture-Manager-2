@@ -56,6 +56,7 @@ import {
 } from "./components/tools/TexturePackInstallerToolPanel";
 import { PackInstallerMetadataSidebar } from "./components/tools/PackInstallerMetadataSidebar";
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
+import { useSwipeDismiss } from "./hooks/useSwipeDismiss";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
 import { MobileBottomDock } from "./components/mobile/MobileBottomDock";
@@ -63,9 +64,11 @@ import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
 import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { AboutToolPanel } from "./components/tools/AboutToolPanel";
+import { ToolActionBar } from "./components/tools/layout";
 import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
+import { AndroidGeodeAccessBanner } from "./components/tools/AndroidGeodeAccessBanner";
 import {
   allAppBackgroundOptions,
   APP_BACKGROUND_RANDOM,
@@ -89,6 +92,8 @@ import type { AppLanguage, AppSettingsView } from "./domain/settings";
 import {
   CURRENT_ONBOARDING_VERSION,
   DEFAULT_APP_SETTINGS_VIEW,
+  MOBILE_ONBOARDING_VERSION,
+  requiredOnboardingVersion,
 } from "./domain/settings";
 import {
   addCustomAppBackground,
@@ -107,7 +112,12 @@ import {
   type AvailableAppUpdate,
 } from "./services/tauriUpdater";
 import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
-import { isDesktopPlatform, isMobileShell } from "./utils/platform";
+import {
+  isAndroidPlatform,
+  isDesktopPlatform,
+  isMobileShell,
+  isSimulateUpdateEnabled,
+} from "./utils/platform";
 import { consumeSuppressNextMobilePopState } from "./utils/mobileHistory";
 import {
   exportDirectoryAsZip,
@@ -250,8 +260,6 @@ function App() {
   const mobileShell = isMobileShell();
   const [mobileGridOpen, setMobileGridOpen] = useState(false);
   const [mobileSideOpen, setMobileSideOpen] = useState(false);
-  const [mobileOutputChipDismissed, setMobileOutputChipDismissed] =
-    useState(false);
   const mobileGridOpenRef = useRef(mobileGridOpen);
   const mobileSideOpenRef = useRef(mobileSideOpen);
   mobileGridOpenRef.current = mobileGridOpen;
@@ -262,6 +270,17 @@ function App() {
     }
     setMobileSideOpen(true);
   }, []);
+  const closeMobileSideRail = useCallback((): void => {
+    if (mobileSideOpenRef.current) {
+      window.history.back();
+    }
+  }, []);
+  const mobileReportSwipe = useSwipeDismiss({
+    enabled: mobileShell && mobileSideOpen,
+    axis: "horizontal",
+    dismissDirection: "positive",
+    onDismiss: closeMobileSideRail,
+  });
   const [appSettings, setAppSettings] = useState<AppSettingsView>(
     DEFAULT_APP_SETTINGS_VIEW,
   );
@@ -401,7 +420,7 @@ function App() {
         const language = resolveInitialAppLanguage({
           persistedLanguage: settings.language,
           onboardingComplete:
-            settings.onboardingVersion >= CURRENT_ONBOARDING_VERSION,
+            settings.onboardingVersion >= requiredOnboardingVersion(mobileShell),
         });
         const resolvedSettings =
           settings.language === language ? settings : { ...settings, language };
@@ -579,7 +598,9 @@ function App() {
         const view = await saveAppSettings({
           language: choices.language,
           theme: choices.theme,
-          onboardingVersion: CURRENT_ONBOARDING_VERSION,
+          onboardingVersion: mobileShell
+            ? MOBILE_ONBOARDING_VERSION
+            : CURRENT_ONBOARDING_VERSION,
         });
         applySettingsView(view);
       } catch (error) {
@@ -590,7 +611,7 @@ function App() {
         setOnboardingBusy(false);
       }
     },
-    [applySettingsView],
+    [applySettingsView, mobileShell],
   );
 
   const handleLanguageChange = useCallback(
@@ -623,7 +644,7 @@ function App() {
 
   const needsOnboarding =
     settingsHydrated &&
-    appSettings.onboardingVersion < CURRENT_ONBOARDING_VERSION;
+    appSettings.onboardingVersion < requiredOnboardingVersion(mobileShell);
 
   const runUpdateCheck = useCallback(
     async (options?: { silent?: boolean }): Promise<void> => {
@@ -693,7 +714,10 @@ function App() {
   );
 
   useEffect(() => {
-    if (!settingsHydrated || needsOnboarding || !isDesktopPlatform()) {
+    const canAutoCheckUpdates =
+      isSimulateUpdateEnabled() ||
+      (isTauriRuntime() && (isDesktopPlatform() || isAndroidPlatform()));
+    if (!settingsHydrated || needsOnboarding || !canAutoCheckUpdates) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -707,7 +731,6 @@ function App() {
   const executeSelectedOperation = async (): Promise<void> => {
     setRunError(null);
     setReport(null);
-    setMobileOutputChipDismissed(false);
 
     let request: OperationRequest | null = null;
 
@@ -1532,7 +1555,7 @@ function App() {
           busy={onboardingBusy}
           error={onboardingError}
           pickFolder={pickFolder}
-          skipGeometryDash={mobileShell}
+          mobileStorageAccess={mobileShell}
           onThemeChange={(theme: AppTheme) => {
             applyTheme(theme);
             setStoredTheme(theme);
@@ -1554,6 +1577,7 @@ function App() {
               // Error surfaced via onboardingError.
             });
           }}
+          onSettingsUpdated={applySettingsView}
           onComplete={(choices) => {
             completeOnboarding(choices).catch(() => {
               // Error surfaced via onboardingError.
@@ -1748,7 +1772,14 @@ function App() {
         )}
 
         <div className="tm-main-column">
-          {availableUpdate && !updateBannerDismissed && isDesktopPlatform() ? (
+          {mobileShell ? (
+            <AndroidGeodeAccessBanner
+              geometryDashFound={appSettings.geometryDashFound}
+              onSettingsUpdated={applySettingsView}
+              className="tm-android-geode-access--global"
+            />
+          ) : null}
+          {availableUpdate && !updateBannerDismissed ? (
             <AppUpdateBanner
               update={availableUpdate}
               operationRunning={isRunning}
@@ -1768,7 +1799,7 @@ function App() {
             <div className="tm-panel-body">{toolPanel}</div>
 
             {showRunAction ? (
-              <div className="tm-tool-actions">
+              <ToolActionBar>
                 <button
                   type="button"
                   className="tm-tool-run-btn"
@@ -1781,38 +1812,14 @@ function App() {
                 {mobileShell && showOperationAndReport ? (
                   <button
                     type="button"
-                    className="tm-tool-rail-btn"
+                    className="tm-tool-rail-btn tm-tool-rail-btn--output"
                     onClick={openMobileSideRail}
                   >
                     <Activity size={16} strokeWidth={1.85} />
                     {t("reports:panelTitle")}
                   </button>
                 ) : null}
-                {mobileShell &&
-                showOperationAndReport &&
-                (report || runError) &&
-                !mobileSideOpen &&
-                !mobileOutputChipDismissed ? (
-                  <div className="tm-mobile-output-chip">
-                    <button
-                      type="button"
-                      className="tm-tool-rail-btn tm-mobile-output-chip-open"
-                      onClick={openMobileSideRail}
-                    >
-                      <Activity size={16} strokeWidth={1.85} />
-                      {t("reports:viewRunOutput")}
-                    </button>
-                    <button
-                      type="button"
-                      className="tm-mobile-output-chip-dismiss"
-                      onClick={() => setMobileOutputChipDismissed(true)}
-                      aria-label={t("common:close")}
-                    >
-                      <X size={15} strokeWidth={2} />
-                    </button>
-                  </div>
-                ) : null}
-              </div>
+              </ToolActionBar>
             ) : null}
           </section>
         </div>
@@ -1826,7 +1833,11 @@ function App() {
                 : `tm-report-state-${reportState}`
             }${isReportCollapsed && !mobileShell ? " tm-report--collapsed" : ""}${
               reportPanelTransition.animating ? " tm-report--animating" : ""
-            }${mobileShell && mobileSideOpen ? " tm-report--mobile-open" : ""}`}
+            }${mobileShell && mobileSideOpen ? " tm-report--mobile-open" : ""}${
+              mobileReportSwipe.dragging ? " tm-report--swipe-dragging" : ""
+            }`}
+            style={mobileShell ? mobileReportSwipe.style : undefined}
+            {...(mobileShell && mobileSideOpen ? mobileReportSwipe.captureHandlers : {})}
           >
             <GlassFrost />
             {mobileShell ? (
@@ -1850,9 +1861,7 @@ function App() {
                   className="tm-mobile-rail-close"
                   aria-label={t("navigation:mobile.closeDrawerAria")}
                   onClick={() => {
-                    if (mobileSideOpenRef.current) {
-                      window.history.back();
-                    }
+                    closeMobileSideRail();
                   }}
                 >
                   <X size={18} strokeWidth={2} aria-hidden />

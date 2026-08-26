@@ -1,26 +1,22 @@
 import { FolderKey } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAndroidStorageAccess } from "../../hooks/useAndroidStorageAccess";
-import { isMobileShell } from "../../utils/platform";
 import type { AppSettingsView } from "../../domain/settings";
 
-type AndroidGeodeAccessBannerProps = {
+type AndroidStorageAccessPanelProps = {
   geometryDashFound: boolean;
   onSettingsUpdated?: (settings: AppSettingsView) => void;
   className?: string;
+  showReadyHint?: boolean;
 };
 
-/**
- * Shown on mobile after onboarding when All files access is missing or Geode
- * media cannot be read.
- */
-export function AndroidGeodeAccessBanner({
+export function AndroidStorageAccessPanel({
   geometryDashFound,
   onSettingsUpdated,
   className = "",
-}: AndroidGeodeAccessBannerProps) {
+  showReadyHint = false,
+}: AndroidStorageAccessPanelProps) {
   const { t } = useTranslation();
-  const mobileShell = isMobileShell();
   const {
     storageReady,
     permissionBlocked,
@@ -28,12 +24,24 @@ export function AndroidGeodeAccessBanner({
     busy,
     requestAccess,
   } = useAndroidStorageAccess({
-    enabled: mobileShell,
+    enabled: true,
     geometryDashFound,
     onSettingsUpdated,
   });
 
-  if (!mobileShell || storageReady) {
+  if (storageReady && showReadyHint) {
+    return (
+      <div
+        className={`tm-android-geode-access tm-android-geode-access--ready ${className}`.trim()}
+        data-testid="android-storage-access"
+        role="status"
+      >
+        <p className="tm-onboarding-hint">{t("onboarding:androidStorage.looksGood")}</p>
+      </div>
+    );
+  }
+
+  if (storageReady) {
     return null;
   }
 
@@ -42,7 +50,7 @@ export function AndroidGeodeAccessBanner({
   return (
     <div
       className={`tm-android-geode-access ${className}`.trim()}
-      data-testid="android-storage-banner"
+      data-testid="android-storage-access"
       role="alert"
     >
       <p className="tm-tool-inline-error">{statusMessage}</p>
@@ -61,6 +69,11 @@ export function AndroidGeodeAccessBanner({
             {t("errors:packInstaller.grantAllFilesAccess")}
           </button>
         </div>
+      ) : null}
+      {!storageReady && !permissionBlocked ? (
+        <p className="tm-onboarding-warning" role="status">
+          {t("onboarding:androidStorage.skipWarning")}
+        </p>
       ) : null}
     </div>
   );

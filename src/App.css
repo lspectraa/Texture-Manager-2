@@ -183,6 +183,15 @@ body {
   overflow: visible;
 }
 
+.tm-shell--onboarding {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding: 0;
+}
+
 .tm-app-dialog-backdrop {
   position: fixed;
   inset: 0;
@@ -2646,6 +2655,14 @@ body {
   gap: 0.55rem;
 }
 
+.tm-android-geode-access--global {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid rgba(125, 211, 252, 0.35);
+  background: rgba(8, 18, 32, 0.72);
+}
+
 .tm-android-geode-access-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2878,7 +2895,8 @@ body {
   line-height: 1.45;
 }
 
-.tm-tool-actions {
+.tm-tool-action-bar {
+  position: relative;
   display: flex;
   flex-shrink: 0;
   flex-wrap: wrap;
@@ -2888,7 +2906,43 @@ body {
   width: 100%;
   margin: 0;
   padding: 16px 2px 20px;
-  border-top: 1px solid rgba(155, 204, 255, 0.14);
+  border-radius: 0;
+  border: 0;
+  /* overflow must stay visible — clipping ancestors kill backdrop-filter sampling. */
+  overflow: visible;
+  background: transparent;
+  box-shadow:
+    0 -1px 0 color-mix(in srgb, var(--tm-border-strong) 65%, transparent),
+    0 -8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.tm-tool-action-bar.tm-glass-card::after {
+  z-index: 0;
+  opacity: 0.04;
+}
+
+.tm-tool-page > .tm-tool-action-bar {
+  margin-top: 8px;
+  padding-top: 14px;
+}
+
+.tm-tool-action-bar .tm-tool-rail-btn--output {
+  color: #f4f8ff;
+  border: 1px solid rgba(125, 233, 216, 0.42);
+  background:
+    radial-gradient(90% 120% at 0% 0%, rgba(93, 224, 200, 0.18), transparent 58%),
+    linear-gradient(155deg, rgba(93, 224, 200, 0.28), rgba(123, 188, 255, 0.16));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.tm-tool-action-bar .tm-tool-rail-btn--output:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(125, 233, 216, 0.62);
+  box-shadow: var(--tm-shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.tm-tool-action-bar .tm-tool-rail-btn--output:active:not(:disabled) {
+  transform: translateY(0) scale(0.992);
 }
 
 .tm-tool-rail-btn {
@@ -7523,6 +7577,23 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   box-shadow: none;
 }
 
+[data-theme="light"][data-shell="mobile"] .tm-tool-action-bar .tm-tool-rail-btn--output {
+  color: #ffffff;
+  border-color: rgba(20, 150, 130, 0.55);
+  background: linear-gradient(155deg, #1db89a 0%, #18a88e 55%, #12987e 100%);
+  box-shadow:
+    0 1px 2px rgba(20, 120, 100, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+
+[data-theme="light"][data-shell="mobile"] .tm-tool-action-bar .tm-tool-rail-btn--output:hover:not(:disabled) {
+  border-color: rgba(15, 130, 110, 0.7);
+  background: linear-gradient(155deg, #22c4a4 0%, #1cb498 55%, #16a48a 100%);
+  box-shadow:
+    0 4px 14px rgba(24, 160, 130, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.28);
+}
+
 [data-theme="light"] .tm-number-step-btn {
   color: var(--tm-heading);
 }
@@ -9618,6 +9689,10 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   gap: 22px;
 }
 
+.tm-theme-style-picker--onboarding .tm-theme-style-picker-grid {
+  padding: 4px;
+}
+
 .tm-theme-style-picker--onboarding .tm-theme-style-picker-title {
   font-size: 1.55rem;
 }
@@ -9635,10 +9710,14 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 .tm-onboarding {
   position: relative;
   z-index: 2;
-  min-height: 100dvh;
+  height: 100%;
+  max-height: 100dvh;
+  min-height: 0;
   display: grid;
   place-items: center;
   padding: clamp(20px, 4vw, 40px);
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 .tm-onboarding-card {
@@ -9718,8 +9797,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding-inline: 2px 6px;
-  margin-inline: -2px;
+  /* Room for selected/focus 3px ring — same as theme picker grid in onboarding. */
+  padding: 4px;
   scrollbar-gutter: stable;
 }
 
@@ -11980,14 +12059,6 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   opacity: 0.7;
 }
 
-.tm-pack-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 8px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(155, 204, 255, 0.12);
-}
 
 .tm-pack-library-rail-anchor {
   width: 0;
@@ -12636,6 +12707,31 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     );
 }
 
+/*
+ * Tool action bar: real backdrop blur (override mobile solid-frost kill).
+ * Fill stays translucent so scrolling content / shell bg show through the glass.
+ */
+[data-shell="mobile"] .tm-tool-action-bar.tm-glass-card .tm-glass-frost {
+  display: block;
+  transform: translateZ(0);
+  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  background:
+    var(--tm-glass-streak),
+    var(--tm-glass-streak-2),
+    var(--tm-glass-specular),
+    var(--tm-glass-edge),
+    radial-gradient(90% 55% at 8% -6%, rgba(140, 190, 255, 0.12), transparent 50%),
+    linear-gradient(
+      160deg,
+      var(--tm-glass-sheen-0) 0%,
+      var(--tm-glass-sheen-1) 38%,
+      var(--tm-glass-sheen-2) 100%
+    ),
+    color-mix(in srgb, var(--tm-glass-fill) 72%, transparent);
+  box-shadow: inset 0 1px 0 var(--tm-glass-rim);
+}
+
 [data-shell="mobile"] *,
 [data-shell="mobile"] *::before,
 [data-shell="mobile"] *::after {
@@ -12714,6 +12810,71 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     0
     var(--tm-mobile-dock-clearance)
     0;
+}
+
+[data-shell="mobile"] .tm-shell.tm-shell--onboarding {
+  padding:
+    max(8px, env(safe-area-inset-top))
+    0
+    max(8px, env(safe-area-inset-bottom, 0px))
+    0;
+}
+
+[data-shell="mobile"] .tm-onboarding {
+  height: 100%;
+  max-height: none;
+  min-height: 0;
+  padding: 8px;
+  place-items: stretch;
+  align-content: stretch;
+}
+
+[data-shell="mobile"] .tm-onboarding-card {
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: 100%;
+  min-height: 0;
+  border-radius: 18px;
+  gap: 20px;
+  padding: 20px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+}
+
+[data-shell="mobile"] .tm-onboarding-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+[data-shell="mobile"] .tm-onboarding-language {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-shell="mobile"] .tm-onboarding-language-scroll {
+  max-height: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px;
+}
+
+[data-shell="mobile"] .tm-theme-style-picker--onboarding {
+  max-width: none;
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+[data-shell="mobile"] .tm-onboarding-android-storage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+[data-shell="mobile"] .tm-onboarding-footer {
+  flex-shrink: 0;
 }
 
 [data-shell="mobile"] .tm-layout,
@@ -13124,6 +13285,11 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   -webkit-overflow-scrolling: touch;
 }
 
+.tm-mobile-dock.is-panel-swiping .tm-mobile-grid-scroll {
+  overflow: hidden;
+  touch-action: none;
+}
+
 .tm-mobile-grid-tile,
 .tm-mobile-grid-section-title,
 .tm-mobile-grid-head {
@@ -13289,6 +13455,10 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 [data-shell="mobile"] .tm-report.tm-report--mobile-open,
 [data-shell="mobile"] .tm-layout--mobile-report-open .tm-report {
   transform: translateX(0);
+}
+
+[data-shell="mobile"] .tm-report.tm-report--swipe-dragging {
+  transition: none;
 }
 
 [data-shell="mobile"] .tm-report .tm-shell-panel-title {
@@ -13615,12 +13785,76 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   display: none;
 }
 
-[data-shell="mobile"] .tm-panel.tm-panel--mobile-flat .tm-glass-frost {
+[data-shell="mobile"] .tm-panel.tm-panel--mobile-flat > .tm-glass-frost {
   display: none;
+}
+
+[data-shell="mobile"] .tm-panel.tm-panel--mobile-flat .tm-tool-action-bar .tm-glass-frost {
+  display: block;
+  transform: translateZ(0);
+  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  -webkit-backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  background:
+    var(--tm-glass-streak),
+    var(--tm-glass-streak-2),
+    var(--tm-glass-specular),
+    var(--tm-glass-edge),
+    radial-gradient(90% 55% at 8% -6%, rgba(140, 190, 255, 0.12), transparent 50%),
+    linear-gradient(
+      160deg,
+      var(--tm-glass-sheen-0) 0%,
+      var(--tm-glass-sheen-1) 38%,
+      var(--tm-glass-sheen-2) 100%
+    ),
+    color-mix(in srgb, var(--tm-glass-fill) 72%, transparent);
+  box-shadow: inset 0 1px 0 var(--tm-glass-rim);
+}
+
+[data-shell="mobile"] .tm-panel.tm-panel--mobile-flat .tm-tool-action-bar.tm-glass-card::after {
+  display: block;
 }
 
 [data-shell="mobile"] .tm-panel-body {
   padding: 0;
+}
+
+/*
+ * Hide scrollbars on main mobile pages (home, tools, editors, report).
+ * Keep visible scroll affordances for onboarding language lists, select menus,
+ * and bottom sheets / drawers.
+ */
+[data-shell="mobile"] .tm-panel-body,
+[data-shell="mobile"] .tm-report-body-inner,
+[data-shell="mobile"] .tm-report ul,
+[data-shell="mobile"] .tm-pack-unit-tree,
+[data-shell="mobile"] .tm-issues-list,
+[data-shell="mobile"] .tm-geode-adjust-panel,
+[data-shell="mobile"] .tm-pe-stage,
+[data-shell="mobile"] .tm-update-banner-notes {
+  scrollbar-gutter: auto !important;
+  scrollbar-width: none !important;
+  scrollbar-color: transparent transparent !important;
+}
+
+[data-shell="mobile"] .tm-panel-body::-webkit-scrollbar,
+[data-shell="mobile"] .tm-panel-body::-webkit-scrollbar-track,
+[data-shell="mobile"] .tm-panel-body::-webkit-scrollbar-thumb,
+[data-shell="mobile"] .tm-panel-body::-webkit-scrollbar-corner,
+[data-shell="mobile"] .tm-report-body-inner::-webkit-scrollbar,
+[data-shell="mobile"] .tm-report-body-inner::-webkit-scrollbar-track,
+[data-shell="mobile"] .tm-report-body-inner::-webkit-scrollbar-thumb,
+[data-shell="mobile"] .tm-report-body-inner::-webkit-scrollbar-corner,
+[data-shell="mobile"] .tm-report ul::-webkit-scrollbar,
+[data-shell="mobile"] .tm-pack-unit-tree::-webkit-scrollbar,
+[data-shell="mobile"] .tm-issues-list::-webkit-scrollbar,
+[data-shell="mobile"] .tm-geode-adjust-panel::-webkit-scrollbar,
+[data-shell="mobile"] .tm-pe-stage::-webkit-scrollbar,
+[data-shell="mobile"] .tm-update-banner-notes::-webkit-scrollbar {
+  display: none;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent;
+  border: 0;
 }
 
 [data-shell="mobile"] .tm-home--mobile,
@@ -13648,10 +13882,15 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   gap: 10px;
 }
 
-[data-shell="mobile"] .tm-panel.tm-panel-tool .tm-tool-actions,
-[data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-pack-actions {
-  position: sticky;
-  /* The mobile panel ends at the dock-clearance boundary. */
+[data-shell="mobile"] .tm-panel.tm-panel-tool {
+  position: relative;
+}
+
+/* Overlay the panel bottom so scrolling tool content passes under the glass. */
+[data-shell="mobile"] .tm-panel.tm-panel-tool > .tm-tool-action-bar {
+  position: absolute;
+  left: 0;
+  right: 0;
   bottom: 0;
   z-index: 12;
   display: flex;
@@ -13662,19 +13901,40 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   margin: 0;
   padding: 12px var(--tm-mobile-content-pad);
   box-sizing: border-box;
-  background: transparent;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  border-top: 1px solid rgba(175, 215, 255, 0.38);
   border-radius: 0;
-  box-shadow: 0 -10px 18px rgba(0, 0, 0, 0.28);
+  box-shadow:
+    0 -1px 0 color-mix(in srgb, var(--tm-border-strong) 72%, transparent),
+    0 -12px 28px rgba(0, 0, 0, 0.28);
+}
+
+[data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-tool-action-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 12;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 12px var(--tm-mobile-content-pad);
+  box-sizing: border-box;
+  border-radius: 0;
+  box-shadow:
+    0 -1px 0 color-mix(in srgb, var(--tm-border-strong) 72%, transparent),
+    0 -12px 28px rgba(0, 0, 0, 0.28);
+}
+
+[data-shell="mobile"] .tm-tool-action-bar.tm-glass-card::after {
+  display: block;
+  opacity: 0.035;
 }
 
 [data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-tool-page {
   padding-bottom: 0;
 }
 
-[data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-pack-actions {
+[data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-tool-action-bar {
   /* Pin to the bottom of the panel like App-level tool actions. */
   margin-top: auto;
   margin-left: calc(-1 * var(--tm-mobile-content-pad));
@@ -13682,45 +13942,12 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   width: calc(100% + (2 * var(--tm-mobile-content-pad)));
 }
 
-[data-shell="mobile"] .tm-panel.tm-panel-tool .tm-tool-actions .tm-tool-run-btn,
-[data-shell="mobile"] .tm-panel.tm-panel-tool .tm-tool-actions .tm-tool-rail-btn,
-[data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-pack-actions .tm-tool-run-btn,
-[data-shell="mobile"] .tm-panel.tm-panel-pack-installer .tm-pack-actions .tm-tool-rail-btn {
+[data-shell="mobile"] .tm-tool-action-bar .tm-tool-run-btn,
+[data-shell="mobile"] .tm-tool-action-bar .tm-tool-rail-btn--output {
   flex: 1 1 0;
   min-width: 0;
   min-height: var(--tm-mobile-control-min-height);
   justify-content: center;
-}
-
-[data-shell="mobile"] .tm-mobile-output-chip {
-  display: inline-flex;
-  min-width: 0;
-  min-height: var(--tm-mobile-control-min-height);
-  border: 1px solid rgba(125, 233, 216, 0.42);
-  border-radius: 999px;
-  overflow: hidden;
-  background: rgba(93, 224, 200, 0.12);
-}
-
-[data-shell="mobile"] .tm-mobile-output-chip .tm-mobile-output-chip-open {
-  min-height: 42px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-[data-shell="mobile"] .tm-mobile-output-chip-dismiss {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  min-height: 42px;
-  padding: 0;
-  border: 0;
-  border-left: 1px solid rgba(125, 233, 216, 0.22);
-  background: transparent;
-  color: var(--tm-text-muted);
 }
 
 [data-shell="mobile"] .tm-home--mobile .tm-home-hero {
@@ -13935,6 +14162,65 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 [data-shell="mobile"] .tm-pe-inspector-toggle.is-open {
   background: rgba(60, 120, 220, 0.35);
   border-color: rgba(120, 180, 255, 0.45);
+}
+
+[data-shell="mobile"] .tm-mobile-edge-tab {
+  position: fixed;
+  right: 0;
+  top: 50%;
+  z-index: 20;
+  transform: translateY(-50%) translateX(calc(100% - 38px));
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 44px;
+  max-width: 52px;
+  padding: 14px 8px 14px 10px;
+  border: 1px solid rgba(140, 185, 255, 0.28);
+  border-right: none;
+  border-radius: 14px 0 0 14px;
+  background: rgba(16, 28, 54, 0.88);
+  color: var(--tm-heading, #e8eef7);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 650;
+  line-height: 1.15;
+  cursor: pointer;
+  box-shadow: -6px 0 20px rgba(0, 0, 0, 0.24);
+  touch-action: none;
+  transition:
+    transform 220ms cubic-bezier(0.32, 0.72, 0, 1),
+    background 180ms ease,
+    border-color 180ms ease;
+}
+
+[data-shell="mobile"] .tm-mobile-edge-tab.is-open,
+[data-shell="mobile"] .tm-mobile-edge-tab:active:not(.is-disabled) {
+  transform: translateY(-50%) translateX(0);
+}
+
+[data-shell="mobile"] .tm-mobile-edge-tab.is-open {
+  background: rgba(60, 120, 220, 0.35);
+  border-color: rgba(120, 180, 255, 0.45);
+}
+
+[data-shell="mobile"] .tm-mobile-edge-tab.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+[data-shell="mobile"] .tm-mobile-edge-tab-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[data-shell="mobile"] .tm-mobile-edge-tab-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  letter-spacing: 0.04em;
 }
 
 [data-shell="mobile"] .tm-particle-editor--mobile .tm-pe-body {
@@ -14387,13 +14673,6 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 }
 
 
-[data-shell="mobile"] .tm-geode-workspace--mobile-adjust > .tm-tool-section:first-of-type {
-  display: none;
-}
-
-[data-shell="mobile"] .tm-geode-workspace:not(.tm-geode-workspace--mobile-adjust) .tm-geode-adjust-panel {
-  display: none;
-}
 
 [data-shell="mobile"] .tm-progress-overlay .tm-progress-card {
   width: min(100% - 24px, 420px);
@@ -14484,6 +14763,50 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   .tm-mobile-sheet {
     transition: none;
   }
+}
+
+.tm-mobile-sheet-handle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 0 0 auto;
+  height: 18px;
+  margin: 0;
+  touch-action: none;
+}
+
+.tm-mobile-sheet-handle-bar {
+  width: 40px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(210, 230, 255, 0.5);
+}
+
+.tm-mobile-sheet.is-swiping .tm-mobile-sheet-body {
+  overflow: hidden;
+  touch-action: none;
+}
+
+.tm-mobile-sheet-root.is-swiping .tm-mobile-sheet-backdrop {
+  pointer-events: none;
+}
+
+.tm-geode-adjust-sheet-subtitle {
+  margin: 0 0 0.75rem;
+}
+
+[data-shell="mobile"] .tm-mobile-sheet-root.tm-geode-adjust-sheet .tm-mobile-sheet-body {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.tm-android-geode-access--onboarding {
+  margin-top: 0.35rem;
+}
+
+.tm-onboarding-android-storage {
+  display: grid;
+  gap: 0.65rem;
 }
 
 .tm-mobile-sheet-head {

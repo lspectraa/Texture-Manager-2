@@ -1,10 +1,12 @@
 package com.spectra.texturemanager2
 
 import android.app.Activity
+import android.app.AppOpsManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.Process
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -20,6 +22,7 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
 import java.io.FileOutputStream
+import java.util.ArrayDeque
 
 /**
  * All-files access for Geode media paths, plus SAF folder/file pickers that
@@ -41,15 +44,117 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
 
   @Command
   fun checkAllFilesAccess(invoke: Invoke) {
-    val granted =
-      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        Environment.isExternalStorageManager()
-      } else {
-        true
-      }
+    val allFilesGranted = hasAllFilesAccess()
+    val geodeProbe = probeGeodeMedia()
     val result = JSObject()
-    result.put("granted", granted)
+    // Prefer camelCase keys that match the Rust/TS contract.
+    result.put("allFilesGranted", allFilesGranted)
+    result.put("geodeReadable", geodeProbe.readable)
+    result.put("geodePath", geodeProbe.path)
+    // Legacy key kept so older Rust builds keep working.
+    result.put("granted", allFilesGranted)
     invoke.resolve(result)
+  }
+
+  /**
+   * Pixel emulators (and some OEMs) can show All files access enabled in Settings
+   * while [Environment.isExternalStorageManager] still returns false until a cold
+   * start. Cross-check AppOps and a real `Android/media` list probe.
+   */
+  private fun hasAllFilesAccess(): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+      return true
+    }
+    if (Environment.isExternalStorageManager()) {
+      return true
+    }
+    if (manageExternalStorageAppOpAllowed()) {
+      return true
+    }
+    return canListPrimaryAndroidMedia()
+  }
+
+  private fun manageExternalStorageAppOpAllowed(): Boolean {
+    return try {
+      val appOps = activity.getSystemService(AppOpsManager::class.java) ?: return false
+      val mode =
+        appOps.unsafeCheckOpNoThrow(
+          "android:manage_external_storage",
+          Process.myUid(),
+          activity.packageName,
+        )
+      mode == AppOpsManager.MODE_ALLOWED
+    } catch (_: Exception) {
+      false
+    }
+  }
+
+  private fun canListPrimaryAndroidMedia(): Boolean {
+    val relativePaths = arrayOf("Android/media", "Android/data")
+    for (root in primaryStorageRoots()) {
+      for (relative in relativePaths) {
+        val dir = File(root, relative)
+        if (!dir.isDirectory || !dir.canRead()) {
+          continue
+        }
+        // null means the platform blocked listing (no all-files access).
+        if (dir.list() != null) {
+          return true
+        }
+      }
+    }
+    return false
+  }
+
+  private data class GeodeProbe(val path: String?, val readable: Boolean)
+
+  private fun probeGeodeMedia(): GeodeProbe {
+    val packages = arrayOf("com.geode.launcher", "com.geode.launcher.play")
+    for (root in primaryStorageRoots()) {
+      for (packageId in packages) {
+        val geode = File(root, "Android/media/$packageId/game/geode")
+        if (!geode.isDirectory || !geode.canRead()) {
+          continue
+        }
+        if (canReadAnyFileUnder(geode)) {
+          val game = geode.parentFile?.absolutePath
+          return GeodeProbe(path = game, readable = true)
+        }
+      }
+    }
+    return GeodeProbe(path = null, readable = false)
+  }
+
+  private fun canReadAnyFileUnder(dir: File): Boolean {
+    val queue = ArrayDeque<File>()
+    queue.add(dir)
+    var visited = 0
+    while (queue.isNotEmpty() && visited < 64) {
+      val current = queue.removeFirst()
+      visited += 1
+      val children = current.listFiles() ?: continue
+      for (child in children) {
+        if (child.isFile && child.canRead()) {
+          return true
+        }
+        if (child.isDirectory && child.canRead()) {
+          queue.add(child)
+        }
+      }
+    }
+    return false
+  }
+
+  private fun primaryStorageRoots(): List<File> {
+    val roots = linkedSetOf<File>()
+    try {
+      Environment.getExternalStorageDirectory()?.let { roots.add(it) }
+    } catch (_: Exception) {
+      // Ignore — fall through to hard-coded roots.
+    }
+    roots.add(File("/storage/emulated/0"))
+    roots.add(File("/sdcard"))
+    return roots.toList()
   }
 
   @Command

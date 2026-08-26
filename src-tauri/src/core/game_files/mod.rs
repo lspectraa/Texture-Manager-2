@@ -12,7 +12,7 @@ use crate::core::discovery::{discover_sheet_pairs, discover_unpaired_png_keys, S
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{
     ensure_no_parent_dir_components, ensure_user_absolute_path, is_safe_path_segment,
-    join_under_parent, path_from_slashes, png_file_to_data_url, remove_dir_all_under_root,
+    path_from_slashes, png_file_to_data_url, remove_dir_all_under_root,
     shorten_path_for_display,
 };
 use crate::core::splitter::split_sheet_candidate;
@@ -64,10 +64,14 @@ impl GameFilesLayout {
         if looks_like_geometry_dash_dir(&self.geometry_dash_dir) {
             return true;
         }
-        // Android: vanilla Resources are inaccessible; Geode media alone is enough.
+        // Android: vanilla Resources are inaccessible; Geode media alone is enough
+        // once we can actually read files (not just see the folder exists).
         #[cfg(target_os = "android")]
         {
-            return looks_like_geode_dir(&self.geometry_dash_dir.join("geode"));
+            if !looks_like_geode_dir(&self.geometry_dash_dir.join("geode")) {
+                return false;
+            }
+            return android_geode_storage_readable(&self.geometry_dash_dir);
         }
         #[cfg(not(target_os = "android"))]
         {
@@ -372,17 +376,59 @@ fn android_geode_media_candidates() -> Vec<PathBuf> {
 pub fn detect_android_geometry_dash_dir() -> Option<PathBuf> {
     for geode in android_geode_media_candidates() {
         if looks_like_geode_dir(&geode) {
-            return geode.parent().map(|parent| parent.to_path_buf());
+            if let Some(game) = geode.parent() {
+                if android_geode_storage_readable(game) {
+                    return Some(game.to_path_buf());
+                }
+            }
         }
-        // Parent `game` folder with a `geode` child that exists but failed the
-        // stricter check above (e.g. empty after install).
+        // Parent `game` folder with a readable `geode` child.
         if let Some(game) = geode.parent() {
-            if geode.exists() || game.join("geode").is_dir() {
+            if geode.is_dir() && android_geode_storage_readable(&game) {
                 return Some(game.to_path_buf());
             }
         }
     }
     None
+}
+
+/// True when the Geode media tree under `game_dir` can be listed and at least one file read.
+#[cfg(target_os = "android")]
+pub fn android_geode_storage_readable(game_dir: &Path) -> bool {
+    let geode = game_dir.join("geode");
+    if !geode.is_dir() {
+        return false;
+    }
+    let candidates = [
+        geode.join("resources"),
+        geode.join("config"),
+        geode.clone(),
+    ];
+    for dir in candidates {
+        if !dir.is_dir() {
+            continue;
+        }
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && fs::File::open(&path).is_ok() {
+                return true;
+            }
+            if path.is_dir() {
+                if fs::read_dir(&path)
+                    .ok()
+                    .and_then(|mut nested| nested.next())
+                    .is_some()
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
 }
 
 /// Diagnostic listing of Geode candidate paths on Android internal storage.
@@ -932,6 +978,13 @@ pub fn resolve_current_source_dir(layout: &GameFilesLayout, relative_dir: &Path)
         .collect();
 
     if parts.is_empty() {
+        #[cfg(target_os = "android")]
+        {
+            let geode_loader = layout.geode_resources.join("geode.loader");
+            if geode_loader.is_dir() {
+                return geode_loader;
+            }
+        }
         return layout.resources.clone();
     }
 
@@ -964,36 +1017,7 @@ pub fn resolve_current_source_dir(layout: &GameFilesLayout, relative_dir: &Path)
 }
 
 fn resolve_png_beside_plist(plist_path: &Path) -> PathBuf {
-    let direct = plist_path.with_extension("png");
-    if direct.exists() {
-        return direct;
-    }
-    if let Some(texture_name) = texture_file_name_from_plist(plist_path) {
-        if let Some(parent) = plist_path.parent() {
-            if let Ok(candidate) = join_under_parent(parent, &texture_name) {
-                if candidate.exists() {
-                    return candidate;
-                }
-            }
-        }
-    }
-    direct
-}
-
-fn texture_file_name_from_plist(plist_path: &Path) -> Option<String> {
-    let root = plist::Value::from_file(plist_path).ok()?;
-    let metadata = root
-        .as_dictionary()
-        .and_then(|d| d.get("metadata"))
-        .and_then(|v| v.as_dictionary())?;
-    for key in ["realTextureFileName", "textureFileName"] {
-        if let Some(name) = metadata.get(key).and_then(|v| v.as_string()) {
-            if !name.is_empty() {
-                return Some(name.to_string());
-            }
-        }
-    }
-    None
+    crate::core::plist_assets::resolve_png_beside_plist(plist_path, None)
 }
 
 /// Locate a latest placeholder sheet without touching the sprite-index JSON.

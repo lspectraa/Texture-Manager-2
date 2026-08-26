@@ -53,7 +53,7 @@ Built by [Spectra](https://www.youtube.com/c/spectraa) · [Discord](https://disc
 | --- | --- | --- |
 | **Windows** x64 | `.msi` | Primary desktop install |
 | **macOS** Apple Silicon / Intel | `.dmg` | Separate builds per architecture |
-| **Android** | `.apk` (arm64) | Sideload from Releases; mobile shell. Optional Play signing via CI secrets. |
+| **Android** | `.apk` (arm64) | Sideload from Releases; mobile shell. Tagged CI publishes require Play/release signing secrets. |
 
 ### Requirements
 
@@ -63,7 +63,7 @@ Built by [Spectra](https://www.youtube.com/c/spectraa) · [Discord](https://disc
 ### Install (desktop)
 
 1. Open the latest [GitHub Release](https://github.com/lspectraa/Texture-Manager-2/releases/latest).
-2. Download the installer for your OS (Windows **`.msi`**, macOS **`.dmg`**, or Android **`.apk`** — not the `.sig` or `latest.json`).
+2. Download the installer for your OS (Windows **`.msi`**, macOS **`.dmg`**, or Android **`.apk`** — not the `.sig`, desktop `latest.json`, or `android-latest.json`).
 3. Install and launch **Texture Manager 2** (on Android, enable install from unknown sources / the browser if prompted).
 4. Complete onboarding:
    - Choose language
@@ -74,7 +74,9 @@ After that, use **Home** (or the mobile dock) to open a tool, set input/output f
 
 ### Updates
 
-Installed desktop copies can check for updates from Settings (**Check for updates**) or via the update banner when a newer release is published. Finish any running operation before installing an update — the app must restart to apply it.
+Installed desktop copies can check for updates from Settings (**Check for updates**) or via the update banner when a newer release is published (Tauri updater plugin + release `latest.json`). Finish any running operation before installing an update — the app must restart to apply it.
+
+On Android, in-app APK updates (once installed) use release `android-latest.json` rather than the desktop updater plugin.
 
 ---
 
@@ -121,7 +123,7 @@ npm run android:init   # once, if gen/android is missing
 npm run android:dev
 ```
 
-Use `?shell=mobile` in the browser when iterating on the mobile UI without a device.
+Use `?shell=mobile` in the browser when iterating on the mobile UI without a device. Add `&simulateUpdate=1` (or set `localStorage.tmSimulateUpdate = "1"`) to fake an available update banner — install only runs a fake download.
 
 ### Common scripts
 
@@ -152,9 +154,9 @@ $env:TAURI_SIGNING_PRIVATE_KEY_PASSWORD = ""
 npm run tauri build
 ```
 
-CI publishes draft desktop + Android releases via `.github/workflows/publish.yml` when you push a `v*` tag or run the workflow manually (Windows MSI, macOS DMG for arm64 and x64, Android arm64 APK).
+CI publishes draft desktop + Android releases via `.github/workflows/publish.yml` when you push a `v*` tag or run the workflow manually (Windows MSI, macOS DMG for arm64 and x64, Android arm64 APK). Desktop uploads include updater `latest.json`; Android also uploads `android-latest.json` (version, APK URL, SHA-256) for in-app APK updates.
 
-Optional Android release signing secrets (falls back to debug-signed APK if unset):
+Tagged Android publishes **require** the signing secrets below (the job fails without them). Manual `workflow_dispatch` runs may omit them and fall back to a debug-signed APK for sideload testing:
 
 | Secret | Purpose |
 | --- | --- |

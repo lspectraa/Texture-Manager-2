@@ -27,7 +27,6 @@ use crate::core::glow_composite::{
 };
 use crate::core::icon_editor::icon_editor_load_sheet_sprites_from_atlas;
 use crate::core::particle_sprites::ParticlePreviewSprite;
-use crate::core::safe_fs::join_under_parent;
 use crate::core::splitter::split_sheet_candidate_memory;
 
 #[derive(Clone)]
@@ -277,49 +276,16 @@ fn resolve_custom_preview_png_candidates(
     plist_path: &std::path::Path,
     plist_root: &Value,
 ) -> Result<Vec<std::path::PathBuf>, AppError> {
-    let plist_parent = plist_path
-        .parent()
-        .ok_or(AppError::InvalidPath("plist path has no parent directory"))?;
-    let stem = plist_path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .ok_or(AppError::InvalidPath("invalid icon plist file name"))?;
-
-    let mut candidates: Vec<std::path::PathBuf> = Vec::new();
-    let push_unique = |path: std::path::PathBuf, out: &mut Vec<std::path::PathBuf>| {
-        if path.is_file() && !out.iter().any(|existing| existing == &path) {
-            out.push(path);
-        }
-    };
-
-    push_unique(plist_parent.join(format!("{stem}.png")), &mut candidates);
-
-    if let Some(metadata) = plist_root
-        .as_dictionary()
-        .and_then(|root| root.get("metadata"))
-        .and_then(Value::as_dictionary)
+    let root_dict = plist_root.as_dictionary();
+    if let Some(resolved) =
+        crate::core::plist_assets::resolve_image_beside_plist(plist_path, root_dict)
     {
-        for key in ["realTextureFileName", "textureFileName"] {
-            let Some(file_name) = metadata.get(key).and_then(Value::as_string) else {
-                continue;
-            };
-            let base_name = std::path::Path::new(file_name)
-                .file_name()
-                .and_then(|value| value.to_str())
-                .unwrap_or(file_name);
-            push_unique(plist_parent.join(base_name), &mut candidates);
-            if let Ok(scoped) = join_under_parent(plist_parent, file_name) {
-                push_unique(scoped, &mut candidates);
-            }
-        }
+        return Ok(vec![resolved]);
     }
 
-    if candidates.is_empty() {
-        return Err(AppError::InvalidPath(
-            "icon sheet PNG not found next to the selected plist (same folder / same stem)",
-        ));
-    }
-    Ok(candidates)
+    Err(AppError::InvalidPath(
+        "icon sheet PNG not found next to the selected plist (same folder / metadata name / same stem)",
+    ))
 }
 
 fn sheet_candidate_for_custom_preview(

@@ -270,27 +270,7 @@ fn dict_get_bool(dict: &Dictionary, key: &str) -> Option<bool> {
 
 /// Search `dir` for a file whose name matches `name` (exact first, then case-insensitive).
 fn find_sibling_file(dir: &Path, name: &str) -> Option<PathBuf> {
-    if name.is_empty() {
-        return None;
-    }
-    let exact = dir.join(name);
-    if exact.is_file() {
-        return Some(exact);
-    }
-    let name_lower = name.to_ascii_lowercase();
-    if let Ok(entries) = fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let file_name = entry.file_name();
-            let entry_lower = file_name.to_string_lossy().to_ascii_lowercase();
-            if entry_lower == name_lower {
-                let p = entry.path();
-                if p.is_file() {
-                    return Some(p);
-                }
-            }
-        }
-    }
-    None
+    crate::core::plist_assets::find_file_in_dir_case_insensitive(dir, name)
 }
 
 /// Read any image file (PNG, TIFF, …) and return it as a `data:image/png;base64,…` URL.
@@ -358,13 +338,15 @@ fn get_texture_embed_bytes(dict: &Dictionary) -> Option<Vec<u8>> {
 ///
 /// Returns `(data_url_option, source, warnings)`.
 fn resolve_particle_texture(
+    plist_path: &Path,
     plist_dir: &Path,
     texture_file_name: &str,
     embed_bytes: Option<Vec<u8>>,
+    plist_root: &Dictionary,
 ) -> (Option<String>, TextureSource, Vec<String>) {
     let mut warnings = Vec::new();
 
-    // 1. Prefer a sibling file on disk.
+    // 1. Prefer a sibling file on disk (metadata name, then shared plist resolver).
     if !texture_file_name.is_empty() {
         if let Some(sibling) = find_sibling_file(plist_dir, texture_file_name) {
             match image_file_to_png_data_url(&sibling) {
@@ -374,6 +356,18 @@ fn resolve_particle_texture(
                     sibling.display()
                 )),
             }
+        }
+    }
+
+    if let Some(resolved) =
+        crate::core::plist_assets::resolve_image_beside_plist(plist_path, Some(plist_root))
+    {
+        match image_file_to_png_data_url(&resolved) {
+            Ok(url) => return (Some(url), TextureSource::Sibling, warnings),
+            Err(e) => warnings.push(format!(
+                "resolved texture '{}' could not be loaded: {e}",
+                resolved.display()
+            )),
         }
     }
 
@@ -632,8 +626,13 @@ pub fn particle_editor_open(path: &str) -> Result<ParticleOpenResult, AppError> 
 
     let plist_dir = plist_path.parent().unwrap_or_else(|| Path::new(""));
 
-    let (texture_png_data_url, texture_source, warnings) =
-        resolve_particle_texture(plist_dir, &texture_file_name, embed_bytes);
+    let (texture_png_data_url, texture_source, warnings) = resolve_particle_texture(
+        &plist_path,
+        plist_dir,
+        &texture_file_name,
+        embed_bytes,
+        dict,
+    );
 
     Ok(ParticleOpenResult {
         config,

@@ -1,3 +1,4 @@
+mod android_apk_update;
 mod android_storage;
 mod core;
 
@@ -48,6 +49,7 @@ use crate::core::pack_installer::{
     delete_installed_pack as delete_installed_pack_core,
     discover_pack_install as discover_pack_install_core,
     install_pack_plan as install_pack_plan_core, list_installed_packs as list_installed_packs_core,
+    pack_png_data_url_from_dir as pack_png_data_url_from_dir_core,
     read_pack_metadata as read_pack_metadata_core, run_pack_operation as run_pack_operation_core,
     update_installed_pack_metadata as update_installed_pack_metadata_core,
     CreateTexturePackRequest, CreateTexturePackResult, InstallPackOptions, InstallPackResult,
@@ -251,6 +253,13 @@ fn android_check_all_files_access(
 }
 
 #[tauri::command]
+fn android_get_storage_status(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+) -> Result<crate::android_storage::AndroidStorageStatus, String> {
+    access.get_storage_status()
+}
+
+#[tauri::command]
 fn android_request_all_files_access(
     access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
 ) -> Result<(), String> {
@@ -284,6 +293,42 @@ fn android_pick_file(
     extensions: Option<Vec<String>>,
 ) -> Result<Option<String>, String> {
     access.pick_file(extensions)
+}
+
+#[tauri::command]
+async fn android_check_app_update(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::android_apk_update::check_app_update(app).await
+}
+
+#[tauri::command]
+async fn android_download_app_update(
+    app: AppHandle,
+    url: String,
+    sha256: String,
+) -> Result<serde_json::Value, String> {
+    crate::android_apk_update::download_app_update(app, url, sha256).await
+}
+
+#[tauri::command]
+fn android_install_app_update(
+    access: tauri::State<'_, crate::android_apk_update::AndroidApkUpdate<tauri::Wry>>,
+    path: String,
+) -> Result<(), String> {
+    access.install_apk(path)
+}
+
+#[tauri::command]
+fn android_can_install_packages(
+    access: tauri::State<'_, crate::android_apk_update::AndroidApkUpdate<tauri::Wry>>,
+) -> Result<bool, String> {
+    access.can_install_packages()
+}
+
+#[tauri::command]
+fn android_open_install_permission_settings(
+    access: tauri::State<'_, crate::android_apk_update::AndroidApkUpdate<tauri::Wry>>,
+) -> Result<(), String> {
+    access.open_install_permission_settings()
 }
 
 #[tauri::command]
@@ -723,6 +768,14 @@ async fn list_installed_packs(
 }
 
 #[tauri::command]
+async fn pack_png_data_url_from_dir(pack_dir: String) -> Result<Option<String>, String> {
+    run_blocking(move || {
+        pack_png_data_url_from_dir_core(pack_dir.as_str()).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn update_installed_pack_metadata(
     game_files: tauri::State<'_, GameFilesState>,
     pack_dir: String,
@@ -916,6 +969,7 @@ pub fn run() {
 
     builder
         .plugin(crate::android_storage::init())
+        .plugin(crate::android_apk_update::init())
         .setup(|app| {
             #[cfg(target_os = "android")]
             {
@@ -946,10 +1000,16 @@ pub fn run() {
             clear_geometry_dash_dir,
             redetect_geometry_dash_dir,
             android_check_all_files_access,
+            android_get_storage_status,
             android_request_all_files_access,
             android_probe_geode_paths,
             android_pick_folder,
             android_pick_file,
+            android_check_app_update,
+            android_download_app_update,
+            android_install_app_update,
+            android_can_install_packages,
+            android_open_install_permission_settings,
             open_path_in_os,
             get_game_files_layout,
             discover_pack_install,
@@ -958,6 +1018,7 @@ pub fn run() {
             read_pack_metadata,
             cleanup_pack_install_temp,
             list_installed_packs,
+            pack_png_data_url_from_dir,
             update_installed_pack_metadata,
             delete_installed_pack,
             run_pack_operation,

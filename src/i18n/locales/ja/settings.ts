@@ -81,11 +81,19 @@ const settings = {
     checkFailed: "更新を確認できませんでした。{{error}}",
     installBlocked: "更新をインストールする前に現在の処理を終えてください。",
     androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "ダウンロードしてインストール中…",
     downloading: "更新をダウンロード中… {{percent}}%",
     installAndRestart: "インストールして再起動",
+    installApk: "Download and install",
     availableTitle: "アップデートがあります",
     availableMeta: "インストールして再起動すると、v{{current}} から v{{version}} に更新されます。",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "インストールの前に現在の処理を終えてください。",
     later: "後で",
     dismiss: "更新の通知を閉じる",

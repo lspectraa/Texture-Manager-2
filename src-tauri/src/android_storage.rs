@@ -17,7 +17,29 @@ const ANDROID_PLUGIN_CLASS: &str = "StorageAccessPlugin";
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckAllFilesAccessResponse {
+  #[serde(default)]
+  all_files_granted: bool,
+  #[serde(default)]
+  geode_readable: bool,
+  #[serde(default)]
+  geode_path: Option<String>,
+  /// Legacy key from older Kotlin plugin builds (`{ "granted": bool }`).
+  #[serde(default)]
   granted: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidStorageStatus {
+  pub all_files_granted: bool,
+  pub geode_readable: bool,
+  pub geode_path: Option<String>,
+}
+
+impl AndroidStorageStatus {
+  pub fn ready(&self) -> bool {
+    self.all_files_granted && self.geode_readable
+  }
 }
 
 #[derive(Debug, Deserialize)]
@@ -47,17 +69,48 @@ pub struct AndroidStorageAccess<R: Runtime> {
 
 impl<R: Runtime> AndroidStorageAccess<R> {
   pub fn check_all_files_access(&self) -> Result<bool, String> {
+    Ok(self.get_storage_status()?.all_files_granted)
+  }
+
+  pub fn get_storage_status(&self) -> Result<AndroidStorageStatus, String> {
     #[cfg(target_os = "android")]
     {
       let response: CheckAllFilesAccessResponse = self
         .handle
         .run_mobile_plugin("checkAllFilesAccess", ())
         .map_err(|err| err.to_string())?;
-      return Ok(response.granted);
+      // Prefer the camelCase contract; fall back to legacy `granted`.
+      let all_files_granted = response.all_files_granted || response.granted;
+
+      let mut geode_readable = response.geode_readable;
+      let mut geode_path = response
+        .geode_path
+        .filter(|path| !path.trim().is_empty());
+
+      // If the plugin only reported permission, finish the probe in Rust so
+      // Pixel / Samsung share the same Geode path logic as settings redetect.
+      if all_files_granted && (!geode_readable || geode_path.is_none()) {
+        if let Some(game) = crate::core::game_files::detect_android_geometry_dash_dir() {
+          geode_path = Some(game.to_string_lossy().to_string());
+          geode_readable = crate::core::game_files::android_geode_storage_readable(&game);
+        } else if !geode_readable {
+          geode_readable = false;
+        }
+      }
+
+      return Ok(AndroidStorageStatus {
+        all_files_granted,
+        geode_readable,
+        geode_path,
+      });
     }
     #[cfg(not(target_os = "android"))]
     {
-      Ok(true)
+      Ok(AndroidStorageStatus {
+        all_files_granted: true,
+        geode_readable: true,
+        geode_path: None,
+      })
     }
   }
 

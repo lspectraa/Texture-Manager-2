@@ -32,7 +32,7 @@ import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages
 import { androidRequestAllFilesAccess } from "../../services/tauriAndroidStorage";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { pickUserFile } from "../../services/tauriPicker";
-import { isDesktopPlatform, isMobileShell } from "../../utils/platform";
+import { isAndroidPlatform, isMobileShell, isSimulateUpdateEnabled } from "../../utils/platform";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
@@ -530,7 +530,7 @@ export function SettingsToolPanel({
             <p className="tm-tool-section-note">{t("cache.regenerateSpriteIndexHint")}</p>
           </ToolSection>
 
-          {isDesktopPlatform() ? (
+          {isTauriRuntime() || isSimulateUpdateEnabled() ? (
           <ToolSection
             title={t("updates.title")}
             subtitle={t("updates.subtitle")}
@@ -552,6 +552,14 @@ export function SettingsToolPanel({
             {operationRunning ? (
               <p className="tm-tool-section-note">{t("updates.installBlocked")}</p>
             ) : null}
+            {isAndroidPlatform() ? (
+              <p className="tm-tool-section-note">{t("updates.androidInstallHint")}</p>
+            ) : null}
+            {isSimulateUpdateEnabled() ? (
+              <p className="tm-tool-section-note">
+                Simulated update mode (?simulateUpdate=1 or localStorage.tmSimulateUpdate=1) — install is a fake download only.
+              </p>
+            ) : null}
             {updateStatusMessage ? (
               updateStatusTone === "danger" ? (
                 <div className="tm-settings-update-status" role="alert">
@@ -562,9 +570,7 @@ export function SettingsToolPanel({
               )
             ) : null}
           </ToolSection>
-          ) : (
-            <p className="tm-tool-section-note">{t("updates.androidUnavailable")}</p>
-          )}
+          ) : null}
 
           <ToolSection
             title={t("geometryDash.title")}

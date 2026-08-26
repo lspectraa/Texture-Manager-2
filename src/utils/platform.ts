@@ -5,7 +5,7 @@ type RuntimeWindow = {
   navigator?: { userAgent?: string };
 };
 
-function runtimeGlobal(): typeof globalThis | undefined {
+function runtimeGlobal(): (typeof globalThis & { localStorage?: Storage }) | undefined {
   return typeof globalThis === "undefined" ? undefined : globalThis;
 }
 
@@ -45,13 +45,31 @@ export const isDesktopPlatform = (): boolean => {
   return isTauriRuntime() && !isAndroidPlatform();
 };
 
+function queryParam(name: string): string | null {
+  return new URLSearchParams(runtimeWindow()?.location?.search ?? "").get(name);
+}
+
 function shellQueryOverride(): "mobile" | "desktop" | null {
-  const value = new URLSearchParams(runtimeWindow()?.location?.search ?? "").get("shell");
+  const value = queryParam("shell");
   if (value === "mobile" || value === "desktop") {
     return value;
   }
   return null;
 }
+
+/** Dev/test: `?simulateUpdate=1` or `localStorage.tmSimulateUpdate=1` fakes an available update. */
+export const isSimulateUpdateEnabled = (): boolean => {
+  const value = queryParam("simulateUpdate")?.trim().toLowerCase();
+  if (value === "1" || value === "true" || value === "yes") {
+    return true;
+  }
+  try {
+    const stored = runtimeGlobal()?.localStorage?.getItem("tmSimulateUpdate")?.trim().toLowerCase();
+    return stored === "1" || stored === "true" || stored === "yes";
+  } catch {
+    return false;
+  }
+};
 
 export const isMobileShell = (): boolean => {
   const override = shellQueryOverride();

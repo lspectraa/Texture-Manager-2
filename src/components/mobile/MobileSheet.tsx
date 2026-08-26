@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
+import { useTouchSwipeDownDismiss } from "../../hooks/useTouchSwipeDownDismiss";
 import { GlassFrost } from "../GlassFrost";
 
 export type MobileSheetSize = "default" | "half";
@@ -28,6 +29,8 @@ export type MobileSheetProps = {
    * backdrop (Icon Editor tab switches).
    */
   showBackdrop?: boolean;
+  /** Swipe down anywhere on the sheet to dismiss (mobile WebView touch). */
+  swipeToDismiss?: boolean;
 };
 
 const SHEET_EXIT_MS = 360;
@@ -45,12 +48,26 @@ export function MobileSheet({
   className = "",
   size = "default",
   showBackdrop = true,
+  swipeToDismiss = true,
 }: MobileSheetProps) {
   const { t } = useTranslation("navigation");
   const titleId = useId();
   const sheetRef = useRef<HTMLElement | null>(null);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
   const [mounted, setMounted] = useState(open);
   const [entered, setEntered] = useState(false);
+
+  const { surfaceRef, swiping, style: swipeStyle } = useTouchSwipeDownDismiss({
+    enabled: open && entered && swipeToDismiss,
+    onDismiss: onClose,
+    scrollContainerRef: bodyRef,
+    excludeSelector: ".tm-mobile-sheet-close",
+  });
+
+  const setSheetRef = (node: HTMLElement | null): void => {
+    sheetRef.current = node;
+    surfaceRef.current = node;
+  };
 
   useEffect(() => {
     if (open) {
@@ -94,8 +111,8 @@ export function MobileSheet({
       className={`tm-mobile-sheet-root${entered || open ? " is-open" : ""}${
         size === "half" ? " tm-mobile-sheet-root--half" : ""
       }${showBackdrop ? "" : " tm-mobile-sheet-root--no-backdrop"}${
-        className ? ` ${className}` : ""
-      }`}
+        swiping ? " is-swiping" : ""
+      }${className ? ` ${className}` : ""}`}
       aria-hidden={!open}
     >
       {showBackdrop ? (
@@ -112,14 +129,20 @@ export function MobileSheet({
         />
       ) : null}
       <section
-        ref={sheetRef}
-        className={`tm-mobile-sheet tm-glass-card${entered ? " is-open" : ""}`}
+        ref={setSheetRef}
+        className={`tm-mobile-sheet tm-glass-card${entered ? " is-open" : ""}${
+          swiping ? " is-swiping" : ""
+        }`}
+        style={swipeStyle}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
         onTransitionEnd={onSheetTransitionEnd}
       >
         <GlassFrost />
+        <div className="tm-mobile-sheet-handle" aria-hidden>
+          <span className="tm-mobile-sheet-handle-bar" />
+        </div>
         <header className="tm-mobile-sheet-head">
           <h2 id={titleId} className="tm-mobile-sheet-title">
             {title}
@@ -133,7 +156,9 @@ export function MobileSheet({
             <X size={18} strokeWidth={2} aria-hidden />
           </button>
         </header>
-        <div className="tm-mobile-sheet-body">{children}</div>
+        <div className="tm-mobile-sheet-body" ref={bodyRef}>
+          {children}
+        </div>
         {footer ? <footer className="tm-mobile-sheet-footer">{footer}</footer> : null}
       </section>
     </div>,

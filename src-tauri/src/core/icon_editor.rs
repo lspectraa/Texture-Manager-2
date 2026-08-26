@@ -20,7 +20,7 @@ use crate::core::plist::{
 };
 use crate::core::safe_fs::{
     ensure_existing_user_file, ensure_readable_image_file, ensure_user_absolute_path,
-    is_safe_path_segment, join_under_parent, png_file_to_data_url, save_png_data_url,
+    is_safe_path_segment, png_file_to_data_url, save_png_data_url,
 };
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
@@ -1347,40 +1347,10 @@ fn empty_icon_editor_plist(atlas_file_name: &str) -> Value {
 }
 
 fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathBuf, AppError> {
-    let plist_parent = plist_path
-        .parent()
-        .ok_or(AppError::InvalidPath("plist path has no parent directory"))?;
-
-    let metadata = root_dict.get("metadata").and_then(Value::as_dictionary);
-    for key in ["realTextureFileName", "textureFileName"] {
-        let Some(file_name) = metadata
-            .and_then(|dict| dict.get(key))
-            .and_then(Value::as_string)
-        else {
-            continue;
-        };
-        // Prefer same-folder basename even if metadata includes a relative path.
-        let base_name = Path::new(file_name)
-            .file_name()
-            .and_then(|value| value.to_str())
-            .unwrap_or(file_name);
-        let candidate = plist_parent.join(base_name);
-        if candidate.is_file() {
-            return Ok(candidate);
-        }
-        let Ok(scoped) = join_under_parent(plist_parent, file_name) else {
-            continue;
-        };
-        if scoped.is_file() {
-            return Ok(scoped);
-        }
-    }
-
-    let stem = plist_path
-        .file_stem()
-        .and_then(|value| value.to_str())
-        .ok_or(AppError::InvalidPath("plist file name is invalid"))?;
-    Ok(plist_parent.join(format!("{stem}.png")))
+    crate::core::plist_assets::resolve_image_beside_plist(plist_path, Some(root_dict))
+        .ok_or(AppError::InvalidPath(
+            "icon sheet PNG not found next to the selected plist (same folder / metadata name / same stem)",
+        ))
 }
 
 fn write_plist_atomically(path: &Path, value: &Value) -> Result<(), AppError> {

@@ -86,11 +86,19 @@ const settings: AppLocaleResources["settings"] = {
     installBlocked:
       "Termina la operación actual antes de instalar una actualización.",
     androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Descargando e instalando…",
     downloading: "Descargando actualización… {{percent}}%",
     installAndRestart: "Instalar y reiniciar",
+    installApk: "Download and install",
     availableTitle: "Actualización disponible",
     availableMeta: "Instala y reinicia para pasar de v{{current}} a v{{version}}.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "Termina la operación actual antes de instalar.",
     later: "Más tarde",
     dismiss: "Descartar actualización",

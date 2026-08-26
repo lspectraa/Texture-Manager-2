@@ -82,11 +82,19 @@ const settings = {
     checkFailed: "업데이트를 확인하지 못했습니다. {{error}}",
     installBlocked: "업데이트를 설치하기 전에 현재 작업을 끝내세요.",
     androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "다운로드 후 설치 중…",
     downloading: "업데이트 다운로드 중… {{percent}}%",
     installAndRestart: "설치 후 다시 시작",
+    installApk: "Download and install",
     availableTitle: "업데이트 사용 가능",
     availableMeta: "설치 후 다시 시작하면 v{{current}}에서 v{{version}}(으)로 업데이트됩니다.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "설치하기 전에 현재 작업을 끝내세요.",
     later: "나중에",
     dismiss: "업데이트 알림 닫기",

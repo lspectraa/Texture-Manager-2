@@ -102,7 +102,7 @@ pub fn particle_editor_sheet_frame_data_url(
     }
 
     let plist_path = layout.resources.join(format!("{sheet_stem}.plist"));
-    let png_path = layout.resources.join(format!("{sheet_stem}.png"));
+    let png_path = crate::core::plist_assets::resolve_png_beside_plist(&plist_path, None);
     if !plist_path.is_file() || !png_path.is_file() {
         return Err(AppError::InvalidPath(
             "gamesheet plist/png pair not found in Resources",

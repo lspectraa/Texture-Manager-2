@@ -869,7 +869,38 @@ pub fn delete_installed_pack(pack_dir: &str, layout: &GameFilesLayout) -> Result
     let dir = resolve_installed_pack_dir(pack_dir, layout)?;
     let packs_root = layout.texture_loader_packs();
     fs::create_dir_all(&packs_root)?;
-    remove_dir_all_under_root(&dir, &packs_root)
+    // Android scoped-storage paths often fail canonicalize(); lexical checks above are enough.
+    #[cfg(target_os = "android")]
+    {
+        return fs::remove_dir_all(&dir).map_err(|err| {
+            if err.kind() == std::io::ErrorKind::PermissionDenied {
+                AppError::IoError(
+                    "Permission denied deleting pack. Grant All files access for Texture Manager, then try again.".to_string(),
+                )
+            } else {
+                AppError::IoError(format!(
+                    "failed to remove pack folder `{}`: {err}",
+                    shorten_path_for_display(&dir)
+                ))
+            }
+        });
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        remove_dir_all_under_root(&dir, &packs_root)
+    }
+}
+
+/// Load `pack.png` from an installed pack directory as a PNG data URL.
+pub fn pack_png_data_url_from_dir(pack_dir: &str) -> Result<Option<String>, AppError> {
+    let dir = parse_user_absolute_path(pack_dir)?;
+    if !dir.is_dir() {
+        return Err(AppError::InvalidPath("pack directory does not exist"));
+    }
+    let Some(png_path) = find_pack_png_in_dir(&dir) else {
+        return Ok(None);
+    };
+    Ok(Some(crate::core::safe_fs::png_file_to_data_url(&png_path)?))
 }
 
 /// Run Convert / Port / Split / Merge against an installed pack directory.

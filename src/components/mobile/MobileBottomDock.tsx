@@ -1,12 +1,7 @@
 import { House, Settings2 } from "lucide-react";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { useTouchSwipeDownDismiss } from "../../hooks/useTouchSwipeDownDismiss";
 import {
   AppToolId,
   TOOL_NAV_SECTIONS,
@@ -40,6 +35,9 @@ const MOBILE_DOCK_SECTION_TOOL_OVERFLOW = 4;
 const MOBILE_DOCK_SECTION_TOOL_CAP = 3;
 const HANDLE_DRAG_OPEN_PX = 28;
 const HANDLE_DRAG_CLOSE_PX = 72;
+const PANEL_SWIPE_START_PX = 8;
+const PANEL_SWIPE_CLOSE_PX = 72;
+const PANEL_SWIPE_MAX_PX = 280;
 
 function sectionDockTools(section: ToolNavSection) {
   const listed = section.tools.filter((tool) => isToolListedOnMobile(tool.id));
@@ -71,12 +69,49 @@ export function MobileBottomDock({
   const { t } = useTranslation("navigation");
   const section = currentSection(selectedTool);
   const panelRef = useRef<HTMLElement | null>(null);
+  const gridScrollRef = useRef<HTMLDivElement | null>(null);
   const dragStartY = useRef<number | null>(null);
   const dragMode = useRef<"open" | "close" | null>(null);
   const openedByDragRef = useRef(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [entered, setEntered] = useState(expanded);
+
+  const finishClose = useCallback((): void => {
+    onExpandedChange(false);
+  }, [onExpandedChange]);
+
+  const finishOpen = useCallback((): void => {
+    onExpandedChange(true);
+  }, [onExpandedChange]);
+
+  const {
+    surfaceRef: expandedInnerRef,
+    swiping: panelDragging,
+    style: panelSwipeStyle,
+  } = useTouchSwipeDownDismiss({
+    enabled: expanded && entered,
+    direction: "down",
+    onDismiss: finishClose,
+    scrollContainerRef: gridScrollRef,
+    excludeSelector: ".tm-mobile-dock-handle",
+    dragStartPx: PANEL_SWIPE_START_PX,
+    thresholdPx: PANEL_SWIPE_CLOSE_PX,
+    maxOffsetPx: PANEL_SWIPE_MAX_PX,
+  });
+
+  const {
+    surfaceRef: dockOpenSwipeRef,
+    swiping: dockOpening,
+    style: dockOpenSwipeStyle,
+  } = useTouchSwipeDownDismiss({
+    enabled: !expanded,
+    direction: "up",
+    onDismiss: finishOpen,
+    dragStartPx: HANDLE_DRAG_OPEN_PX,
+    thresholdPx: HANDLE_DRAG_OPEN_PX,
+    maxOffsetPx: 120,
+  });
 
   useEffect(() => {
     if (expanded) {
@@ -89,12 +124,9 @@ export function MobileBottomDock({
     setDragOffset(0);
   }, [expanded]);
 
-  const finishOpen = (): void => {
-    onExpandedChange(true);
-  };
-
-  const finishClose = (): void => {
-    onExpandedChange(false);
+  const setPanelRef = (node: HTMLElement | null): void => {
+    panelRef.current = node;
+    dockOpenSwipeRef.current = node;
   };
 
   const onHandlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -170,12 +202,14 @@ export function MobileBottomDock({
   };
 
   const panelStyle: CSSProperties | undefined =
-    dragging && dragOffset !== 0
+    panelSwipeStyle ??
+    dockOpenSwipeStyle ??
+    (dragging && dragOffset !== 0
       ? {
           transform: `translateY(${Math.max(0, dragOffset)}px)`,
           transition: "none",
         }
-      : undefined;
+      : undefined);
 
   const handleAria = expanded
     ? t("mobile.closeGridAria")
@@ -185,7 +219,7 @@ export function MobileBottomDock({
     <div
       className={`tm-mobile-nav-chrome${expanded ? " is-expanded" : ""}${
         entered ? " is-entered" : ""
-      }${dragging ? " is-dragging" : ""}`}
+      }${dragging || panelDragging || dockOpening ? " is-dragging" : ""}`}
     >
       <button
         type="button"
@@ -201,8 +235,8 @@ export function MobileBottomDock({
       />
 
       <nav
-        ref={panelRef}
-        className="tm-mobile-dock tm-glass-card"
+        ref={setPanelRef}
+        className={`tm-mobile-dock tm-glass-card${panelDragging ? " is-panel-swiping" : ""}`}
         aria-label={expanded ? t("mobile.allToolsTitle") : t("applicationAria")}
         style={panelStyle}
       >
@@ -236,7 +270,12 @@ export function MobileBottomDock({
           className="tm-mobile-nav-expanded"
           aria-hidden={!expanded}
         >
-          <div className="tm-mobile-nav-expanded-inner">
+          <div
+            className="tm-mobile-nav-expanded-inner"
+            ref={(node) => {
+              expandedInnerRef.current = node;
+            }}
+          >
           <header className="tm-mobile-grid-head">
             <div>
               <p className="tm-mobile-grid-eyebrow">{t("title")}</p>
@@ -244,7 +283,7 @@ export function MobileBottomDock({
             </div>
           </header>
 
-          <div className="tm-mobile-grid-scroll">
+          <div className="tm-mobile-grid-scroll" ref={gridScrollRef}>
             <div
               className="tm-mobile-grid-section"
               data-columns={columnsForCount(2)}

@@ -112,18 +112,28 @@ jobs:
       - name: Sync version from package.json
         run: npm run sync:version
 
-      - name: Configure Android release signing (optional)
+      - name: Configure Android release signing
         working-directory: src-tauri/gen/android
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "No ANDROID_KEYSTORE_BASE64 secret; release APK will be debug-signed for sideload."
+          set -euo pipefail
+          REQUIRE_SIGNING=false
+          if [ "${{ github.event_name }}" = "push" ] && { [ "${{ github.ref_type }}" = "tag" ] || [[ "${{ github.ref }}" == refs/tags/v* ]]; }; then
+            REQUIRE_SIGNING=true
+          fi
+
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            if [ "$REQUIRE_SIGNING" = true ]; then
+              echo "Tagged Android publish requires ANDROID_KEYSTORE_BASE64 (and alias/password). Refusing debug-signed fallback on tags."
+              exit 1
+            fi
+            echo "No ANDROID_KEYSTORE_BASE64 secret; workflow_dispatch fallback — release APK will be debug-signed for sideload."
             exit 0
           fi
-          if [ -z "$ANDROID_KEY_ALIAS" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ]; then
+          if [ -z "${ANDROID_KEY_ALIAS:-}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
             echo "ANDROID_KEYSTORE_BASE64 is set but ANDROID_KEY_ALIAS / ANDROID_KEYSTORE_PASSWORD are missing."
             exit 1
           fi
@@ -149,6 +159,7 @@ jobs:
         run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK to draft GitHub release
+        id: upload-apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.ver.outputs.version }}
@@ -176,3 +187,51 @@ jobs:
           fi
 
           gh release upload "$TAG" "${APK}#${ASSET_NAME}" --clobber
+
+          {
+            echo "apk_path=${APK}"
+            echo "asset_name=${ASSET_NAME}"
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write android-latest.json
+        id: android-latest
+        env:
+          VERSION: ${{ steps.upload-apk.outputs.version }}
+          APK_PATH: ${{ steps.upload-apk.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          SHA256="$(sha256sum "$APK_PATH" | awk '{print $1}')"
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          APK_URL="https://github.com/lspectraa/Texture-Manager-2/releases/download/v${VERSION}/Texture-Manager-2-${VERSION}-android-aarch64.apk"
+          NOTES="Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$NOTES" \
+            --arg pub_date "$PUB_DATE" \
+            --arg url "$APK_URL" \
+            --arg sha256 "$SHA256" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "aarch64-linux-android": {
+                  url: $url,
+                  sha256: $sha256
+                }
+              }
+            }' > android-latest.json
+
+          echo "Wrote android-latest.json (sha256=${SHA256})"
+          cat android-latest.json
+
+      - name: Upload android-latest.json to draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.upload-apk.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" android-latest.json --clobber

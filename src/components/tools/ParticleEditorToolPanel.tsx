@@ -17,7 +17,8 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { save } from "@tauri-apps/plugin-dialog";
+import { pickUserFile } from "../../services/tauriPicker";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { usePinchZoom } from "../../hooks/usePinchZoom";
 import { isMobileShell } from "../../utils/platform";
@@ -859,15 +860,12 @@ export function ParticleEditorToolPanel() {
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("particleEditor.dialogs.customIconTitle"),
-        filters: [
-          { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["plist"],
+        filterName: t("particleEditor.dialogs.plistFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected?.trim()) return;
       setCustomIconPlistPath(selected);
     } catch {
       // Dialog cancelled / unavailable.
@@ -901,15 +899,12 @@ export function ParticleEditorToolPanel() {
     }
     setError(null);
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("particleEditor.dialogs.openTitle"),
-        filters: [
-          { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["plist"],
+        filterName: t("particleEditor.dialogs.plistFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected?.trim()) return;
       setBusy(true);
       const result = await openParticleEditor(selected);
       const basename = selected.split(/[\\/]/).pop() ?? "";
@@ -1082,18 +1077,12 @@ export function ParticleEditorToolPanel() {
     }
     setError(null);
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("particleEditor.dialogs.textureTitle"),
-        filters: [
-          {
-            name: t("particleEditor.dialogs.imageFilter"),
-            extensions: ["png", "jpg", "jpeg", "tiff", "bmp"],
-          },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["png", "jpg", "jpeg", "tiff", "bmp"],
+        filterName: t("particleEditor.dialogs.imageFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected?.trim()) return;
       setBusy(true);
       const dataUrl = await loadParticleEditorTexture(selected);
       const name = selected.split(/[\\/]/).pop() ?? "";

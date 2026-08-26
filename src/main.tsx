@@ -2,13 +2,13 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import {
-  CURRENT_ONBOARDING_VERSION,
   DEFAULT_APP_SETTINGS_VIEW,
+  requiredOnboardingVersion,
 } from "./domain/settings";
 import { initAppI18n } from "./i18n";
 import { resolveInitialAppLanguage } from "./i18n/languages";
 import { getAppSettings } from "./services/tauriSettings";
-import { applyShellDataset } from "./utils/platform";
+import { applyShellDataset, isMobileShell } from "./utils/platform";
 import { applyTheme, initTheme, setStoredTheme } from "./utils/theme";
 
 const BOOTSTRAP_TIMEOUT_MS = 8000;
@@ -58,7 +58,7 @@ async function bootstrap(): Promise<void> {
   const language = resolveInitialAppLanguage({
     persistedLanguage: settings.language,
     onboardingComplete:
-      settings.onboardingVersion >= CURRENT_ONBOARDING_VERSION,
+      settings.onboardingVersion >= requiredOnboardingVersion(isMobileShell()),
   });
   await withTimeout(initAppI18n(language), undefined);
 

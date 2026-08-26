@@ -12,6 +12,7 @@ import type {
 import type { AppSettingsView } from "../../domain/settings";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { isMobileShell } from "../../utils/platform";
+import { invokeErrorMessage } from "../../utils/invokeErrorMessage";
 import {
   autoSelectGeodeButtonsPlist,
   getGeodeButtonsDefaultInputDir,
@@ -19,7 +20,6 @@ import {
   getGeodeButtonsTemplatePreviewDataUrl,
   GeodeButtonsTargetGroup,
 } from "../../services/tauriGeodeButtons";
-import { AndroidGeodeAccessBanner } from "./AndroidGeodeAccessBanner";
 import { PickFolderFn } from "./types";
 import {
   FolderPathField,
@@ -28,6 +28,8 @@ import {
   ToolPageHeader,
   ToolSection,
 } from "./layout";
+import { MobileEdgeTab } from "../mobile/MobileEdgeTab";
+import { MobileSheet } from "../mobile/MobileSheet";
 
 type GeodeButtonsToolPanelProps = {
   inputDir: string;
@@ -493,7 +495,7 @@ export function GeodeButtonsToolPanel({
   onOptionsChange,
   pickFolder,
   geometryDashFound = false,
-  onAppSettingsUpdated,
+  onAppSettingsUpdated: _onAppSettingsUpdated,
 }: GeodeButtonsToolPanelProps) {
   const { t } = useTranslation(["tools", "errors"]);
   const [plistPath, setPlistPath] = useState<string>("");
@@ -501,7 +503,7 @@ export function GeodeButtonsToolPanel({
   const [targets, setTargets] = useState<GeodeButtonsTargetGroup[] | null>(null);
   const [targetsError, setTargetsError] = useState<string | null>(null);
   const [selectedFamilyId, setSelectedFamilyId] = useState<string | null>(null);
-  const [mobileShowAdjust, setMobileShowAdjust] = useState(false);
+  const [mobileAdjustOpen, setMobileAdjustOpen] = useState(false);
   const mobileShell = isMobileShell();
   const [previewByFamily, setPreviewByFamily] = useState<Record<string, string>>({});
   const [basePreviewByFamily, setBasePreviewByFamily] = useState<Record<string, string>>({});
@@ -514,6 +516,12 @@ export function GeodeButtonsToolPanel({
     () => targets?.find((g) => g.id === selectedFamilyId) ?? null,
     [targets, selectedFamilyId],
   );
+
+  useEffect(() => {
+    if (!selectedFamilyId) {
+      setMobileAdjustOpen(false);
+    }
+  }, [selectedFamilyId]);
 
   const groupedTargets = useMemo(() => {
     const source = targets ?? [];
@@ -762,7 +770,9 @@ export function GeodeButtonsToolPanel({
     let alive = true;
     setTargets(null);
     setTargetsError(null);
-    getGeodeButtonsTargetIndex(plistPath, { useGameFilesCache: !useCustomSheet })
+    getGeodeButtonsTargetIndex(plistPath, {
+      useGameFilesCache: !useCustomSheet && !mobileShell,
+    })
       .then((groups) => {
         if (!alive) return;
         setTargets(groups);
@@ -771,15 +781,13 @@ export function GeodeButtonsToolPanel({
       .catch((err: unknown) => {
         if (!alive) return;
         setTargetsError(
-          err instanceof Error
-            ? err.message
-            : t("errors:geodeButtons.readTargetFramesFailed"),
+          invokeErrorMessage(err, t("errors:geodeButtons.readTargetFramesFailed")),
         );
       });
     return () => {
       alive = false;
     };
-  }, [plistPath, t, useCustomSheet]);
+  }, [mobileShell, plistPath, t, useCustomSheet]);
 
   useEffect(() => {
     if (!targets || targets.length === 0) {
@@ -943,21 +951,125 @@ export function GeodeButtonsToolPanel({
     ? t(`geodeButtons.variants.${selectedVariant}`)
     : t("geodeButtons.notAvailable");
 
+  const geodeAdjustSubtitle = t("geodeButtons.adjustSubtitle", {
+    family: selectedFamily?.label ?? t("geodeButtons.noFamilySelected"),
+    variant: selectedVariantLabel,
+  });
+
+  const geodeAdjustControls = (
+    <>
+      <ToolFilePathField
+        label={t("geodeButtons.templatePng")}
+        hint={t("geodeButtons.perFamily")}
+        value={currentTemplatePath}
+        placeholder={t("geodeButtons.selectTemplatePng")}
+        browseIcon={FileImage}
+        disabled={!selectedFamilyId}
+        onBrowse={() => {
+          const familyId = selectedFamilyId ?? "";
+          if (!familyId) return;
+          pickTemplate((path) => setFamilyTemplatePath(familyId, path));
+        }}
+      />
+
+      <div className="tm-geode-hsv-block">
+        <div className="tm-geode-block-title">{t("geodeButtons.hsvDelta")}</div>
+
+        <div className="tm-geode-hsv-row">
+          <label className="tm-geode-hsv-label">
+            {t("geodeButtons.hueDegrees")}
+            <input
+              className="tm-geode-slider tm-geode-slider--hue"
+              type="range"
+              min={-180}
+              max={180}
+              step={1}
+              value={selectedHsv.hueDeg}
+              style={sliderStyles.hue}
+              onChange={(e) => setHsvField({ hueDeg: Number(e.target.value) })}
+              onInput={(e) =>
+                setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
+              }
+              onDoubleClick={() => setHsvField({ hueDeg: 0 })}
+            />
+          </label>
+          <div className="tm-geode-hsv-input">
+            <FloatStepper
+              value={selectedHsv.hueDeg}
+              step={1}
+              min={-180}
+              max={180}
+              onChange={(value) => setHsvField({ hueDeg: value })}
+            />
+          </div>
+        </div>
+
+        <div className="tm-geode-hsv-row">
+          <label className="tm-geode-hsv-label">
+            {t("geodeButtons.saturation")}
+            <input
+              className="tm-geode-slider tm-geode-slider--sat"
+              type="range"
+              min={-1}
+              max={1}
+              step={0.01}
+              value={selectedHsv.satDelta}
+              style={sliderStyles.saturation}
+              onChange={(e) => setHsvField({ satDelta: Number(e.target.value) })}
+              onInput={(e) =>
+                setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
+              }
+              onDoubleClick={() => setHsvField({ satDelta: 0 })}
+            />
+          </label>
+          <div className="tm-geode-hsv-input">
+            <FloatStepper
+              value={selectedHsv.satDelta}
+              step={0.01}
+              min={-1}
+              max={1}
+              onChange={(value) => setHsvField({ satDelta: value })}
+            />
+          </div>
+        </div>
+
+        <div className="tm-geode-hsv-row">
+          <label className="tm-geode-hsv-label">
+            {t("geodeButtons.value")}
+            <input
+              className="tm-geode-slider tm-geode-slider--val"
+              type="range"
+              min={-1}
+              max={1}
+              step={0.01}
+              value={selectedHsv.valDelta}
+              style={sliderStyles.value}
+              onChange={(e) => setHsvField({ valDelta: Number(e.target.value) })}
+              onInput={(e) =>
+                setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })
+              }
+              onDoubleClick={() => setHsvField({ valDelta: 0 })}
+            />
+          </label>
+          <div className="tm-geode-hsv-input">
+            <FloatStepper
+              value={selectedHsv.valDelta}
+              step={0.01}
+              min={-1}
+              max={1}
+              onChange={(value) => setHsvField({ valDelta: value })}
+            />
+          </div>
+        </div>
+
+        <p className="tm-tool-section-note">{t("geodeButtons.hsvHelp")}</p>
+      </div>
+    </>
+  );
+
   return (
     <ToolPage accent="cyan" wide>
       <ToolPageHeader toolId="geodeButtons" />
-
-      {mobileShell ? (
-        <AndroidGeodeAccessBanner
-          geometryDashFound={geometryDashFound}
-          onSettingsUpdated={(settings) => {
-            onAppSettingsUpdated?.(settings);
-            if (settings.geometryDashFound) {
-              setTargetsError(null);
-            }
-          }}
-        />
-      ) : null}
 
       {targetsError ? (
         <p className="tm-tool-inline-error" role="alert">
@@ -997,11 +1109,7 @@ export function GeodeButtonsToolPanel({
         />
       </ToolSection>
 
-      <div
-        className={`tm-geode-workspace${
-          mobileShell && mobileShowAdjust ? " tm-geode-workspace--mobile-adjust" : ""
-        }`}
-      >
+      <div className="tm-geode-workspace">
         <ToolSection
           title={t("geodeButtons.buttonFamilies")}
           subtitle={t("geodeButtons.buttonFamiliesDescription")}
@@ -1022,9 +1130,6 @@ export function GeodeButtonsToolPanel({
                       className={`tm-geode-family-card${isSelected ? " selected" : ""}`}
                       onClick={() => {
                         setSelectedFamilyId(group.id);
-                        if (mobileShell) {
-                          setMobileShowAdjust(true);
-                        }
                       }}
                     >
                       <div className="tm-geode-family-preview">
@@ -1069,136 +1174,40 @@ export function GeodeButtonsToolPanel({
           ) : null}
         </ToolSection>
 
-        <ToolSection
-          className="tm-geode-adjust-panel"
-          title={t("geodeButtons.adjust")}
-          subtitle={t("geodeButtons.adjustSubtitle", {
-            family:
-              selectedFamily?.label ?? t("geodeButtons.noFamilySelected"),
-            variant: selectedVariantLabel,
-          })}
-          icon={SlidersHorizontal}
-        >
-          {mobileShell ? (
-            <button
-              type="button"
-              className="tm-settings-action-btn"
-              onClick={() => setMobileShowAdjust(false)}
+        {mobileShell ? (
+          <>
+            <MobileEdgeTab
+              label={t("geodeButtons.adjust")}
+              icon={<SlidersHorizontal size={16} strokeWidth={2} />}
+              open={mobileAdjustOpen && Boolean(selectedFamilyId)}
+              disabled={!selectedFamilyId}
+              onOpen={() => setMobileAdjustOpen(true)}
+              onClose={() => setMobileAdjustOpen(false)}
+              className="tm-geode-adjust-edge-tab"
+            />
+            <MobileSheet
+              open={mobileAdjustOpen && Boolean(selectedFamilyId)}
+              onClose={() => setMobileAdjustOpen(false)}
+              title={t("geodeButtons.adjust")}
+              className="tm-geode-adjust-sheet"
+              size="half"
             >
-              {t("navigation:mobile.geodeBackToFamilies")}
-            </button>
-          ) : null}
-          <ToolFilePathField
-            label={t("geodeButtons.templatePng")}
-            hint={t("geodeButtons.perFamily")}
-            value={currentTemplatePath}
-            placeholder={t("geodeButtons.selectTemplatePng")}
-            browseIcon={FileImage}
-            disabled={!selectedFamilyId}
-            onBrowse={() => {
-              const familyId = selectedFamilyId ?? "";
-              if (!familyId) return;
-              pickTemplate((path) => setFamilyTemplatePath(familyId, path));
-            }}
-          />
-
-          <div className="tm-geode-hsv-block">
-            <div className="tm-geode-block-title">
-              {t("geodeButtons.hsvDelta")}
-            </div>
-
-            <div className="tm-geode-hsv-row">
-              <label className="tm-geode-hsv-label">
-                {t("geodeButtons.hueDegrees")}
-                <input
-                  className="tm-geode-slider tm-geode-slider--hue"
-                  type="range"
-                  min={-180}
-                  max={180}
-                  step={1}
-                  value={selectedHsv.hueDeg}
-                  style={sliderStyles.hue}
-                  onChange={(e) => setHsvField({ hueDeg: Number(e.target.value) })}
-                  onInput={(e) =>
-                    setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
-                  }
-                  onDoubleClick={() => setHsvField({ hueDeg: 0 })}
-                />
-              </label>
-              <div className="tm-geode-hsv-input">
-                <FloatStepper
-                  value={selectedHsv.hueDeg}
-                  step={1}
-                  min={-180}
-                  max={180}
-                  onChange={(value) => setHsvField({ hueDeg: value })}
-                />
-              </div>
-            </div>
-
-            <div className="tm-geode-hsv-row">
-              <label className="tm-geode-hsv-label">
-                {t("geodeButtons.saturation")}
-                <input
-                  className="tm-geode-slider tm-geode-slider--sat"
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={selectedHsv.satDelta}
-                  style={sliderStyles.saturation}
-                  onChange={(e) => setHsvField({ satDelta: Number(e.target.value) })}
-                  onInput={(e) =>
-                    setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
-                  }
-                  onDoubleClick={() => setHsvField({ satDelta: 0 })}
-                />
-              </label>
-              <div className="tm-geode-hsv-input">
-                <FloatStepper
-                  value={selectedHsv.satDelta}
-                  step={0.01}
-                  min={-1}
-                  max={1}
-                  onChange={(value) => setHsvField({ satDelta: value })}
-                />
-              </div>
-            </div>
-
-            <div className="tm-geode-hsv-row">
-              <label className="tm-geode-hsv-label">
-                {t("geodeButtons.value")}
-                <input
-                  className="tm-geode-slider tm-geode-slider--val"
-                  type="range"
-                  min={-1}
-                  max={1}
-                  step={0.01}
-                  value={selectedHsv.valDelta}
-                  style={sliderStyles.value}
-                  onChange={(e) => setHsvField({ valDelta: Number(e.target.value) })}
-                  onInput={(e) =>
-                    setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })
-                  }
-                  onDoubleClick={() => setHsvField({ valDelta: 0 })}
-                />
-              </label>
-              <div className="tm-geode-hsv-input">
-                <FloatStepper
-                  value={selectedHsv.valDelta}
-                  step={0.01}
-                  min={-1}
-                  max={1}
-                  onChange={(value) => setHsvField({ valDelta: value })}
-                />
-              </div>
-            </div>
-
-            <p className="tm-tool-section-note">
-              {t("geodeButtons.hsvHelp")}
-            </p>
-          </div>
-        </ToolSection>
+              <p className="tm-tool-section-note tm-geode-adjust-sheet-subtitle">
+                {geodeAdjustSubtitle}
+              </p>
+              {geodeAdjustControls}
+            </MobileSheet>
+          </>
+        ) : (
+          <ToolSection
+            className="tm-geode-adjust-panel"
+            title={t("geodeButtons.adjust")}
+            subtitle={geodeAdjustSubtitle}
+            icon={SlidersHorizontal}
+          >
+            {geodeAdjustControls}
+          </ToolSection>
+        )}
       </div>
     </ToolPage>
   );

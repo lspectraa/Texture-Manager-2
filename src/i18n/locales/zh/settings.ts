@@ -80,11 +80,19 @@ const settings = {
     checkFailed: "无法检查更新。{{error}}",
     installBlocked: "请先完成当前操作，再安装更新。",
     androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "正在下载并安装…",
     downloading: "正在下载更新… {{percent}}%",
     installAndRestart: "安装并重启",
+    installApk: "Download and install",
     availableTitle: "有可用更新",
     availableMeta: "安装并重启即可从 v{{current}} 更新到 v{{version}}。",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "请先完成当前操作，再进行安装。",
     later: "稍后",
     dismiss: "忽略此更新",

@@ -83,11 +83,19 @@ const settings = {
     checkFailed: "Não foi possível procurar atualizações. {{error}}",
     installBlocked: "Conclua a operação atual antes de instalar uma atualização.",
     androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Baixando e instalando…",
     downloading: "Baixando atualização… {{percent}}%",
     installAndRestart: "Instalar e reiniciar",
+    installApk: "Download and install",
     availableTitle: "Atualização disponível",
     availableMeta: "Instale e reinicie para ir da v{{current}} para a v{{version}}.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "Conclua a operação atual antes de instalar.",
     later: "Depois",
     dismiss: "Dispensar atualização",

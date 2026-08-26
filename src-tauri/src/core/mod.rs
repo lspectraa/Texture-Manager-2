@@ -21,6 +21,7 @@ pub mod particle_editor;
 pub mod particle_sprites;
 pub mod pipeline;
 pub mod plist;
+pub mod plist_assets;
 pub mod porter;
 pub mod randomizer;
 pub mod report;
