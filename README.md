@@ -96,21 +96,24 @@ Stack: **Tauri 2** · **React 19** · **TypeScript** · **Vite 7** · **Rust**
 
 Check what’s installed:
 
-```powershell
+```bash
 npm run check:env
 ```
 
 ### Setup
 
-```powershell
+```bash
 git clone https://github.com/lspectraa/Texture-Manager-2.git
 cd Texture-Manager-2
 npm install
+npm run fetch:upscaler-binaries   # Waifu2x / Real-ESRGAN sidecars for Upscaler
 ```
+
+On macOS you also need **Xcode Command Line Tools** (`xcode-select --install`). Full Xcode is only required for signed App Store / notarized release builds.
 
 ### Develop (desktop)
 
-```powershell
+```bash
 npm run tauri dev
 ```
 
@@ -118,9 +121,9 @@ This starts the Vite frontend and opens the native Tauri window.
 
 ### Develop (Android)
 
-```powershell
+```bash
 npm run android:init   # once, if gen/android is missing
-npm run android:dev
+npm run android:dev    # currently Windows-oriented helper script; needs Android SDK + PowerShell Core on macOS
 ```
 
 Use `?shell=mobile` in the browser when iterating on the mobile UI without a device. Add `&simulateUpdate=1` (or set `localStorage.tmSimulateUpdate = "1"`) to fake an available update banner — install only runs a fake download.

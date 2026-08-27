@@ -22,7 +22,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "node ./scripts/fetch-upscaler-binaries.mjs --if-missing && tauri",
-    "check:env": "powershell -ExecutionPolicy Bypass -File ./scripts/check-prereqs.ps1",
+    "check:env": "node ./scripts/check-prereqs.mjs",
     "phase0:verify": "npm run check:env && npm run build",
     "sync:version": "node ./scripts/sync-version.mjs",
     "fetch:upscaler-binaries": "node ./scripts/fetch-upscaler-binaries.mjs",
