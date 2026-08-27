@@ -32,7 +32,12 @@ import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages
 import { androidRequestAllFilesAccess } from "../../services/tauriAndroidStorage";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { pickUserFile } from "../../services/tauriPicker";
-import { isAndroidPlatform, isMobileShell, isSimulateUpdateEnabled } from "../../utils/platform";
+import {
+  geometryDashPathPlaceholder,
+  isAndroidPlatform,
+  isMobileShell,
+  isSimulateUpdateEnabled,
+} from "../../utils/platform";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
@@ -605,11 +610,7 @@ export function SettingsToolPanel({
               value={draftPath}
               onChange={setDraftPath}
               pickFolder={pickFolder}
-              placeholder={
-                mobileShell
-                  ? "/storage/emulated/0/Android/media/com.geode.launcher/game/geode"
-                  : "C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
-              }
+              placeholder={geometryDashPathPlaceholder()}
               onBrowse={(path) => {
                 setDraftPath(path);
                 onGeometryDashPathSelected(path);

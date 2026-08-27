@@ -12,6 +12,7 @@ import { APP_LANGUAGES } from "../i18n/languages";
 import type { AppTheme } from "../utils/theme";
 import { applyTheme, setStoredTheme } from "../utils/theme";
 import { shortenPathForDisplay } from "../utils/pathDisplay";
+import { geometryDashPathPlaceholder } from "../utils/platform";
 import type { PickFolderFn } from "./tools/types";
 import { FolderPathField } from "./tools/layout";
 import { GlassFrost } from "./GlassFrost";
@@ -241,7 +242,7 @@ export function OnboardingFlow({
                 value={draftPath}
                 onChange={setDraftPath}
                 pickFolder={pickFolder}
-                placeholder="C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
+                placeholder={geometryDashPathPlaceholder()}
                 onBrowse={(path) => {
                   setDraftPath(path);
                   onGeometryDashPathSelected(path);

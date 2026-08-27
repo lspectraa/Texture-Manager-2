@@ -41,8 +41,38 @@ export const isAndroidPlatform = (): boolean => {
   return /android/i.test(userAgent);
 };
 
+export const isMacPlatform = (): boolean => {
+  const userAgent = runtimeNavigator()?.userAgent;
+  if (!userAgent) {
+    return false;
+  }
+  return /Mac OS X|Macintosh/i.test(userAgent) && !/iPhone|iPad|iPod/i.test(userAgent);
+};
+
+export const isLinuxPlatform = (): boolean => {
+  const userAgent = runtimeNavigator()?.userAgent;
+  if (!userAgent) {
+    return false;
+  }
+  return /Linux/i.test(userAgent) && !/android/i.test(userAgent);
+};
+
 export const isDesktopPlatform = (): boolean => {
   return isTauriRuntime() && !isAndroidPlatform();
+};
+
+/** Example Geometry Dash install path shown in Settings / onboarding. */
+export const geometryDashPathPlaceholder = (): string => {
+  if (isAndroidPlatform()) {
+    return "/storage/emulated/0/Android/media/com.geode.launcher/game/geode";
+  }
+  if (isMacPlatform()) {
+    return "~/Library/Application Support/Steam/steamapps/common/Geometry Dash";
+  }
+  if (isLinuxPlatform()) {
+    return "~/.steam/steam/steamapps/common/Geometry Dash";
+  }
+  return "C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash";
 };
 
 function queryParam(name: string): string | null {

@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   applyShellDataset,
+  geometryDashPathPlaceholder,
   isAndroidPlatform,
   isDesktopPlatform,
+  isLinuxPlatform,
+  isMacPlatform,
   isMobileShell,
   isTauriRuntime,
 } from "./platform";
@@ -71,5 +74,22 @@ describe("platform detection", () => {
     const { dataset } = installBrowserGlobals({ search: "?shell=mobile" });
     applyShellDataset();
     expect(dataset.shell).toBe("mobile");
+  });
+
+  it("picks a macOS Geometry Dash path placeholder", () => {
+    installBrowserGlobals({
+      userAgent:
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
+    });
+    expect(isMacPlatform()).toBe(true);
+    expect(geometryDashPathPlaceholder()).toContain("Library/Application Support/Steam");
+  });
+
+  it("picks a Linux Geometry Dash path placeholder", () => {
+    installBrowserGlobals({
+      userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+    });
+    expect(isLinuxPlatform()).toBe(true);
+    expect(geometryDashPathPlaceholder()).toContain(".steam/steam");
   });
 });
