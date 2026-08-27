@@ -2911,14 +2911,14 @@ body {
   /* overflow must stay visible — clipping ancestors kill backdrop-filter sampling. */
   overflow: visible;
   background: transparent;
-  box-shadow:
-    0 -1px 0 color-mix(in srgb, var(--tm-border-strong) 65%, transparent),
-    0 -8px 24px rgba(0, 0, 0, 0.18);
+  /* Desktop: hairline only — solid glass plate is mobile-only (see [data-shell="mobile"]). */
+  box-shadow: 0 -1px 0 color-mix(in srgb, var(--tm-border-strong) 65%, transparent);
 }
 
+/* Desktop: no frosted overlay behind Run Operation / pack actions. */
+.tm-tool-action-bar.tm-glass-card .tm-glass-frost,
 .tm-tool-action-bar.tm-glass-card::after {
-  z-index: 0;
-  opacity: 0.04;
+  display: none;
 }
 
 .tm-tool-page > .tm-tool-action-bar {
@@ -6981,29 +6981,19 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   box-shadow: 0 0 0 2px rgba(121, 183, 255, 0.38);
 }
 
-/* Drop the report column when the shell is genuinely tight — raised past
-   1320 so 125% DPI on common 1080p/1440p windows doesn't compact too early. */
+/* Tighten side columns on mid-width desktops — keep the report rail on the right. */
 @media (max-width: 1500px) {
   .tm-layout {
     --tm-layout-nav-width: 252px;
-    grid-template-columns: var(--tm-layout-nav-width) minmax(0, 1fr);
+    --tm-layout-report-width: 360px;
   }
 
   .tm-layout.tm-layout-nav-collapsed {
     --tm-layout-nav-width: var(--tm-shell-rail-width);
   }
 
-  .tm-layout.tm-layout-icon-editor {
-    grid-template-columns: var(--tm-layout-nav-width) minmax(0, 1fr);
-  }
-
-  .tm-report {
-    grid-column: span 2;
-  }
-
-  .tm-layout.tm-layout-report-collapsed .tm-report {
-    max-height: var(--tm-shell-rail-width);
-    min-height: var(--tm-shell-rail-width);
+  .tm-layout.tm-layout-report-collapsed {
+    --tm-layout-report-width: var(--tm-shell-rail-width);
   }
 
   .tm-geode-workspace {
@@ -7069,6 +7059,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
    not the viewport — otherwise dropping the report column (which WIDENS the
    panel) incorrectly also compacted the home grids. */
 
+/* Narrow desktop: compress columns; do not stack the report under the main panel.
+   Mobile uses its own single-column layout under [data-shell="mobile"]. */
 @media (max-width: 980px) {
   .tm-shell {
     height: auto;
@@ -7077,11 +7069,17 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 
   .tm-layout {
     flex: initial;
-    grid-template-columns: 1fr;
+    --tm-layout-nav-width: var(--tm-shell-rail-width);
+    --tm-layout-report-width: min(300px, 32vw);
+    grid-template-columns: var(--tm-layout-nav-width) minmax(0, 1fr) var(--tm-layout-report-width);
   }
 
-  .tm-report {
-    grid-column: auto;
+  .tm-layout.tm-layout-icon-editor {
+    grid-template-columns: var(--tm-layout-nav-width) minmax(0, 1fr);
+  }
+
+  .tm-layout.tm-layout-report-collapsed {
+    --tm-layout-report-width: var(--tm-shell-rail-width);
   }
 
   .tm-sidebar,

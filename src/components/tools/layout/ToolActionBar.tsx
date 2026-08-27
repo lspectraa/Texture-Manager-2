@@ -7,7 +7,8 @@ export type ToolActionBarProps = {
 };
 
 /**
- * Sticky glass footer for primary tool actions (Run operation, pack metadata, etc.).
+ * Primary tool actions (Run operation, pack metadata, etc.).
+ * Glass frost overlay is mobile-only via CSS (`[data-shell="mobile"]`).
  * Design token / class name: `tm-tool-action-bar`.
  */
 export function ToolActionBar({ children, className = "" }: ToolActionBarProps) {
