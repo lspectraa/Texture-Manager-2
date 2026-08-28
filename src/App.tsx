@@ -1854,7 +1854,10 @@ function App() {
                 <span className="tm-nav-btn-copy">
                   <span className="tm-nav-btn-label">
                     {showPackMetadataRail
-                      ? t("tools:packInstaller.metadataPanelTitle")
+                      ? packInstallerBridge.mode === "library" &&
+                        packInstallerBridge.libraryRailTab === "applied"
+                        ? t("tools:packInstaller.appliedPanelTitle")
+                        : t("tools:packInstaller.metadataPanelTitle")
                       : t("reports:panelTitle")}
                   </span>
                 </span>
@@ -1915,7 +1918,10 @@ function App() {
                 <span className="tm-nav-btn-copy">
                   <span className="tm-nav-btn-label">
                     {showPackMetadataRail
-                      ? t("tools:packInstaller.metadataPanelTitle")
+                      ? packInstallerBridge.mode === "library" &&
+                        packInstallerBridge.libraryRailTab === "applied"
+                        ? t("tools:packInstaller.appliedPanelTitle")
+                        : t("tools:packInstaller.metadataPanelTitle")
                       : t("reports:panelTitle")}
                   </span>
                 </span>
@@ -1930,6 +1936,8 @@ function App() {
               <PackInstallerMetadataSidebar
                 bridge={packInstallerBridge}
                 onBridgeChange={setPackInstallerBridge}
+                libraryPacks={packInstallerSidebarActions?.libraryPacks ?? []}
+                libraryPreviews={packInstallerSidebarActions?.libraryPreviews ?? {}}
                 onBrowsePackPng={packInstallerSidebarActions?.browsePackPng}
                 onClearPackPng={packInstallerSidebarActions?.clearPackPng}
                 onUpdateSelectedPackMetadata={
@@ -1939,6 +1947,8 @@ function App() {
                   packInstallerSidebarActions?.updateLibraryPackMetadata
                 }
                 onSaveLibraryMetadata={packInstallerSidebarActions?.saveLibraryMetadata}
+                onAddPackToApplied={packInstallerSidebarActions?.addPackToApplied}
+                onCommitAppliedEntries={packInstallerSidebarActions?.commitAppliedEntries}
               />
             ) : null}
             {!showPackMetadataRail && loadError ? (

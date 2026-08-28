@@ -326,6 +326,19 @@ where
         });
     }
 
+    for unit in &selected {
+        if unit.kind == InstallUnitKind::Pack {
+            if let Some(metadata) = &unit.metadata {
+                if !is_pack_metadata_valid(metadata) {
+                    return Err(AppError::IoError(format!(
+                        "Pack `{}` has invalid pack.json metadata. All fields (textureldr, name, id, version, author) must be set.",
+                        unit.label
+                    )));
+                }
+            }
+        }
+    }
+
     let config_root = layout.geode_config();
     let mods_root = layout.geode_mods();
     fs::create_dir_all(&config_root)?;
@@ -646,6 +659,14 @@ fn overlay_directory_files(from: &Path, onto: &Path) -> Result<(), AppError> {
     Ok(())
 }
 
+fn is_pack_metadata_valid(metadata: &PackMetadata) -> bool {
+    !metadata.textureldr.trim().is_empty()
+        && !metadata.name.trim().is_empty()
+        && !metadata.id.trim().is_empty()
+        && !metadata.version.trim().is_empty()
+        && !metadata.author.trim().is_empty()
+}
+
 /// Scaffold a new texture pack under texture-loader packs.
 ///
 /// Optionally copies all files from `source_dir`, then writes `pack.json` from
@@ -662,6 +683,12 @@ pub fn create_texture_pack(
     if !is_safe_path_segment(folder_name) {
         return Err(AppError::InvalidPath(
             "folder name must be a single safe path segment",
+        ));
+    }
+
+    if !is_pack_metadata_valid(&request.metadata) {
+        return Err(AppError::InvalidOperation(
+            "pack.json requires textureldr, name, id, version, and author",
         ));
     }
 
@@ -786,9 +813,13 @@ pub fn list_installed_packs(
         }
 
         let meta_result = read_pack_metadata(&child.to_string_lossy())?;
-        let metadata = meta_result
-            .metadata
-            .or_else(|| Some(default_pack_metadata(folder_name)));
+        let metadata = if child.join("pack.json").is_file() {
+            meta_result
+                .metadata
+                .or_else(|| Some(default_pack_metadata(folder_name)))
+        } else {
+            None
+        };
         let (_, file_count) = build_tree_and_count(&child);
         packs.push(InstalledPackSummary {
             id: format!("library:{folder_name}"),
@@ -831,6 +862,17 @@ pub fn update_installed_pack_metadata(
     let dir = resolve_installed_pack_dir(pack_dir, layout)?;
 
     let pack_json_path = dir.join("pack.json");
+    if !pack_json_path.is_file() {
+        return Err(AppError::InvalidOperation(
+            "pack has no pack.json; metadata cannot be saved",
+        ));
+    }
+    if !is_pack_metadata_valid(metadata) {
+        return Err(AppError::InvalidOperation(
+            "pack.json requires textureldr, name, id, version, and author",
+        ));
+    }
+
     let json = serde_json::to_string_pretty(metadata)
         .map_err(|err| AppError::ParseError(format!("failed to serialize pack.json: {err}")))?;
     fs::write(&pack_json_path, format!("{json}\n"))?;
@@ -1665,14 +1707,23 @@ fn build_pack_unit(pack_dir: &Path, layout: &GameFilesLayout) -> Result<InstallU
 
     let dest = layout.texture_loader_packs().join(folder_name);
     let meta_result = read_pack_metadata(&pack_dir.to_string_lossy())?;
-    let metadata = meta_result
-        .metadata
-        .unwrap_or_else(|| default_pack_metadata(folder_name));
-    let label = if metadata.name.trim().is_empty() {
-        folder_name.to_string()
+    let metadata = if pack_dir.join("pack.json").is_file() {
+        meta_result
+            .metadata
+            .or_else(|| Some(default_pack_metadata(folder_name)))
     } else {
-        metadata.name.clone()
+        None
     };
+    let label = metadata
+        .as_ref()
+        .map(|m| {
+            if m.name.trim().is_empty() {
+                folder_name.to_string()
+            } else {
+                m.name.clone()
+            }
+        })
+        .unwrap_or_else(|| folder_name.to_string());
 
     let (tree, file_count) = build_tree_and_count(pack_dir);
     Ok(InstallUnit {
@@ -1683,7 +1734,7 @@ fn build_pack_unit(pack_dir: &Path, layout: &GameFilesLayout) -> Result<InstallU
         destination_path: dest.to_string_lossy().into_owned(),
         enabled: true,
         tree: Some(tree),
-        metadata: Some(metadata),
+        metadata,
         pack_png_path: meta_result.pack_png_path,
         file_count: Some(file_count),
     })
@@ -2625,5 +2676,78 @@ mod tests {
                 || err.to_string().contains("packs")
                 || err.to_string().contains("pack must")
         );
+    }
+
+    #[test]
+    fn discover_pack_without_pack_json_has_no_metadata() {
+        let root = unique_temp("root-no-json");
+        let gd = unique_temp("gd-no-json");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let source = unique_temp("pack-no-json-src");
+        fs::create_dir_all(source.join("Bare")).expect("pack dir");
+        fs::write(source.join("Bare").join("sheet.png"), b"a").expect("sheet");
+
+        let plan = discover_pack_install(&source.to_string_lossy(), &layout).expect("discover");
+        assert_eq!(plan.units.len(), 1);
+        assert!(plan.units[0].metadata.is_none());
+    }
+
+    #[test]
+    fn install_pack_without_pack_json_does_not_create_pack_json() {
+        let root = unique_temp("root-install-no-json");
+        let gd = unique_temp("gd-install-no-json");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let source = unique_temp("pack-install-no-json-src");
+        fs::create_dir_all(source.join("Bare")).expect("pack dir");
+        fs::write(source.join("Bare").join("sheet.png"), b"a").expect("sheet");
+
+        let plan = discover_pack_install(&source.to_string_lossy(), &layout).expect("discover");
+        let unit_ids = vec![plan.units[0].id.clone()];
+        let dest = PathBuf::from(&plan.units[0].destination_path);
+
+        install_pack_plan(
+            &plan,
+            &unit_ids,
+            &layout,
+            &InstallPackOptions::default(),
+            |_| {},
+        )
+        .expect("install");
+
+        assert!(dest.join("sheet.png").is_file());
+        assert!(!dest.join("pack.json").exists());
+    }
+
+    #[test]
+    fn install_pack_plan_rejects_invalid_pack_metadata() {
+        let root = unique_temp("root-invalid-meta");
+        let gd = unique_temp("gd-invalid-meta");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+
+        let source = unique_temp("pack-invalid-meta-src");
+        write_pack_json(&source.join("Demo"), "Demo", "tester.demo");
+        let mut plan = discover_pack_install(&source.to_string_lossy(), &layout).expect("discover");
+        plan.units[0].metadata = Some(PackMetadata {
+            textureldr: "1.5.0".to_string(),
+            name: String::new(),
+            id: "tester.demo".to_string(),
+            version: "1.0.0".to_string(),
+            author: "tester".to_string(),
+        });
+
+        let err = install_pack_plan(
+            &plan,
+            &[plan.units[0].id.clone()],
+            &layout,
+            &InstallPackOptions::default(),
+            |_| {},
+        )
+        .expect_err("invalid metadata");
+        assert!(err.to_string().contains("invalid pack.json metadata"));
     }
 }

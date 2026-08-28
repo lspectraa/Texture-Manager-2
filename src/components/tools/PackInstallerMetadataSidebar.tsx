@@ -1,23 +1,29 @@
-import { ImageOff, LoaderCircle, Package, Save } from "lucide-react";
+import { ImageOff, Layers, LoaderCircle, Package, Save } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useRef } from "react";
+import { useRef, type ReactElement } from "react";
 import type {
+  AppliedPackEntry,
   InstallUnit,
   InstallUnitKind,
   InstalledPack,
   PackInstallerBridge,
+  PackInstallerLibraryRailTab,
   PackMetadata,
 } from "../../domain/packInstaller";
 import {
   DEFAULT_PACK_METADATA,
   slugifyPackIdSegment,
 } from "../../domain/packInstaller";
+import { isPackMetadataValid } from "../../domain/packMetadataValidation";
 import { shortenPathForDisplay } from "../../utils/pathDisplay";
+import { PackAppliedOrderPanel } from "./PackAppliedOrderPanel";
 import { ToolTextField } from "./layout";
 
 type PackInstallerMetadataSidebarProps = {
   bridge: PackInstallerBridge;
   onBridgeChange: (next: PackInstallerBridge) => void;
+  libraryPacks: InstalledPack[];
+  libraryPreviews: Record<string, string | null>;
   onBrowsePackPng?: () => void;
   onClearPackPng?: () => void;
   /** Install-mode: persist metadata edits into the selected plan unit. */
@@ -26,6 +32,8 @@ type PackInstallerMetadataSidebarProps = {
   onUpdateLibraryPackMetadata?: (metadata: PackMetadata) => void;
   /** Library-mode: write metadata + optional PNG to disk. */
   onSaveLibraryMetadata?: () => void;
+  onAddPackToApplied?: (pack: InstalledPack) => void;
+  onCommitAppliedEntries?: (entries: AppliedPackEntry[]) => void;
 };
 
 function unitKindLabel(
@@ -102,6 +110,25 @@ function PackPngActions({
         </p>
       ) : null}
     </>
+  );
+}
+
+function PackMetadataHint({
+  message,
+  variant,
+}: {
+  message: string;
+  variant: "invalid" | "info";
+}): ReactElement {
+  return (
+    <p
+      className={
+        variant === "invalid" ? "tm-pack-meta-invalid-hint" : "tm-pack-meta-info-hint"
+      }
+      role={variant === "invalid" ? "alert" : undefined}
+    >
+      {message}
+    </p>
   );
 }
 
@@ -198,14 +225,53 @@ function libraryDisplayName(pack: InstalledPack): string {
   return name || pack.folderName;
 }
 
+function LibraryRailTabs({
+  activeTab,
+  onTabChange,
+  t,
+}: {
+  activeTab: PackInstallerLibraryRailTab;
+  onTabChange: (tab: PackInstallerLibraryRailTab) => void;
+  t: (key: string) => string;
+}) {
+  return (
+    <div className="tm-pack-rail-tabs" role="tablist" aria-label={t("packInstaller.libraryRailTabsLabel")}>
+      <button
+        type="button"
+        role="tab"
+        className={`tm-pack-rail-tab${activeTab === "metadata" ? " tm-pack-rail-tab-active" : ""}`}
+        aria-selected={activeTab === "metadata"}
+        onClick={() => onTabChange("metadata")}
+      >
+        <Package size={14} strokeWidth={1.85} aria-hidden />
+        {t("packInstaller.libraryRailTabMetadata")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        className={`tm-pack-rail-tab${activeTab === "applied" ? " tm-pack-rail-tab-active" : ""}`}
+        aria-selected={activeTab === "applied"}
+        onClick={() => onTabChange("applied")}
+      >
+        <Layers size={14} strokeWidth={1.85} aria-hidden />
+        {t("packInstaller.libraryRailTabApplied")}
+      </button>
+    </div>
+  );
+}
+
 export function PackInstallerMetadataSidebar({
   bridge,
   onBridgeChange,
+  libraryPacks,
+  libraryPreviews,
   onBrowsePackPng,
   onClearPackPng,
   onUpdateSelectedPackMetadata,
   onUpdateLibraryPackMetadata,
   onSaveLibraryMetadata,
+  onAddPackToApplied,
+  onCommitAppliedEntries,
 }: PackInstallerMetadataSidebarProps) {
   const { t } = useTranslation("tools");
   const createIdTouchedRef = useRef(false);
@@ -314,88 +380,141 @@ export function PackInstallerMetadataSidebar({
         />
 
         <MetadataFields meta={bridge.createMetadata} onPatch={updateCreateMetadata} t={t} />
+        {!isPackMetadataValid(bridge.createMetadata) ? (
+          <PackMetadataHint
+            variant="invalid"
+            message={t("packInstaller.metadataInvalidHint")}
+          />
+        ) : null}
       </div>
     );
   }
 
   if (bridge.mode === "library") {
-    const pack = bridge.libraryPack;
-    if (!pack) {
-      return (
-        <div className="tm-pack-meta tm-pack-meta-empty">
-          <span className="tm-pack-meta-empty-icon" aria-hidden>
-            <Package size={22} strokeWidth={1.75} />
-          </span>
-          <p className="tm-pack-meta-empty-title">{t("packInstaller.metadataEmptyTitle")}</p>
-          <p className="tm-pack-meta-empty-hint">
-            {t("packInstaller.metadataLibraryEmptyHint")}
-          </p>
-        </div>
-      );
-    }
+    const metadataContent =
+      bridge.libraryRailTab === "metadata" ? (
+        bridge.libraryPack ? (
+          (() => {
+            const pack = bridge.libraryPack;
+            const hasPackJson = Boolean(pack.metadata);
+            const metadataValid = pack.metadata
+              ? isPackMetadataValid(pack.metadata)
+              : false;
+            const pngPath = bridge.libraryPackPngDirty
+              ? (bridge.libraryPackPngPath ?? null)
+              : (pack.packPngPath ?? null);
 
-    const meta = pack.metadata ?? {
-      ...DEFAULT_PACK_METADATA,
-      name: pack.folderName,
-    };
-    const pngPath =
-      bridge.libraryPackPngDirty
-        ? (bridge.libraryPackPngPath ?? null)
-        : (pack.packPngPath ?? null);
+            return (
+              <>
+                <header className="tm-pack-meta-head">
+                  <span className="tm-pack-meta-head-icon" aria-hidden>
+                    <Package size={16} strokeWidth={1.85} />
+                  </span>
+                  <div>
+                    <h3 className="tm-pack-meta-title">{libraryDisplayName(pack)}</h3>
+                    <p className="tm-pack-meta-subtitle">{t("packInstaller.metadataLibraryHint")}</p>
+                  </div>
+                </header>
+
+                {!hasPackJson ? (
+                  <PackMetadataHint
+                    variant="info"
+                    message={t("packInstaller.metadataNoPackJsonLibraryHint")}
+                  />
+                ) : null}
+
+                <PackPngPreview
+                  dataUrl={bridge.packPngDataUrl}
+                  alt={t("packInstaller.packPngAlt")}
+                  missingLabel={t("packInstaller.packPngMissing")}
+                />
+
+                {hasPackJson ? (
+                  <>
+                    <PackPngActions
+                      onBrowse={onBrowsePackPng}
+                      onClear={onClearPackPng}
+                      canClear={Boolean(pngPath) || Boolean(bridge.packPngDataUrl)}
+                      browseLabel={t("packInstaller.browsePackPng")}
+                      clearLabel={t("packInstaller.clearPackPng")}
+                      path={pngPath}
+                    />
+
+                    <MetadataFields
+                      meta={pack.metadata ?? DEFAULT_PACK_METADATA}
+                      onPatch={(patch, options) => updateLibraryMetadata(pack, patch, options)}
+                      t={t}
+                    />
+
+                    {!metadataValid ? (
+                      <PackMetadataHint
+                        variant="invalid"
+                        message={t("packInstaller.metadataInvalidHint")}
+                      />
+                    ) : null}
+                  </>
+                ) : null}
+
+                <p className="tm-pack-meta-path">
+                  <span className="tm-pack-meta-path-label">{t("packInstaller.destination")}</span>
+                  <span title={pack.path}>{shortenPathForDisplay(pack.path)}</span>
+                </p>
+
+                {hasPackJson ? (
+                  <button
+                    type="button"
+                    className="tm-tool-run-btn tm-pack-meta-save-btn"
+                    onClick={() => onSaveLibraryMetadata?.()}
+                    disabled={
+                      bridge.librarySaving || !onSaveLibraryMetadata || !metadataValid
+                    }
+                  >
+                  {bridge.librarySaving ? (
+                    <LoaderCircle size={15} className="tm-pack-spin" />
+                  ) : (
+                    <Save size={15} />
+                  )}
+                  {bridge.librarySaving
+                    ? t("packInstaller.librarySavingMetadata")
+                    : t("packInstaller.librarySaveMetadata")}
+                  </button>
+                ) : null}
+              </>
+            );
+          })()
+        ) : (
+          <div className="tm-pack-meta tm-pack-meta-empty">
+            <span className="tm-pack-meta-empty-icon" aria-hidden>
+              <Package size={22} strokeWidth={1.75} />
+            </span>
+            <p className="tm-pack-meta-empty-title">{t("packInstaller.metadataEmptyTitle")}</p>
+            <p className="tm-pack-meta-empty-hint">
+              {t("packInstaller.metadataLibraryEmptyHint")}
+            </p>
+          </div>
+        )
+      ) : null;
 
     return (
-      <div className="tm-pack-meta">
-        <header className="tm-pack-meta-head">
-          <span className="tm-pack-meta-head-icon" aria-hidden>
-            <Package size={16} strokeWidth={1.85} />
-          </span>
-          <div>
-            <h3 className="tm-pack-meta-title">{libraryDisplayName(pack)}</h3>
-            <p className="tm-pack-meta-subtitle">{t("packInstaller.metadataLibraryHint")}</p>
-          </div>
-        </header>
-
-        <PackPngPreview
-          dataUrl={bridge.packPngDataUrl}
-          alt={t("packInstaller.packPngAlt")}
-          missingLabel={t("packInstaller.packPngMissing")}
-        />
-
-        <PackPngActions
-          onBrowse={onBrowsePackPng}
-          onClear={onClearPackPng}
-          canClear={Boolean(pngPath) || Boolean(bridge.packPngDataUrl)}
-          browseLabel={t("packInstaller.browsePackPng")}
-          clearLabel={t("packInstaller.clearPackPng")}
-          path={pngPath}
-        />
-
-        <MetadataFields
-          meta={meta}
-          onPatch={(patch, options) => updateLibraryMetadata(pack, patch, options)}
+      <div className="tm-pack-meta tm-pack-meta-library-rail">
+        <LibraryRailTabs
+          activeTab={bridge.libraryRailTab}
+          onTabChange={(tab) => onBridgeChange({ ...bridge, libraryRailTab: tab })}
           t={t}
         />
-
-        <p className="tm-pack-meta-path">
-          <span className="tm-pack-meta-path-label">{t("packInstaller.destination")}</span>
-          <span title={pack.path}>{shortenPathForDisplay(pack.path)}</span>
-        </p>
-
-        <button
-          type="button"
-          className="tm-tool-run-btn tm-pack-meta-save-btn"
-          onClick={() => onSaveLibraryMetadata?.()}
-          disabled={bridge.librarySaving || !onSaveLibraryMetadata}
+        <div
+          className={bridge.libraryRailTab === "applied" ? undefined : "tm-pack-applied-sr"}
+          aria-hidden={bridge.libraryRailTab !== "applied"}
         >
-          {bridge.librarySaving ? (
-            <LoaderCircle size={15} className="tm-pack-spin" />
-          ) : (
-            <Save size={15} />
-          )}
-          {bridge.librarySaving
-            ? t("packInstaller.librarySavingMetadata")
-            : t("packInstaller.librarySaveMetadata")}
-        </button>
+          <PackAppliedOrderPanel
+            bridge={bridge}
+            libraryPacks={libraryPacks}
+            libraryPreviews={libraryPreviews}
+            onAppliedEntriesChange={(entries) => onCommitAppliedEntries?.(entries)}
+            onAddPack={(pack) => onAddPackToApplied?.(pack)}
+          />
+        </div>
+        {metadataContent}
       </div>
     );
   }
@@ -430,10 +549,8 @@ export function PackInstallerMetadataSidebar({
     );
   }
 
-  const meta = unit.metadata ?? {
-    ...DEFAULT_PACK_METADATA,
-    name: unit.label,
-  };
+  const meta = unit.metadata;
+  const metadataValid = meta ? isPackMetadataValid(meta) : false;
 
   return (
     <div className="tm-pack-meta">
@@ -446,6 +563,13 @@ export function PackInstallerMetadataSidebar({
           <p className="tm-pack-meta-subtitle">{t("packInstaller.metadataInstallHint")}</p>
         </div>
       </header>
+
+      {!meta ? (
+        <PackMetadataHint
+          variant="info"
+          message={t("packInstaller.metadataNoPackJsonInstallHint")}
+        />
+      ) : null}
 
       <PackPngPreview
         dataUrl={bridge.packPngDataUrl}
@@ -462,11 +586,21 @@ export function PackInstallerMetadataSidebar({
         path={unit.packPngPath ?? null}
       />
 
-      <MetadataFields
-        meta={meta}
-        onPatch={(patch, options) => updateInstallMetadata(unit, patch, options)}
-        t={t}
-      />
+      {meta ? (
+        <>
+          <MetadataFields
+            meta={meta}
+            onPatch={(patch, options) => updateInstallMetadata(unit, patch, options)}
+            t={t}
+          />
+          {!metadataValid ? (
+            <PackMetadataHint
+              variant="invalid"
+              message={t("packInstaller.metadataInvalidHint")}
+            />
+          ) : null}
+        </>
+      ) : null}
 
       <p className="tm-pack-meta-path">
         <span className="tm-pack-meta-path-label">{t("packInstaller.destination")}</span>

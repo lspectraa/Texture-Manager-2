@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
 
@@ -134,7 +135,7 @@ export function useSwipeDismiss({
     [resetDrag],
   );
 
-  const onClickCapture = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+  const onClickCapture = useCallback((event: ReactMouseEvent<HTMLElement>) => {
     if (dragOffsetRef.current > dragStartPx || draggingRef.current) {
       event.preventDefault();
       event.stopPropagation();

@@ -1,3 +1,4 @@
+pub mod geode_user_data;
 pub mod sync;
 
 use std::collections::{HashMap, HashSet};
@@ -403,8 +404,7 @@ pub fn looks_like_geode_dir(path: &Path) -> bool {
 const ANDROID_GEODE_PACKAGE_IDS: &[&str] = &["com.geode.launcher", "com.geode.launcher.play"];
 
 #[cfg(target_os = "android")]
-fn android_geode_media_candidates() -> Vec<PathBuf> {
-    let mut out: Vec<PathBuf> = Vec::new();
+pub(crate) fn android_geode_internal_storage_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
     if let Ok(ext) = std::env::var("EXTERNAL_STORAGE") {
         let trimmed = ext.trim();
@@ -414,8 +414,64 @@ fn android_geode_media_candidates() -> Vec<PathBuf> {
     }
     push_unique(&mut roots, PathBuf::from("/storage/emulated/0"));
     push_unique(&mut roots, PathBuf::from("/sdcard"));
+    roots
+}
 
-    for root in roots {
+/// Android mod save tree, e.g. `…/Android/media/com.geode.launcher/save`.
+#[cfg(target_os = "android")]
+pub(crate) fn android_geode_save_dir_candidates() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for root in android_geode_internal_storage_roots() {
+        for package in ANDROID_GEODE_PACKAGE_IDS {
+            push_unique(
+                &mut out,
+                root.join("Android")
+                    .join("media")
+                    .join(package)
+                    .join("save"),
+            );
+        }
+    }
+    out
+}
+
+/// Resolve the Geode launcher save folder used for mod data (`saved.json`, etc.).
+#[cfg(target_os = "android")]
+pub(crate) fn detect_android_geode_save_dir() -> Option<PathBuf> {
+    for save in android_geode_save_dir_candidates() {
+        if android_geode_save_storage_readable(&save) {
+            return Some(save);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "android")]
+fn android_geode_save_storage_readable(save_dir: &Path) -> bool {
+    if save_dir.is_dir() {
+        let texture_loader_mod = save_dir
+            .join("geode")
+            .join("mods")
+            .join("geode.texture-loader");
+        if texture_loader_mod.is_dir() {
+            return fs::read_dir(&texture_loader_mod).is_ok();
+        }
+        let mods = save_dir.join("geode").join("mods");
+        if mods.is_dir() {
+            return fs::read_dir(&mods).is_ok();
+        }
+        return fs::read_dir(save_dir).is_ok();
+    }
+
+    save_dir
+        .parent()
+        .is_some_and(|media_package| media_package.is_dir() && fs::read_dir(media_package).is_ok())
+}
+
+#[cfg(target_os = "android")]
+fn android_geode_media_candidates() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for root in android_geode_internal_storage_roots() {
         for package in ANDROID_GEODE_PACKAGE_IDS {
             push_unique(
                 &mut out,

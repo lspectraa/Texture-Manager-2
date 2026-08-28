@@ -10,6 +10,7 @@ import type {
   PackInstallProgress,
   PackOperationKind,
   ReadPackMetadataResult,
+  ReadTextureLoaderAppliedResult,
   RunPackOperationOptions,
   RunPackOperationResult,
   UpdateInstalledPackMetadataRequest,
@@ -142,6 +143,27 @@ export const deleteInstalledPack = async (packDir: string): Promise<void> => {
     throw new Error("Delete pack requires the Tauri runtime.");
   }
   await invoke<void>("delete_installed_pack", { packDir });
+};
+
+export const PACK_LIBRARY_DRAG_MIME = "application/x-tm-pack-library";
+
+export const readTextureLoaderApplied =
+  async (): Promise<ReadTextureLoaderAppliedResult> => {
+    if (!isTauriRuntime()) {
+      throw new Error("Read applied packs requires the Tauri runtime.");
+    }
+    return invoke<ReadTextureLoaderAppliedResult>("read_texture_loader_applied");
+  };
+
+export const writeTextureLoaderApplied = async (
+  appliedPaths: string[],
+): Promise<void> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Write applied packs requires the Tauri runtime.");
+  }
+  await invoke<void>("write_texture_loader_applied", {
+    request: { appliedPaths },
+  });
 };
 
 export const runPackOperation = async (

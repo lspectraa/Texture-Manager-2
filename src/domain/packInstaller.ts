@@ -129,6 +129,23 @@ export type UpdateInstalledPackMetadataRequest = {
 
 export type PackInstallerMode = "install" | "create" | "library";
 
+export type PackInstallerLibraryRailTab = "metadata" | "applied";
+
+export type AppliedPackEntry = {
+  folderName: string;
+  path: string;
+  displayName: string;
+  packPngPath?: string;
+  missing?: boolean;
+};
+
+export type ReadTextureLoaderAppliedResult = {
+  savedJsonPath: string;
+  modSaveDir: string;
+  supported: boolean;
+  entries: AppliedPackEntry[];
+};
+
 /** Shared UI bridge between the tool panel and the metadata rail. */
 export type PackInstallerBridge = {
   mode: PackInstallerMode;
@@ -144,6 +161,12 @@ export type PackInstallerBridge = {
   libraryPackPngPath: string | null | undefined;
   libraryPackPngDirty: boolean;
   librarySaving: boolean;
+  libraryRailTab: PackInstallerLibraryRailTab;
+  appliedEntries: AppliedPackEntry[];
+  appliedDirty: boolean;
+  appliedSaving: boolean;
+  appliedConfigPath: string | null;
+  appliedSupported: boolean;
 };
 
 export const DEFAULT_PACK_METADATA: PackMetadata = {
@@ -165,6 +188,12 @@ export const DEFAULT_PACK_INSTALLER_BRIDGE: PackInstallerBridge = {
   libraryPackPngPath: undefined,
   libraryPackPngDirty: false,
   librarySaving: false,
+  libraryRailTab: "applied",
+  appliedEntries: [],
+  appliedDirty: false,
+  appliedSaving: false,
+  appliedConfigPath: null,
+  appliedSupported: true,
 };
 
 export function slugifyPackIdSegment(value: string): string {

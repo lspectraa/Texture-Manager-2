@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import {
   FolderOpen,
+  Layers,
   Scissors,
   Shuffle,
   Trash2,
@@ -14,6 +15,7 @@ export type PackLibraryContextAction =
   | "convert"
   | "port"
   | "split"
+  | "applyToGame"
   | "delete";
 
 type PackLibraryContextMenuProps = {
@@ -52,6 +54,11 @@ const MENU_ITEMS: {
     action: "split",
     icon: Scissors,
     labelKey: "packInstaller.libraryActionSplit",
+  },
+  {
+    action: "applyToGame",
+    icon: Layers,
+    labelKey: "packInstaller.libraryActionApplyToGame",
   },
   {
     action: "delete",

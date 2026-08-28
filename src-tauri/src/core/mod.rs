@@ -28,6 +28,7 @@ pub mod report;
 pub mod safe_fs;
 pub mod settings;
 pub mod splitter;
+pub mod texture_loader_applied;
 pub mod sprite_index;
 pub mod upscaler;
 pub mod upscaler_sidecar;

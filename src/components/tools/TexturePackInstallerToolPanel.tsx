@@ -28,6 +28,7 @@ import {
 import { useTranslation } from "react-i18next";
 import convertVersionMap from "../../config/convertVersionMap.json";
 import type {
+  AppliedPackEntry,
   InstallPlan,
   InstallTreeNode,
   InstallUnit,
@@ -39,9 +40,12 @@ import type {
 } from "../../domain/packInstaller";
 import type { AppSettingsView } from "../../domain/settings";
 import {
-  DEFAULT_PACK_METADATA,
   folderNameFromPackName,
 } from "../../domain/packInstaller";
+import {
+  installPlanHasInvalidPackMetadata,
+  isPackMetadataValid,
+} from "../../domain/packMetadataValidation";
 import {
   cleanupPackInstallTemp,
   createTexturePack,
@@ -52,8 +56,10 @@ import {
   installPackPlan,
   listInstalledPacks,
   readPackMetadata,
+  readTextureLoaderApplied,
   runPackOperation,
   updateInstalledPackMetadata,
+  writeTextureLoaderApplied,
 } from "../../services/tauriPackInstaller";
 import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import { isTauriRuntime } from "../../services/tauriOperations";
@@ -66,6 +72,10 @@ import {
   shortenPathForDisplay,
 } from "../../utils/pathDisplay";
 import { invokeErrorMessage } from "../../utils/invokeErrorMessage";
+import {
+  PackLibraryDragSurface,
+  usePackLibraryDropListener,
+} from "../../hooks/usePackLibraryPointerDrag";
 import {
   PackLibraryContextMenu,
   type PackLibraryContextAction,
@@ -91,6 +101,10 @@ export type PackInstallerSidebarActions = {
   updateSelectedPackMetadata: (metadata: PackMetadata) => void;
   updateLibraryPackMetadata: (metadata: PackMetadata) => void;
   saveLibraryMetadata: () => void;
+  addPackToApplied: (pack: InstalledPack) => void;
+  commitAppliedEntries: (entries: AppliedPackEntry[]) => void;
+  libraryPacks: InstalledPack[];
+  libraryPreviews: Record<string, string | null>;
 };
 
 type TexturePackInstallerToolPanelProps = {
@@ -360,6 +374,8 @@ export function TexturePackInstallerToolPanel({
   const overlayTimerRef = useRef<number | null>(null);
   const libraryRailFocusRef = useRef<HTMLDivElement | null>(null);
   const libraryLongPressTimerRef = useRef<number | null>(null);
+  const suppressAppliedAutoSaveRef = useRef(false);
+  const appliedAutoSaveTimerRef = useRef<number | null>(null);
 
   const setBridge = useCallback(
     (patch: Partial<PackInstallerBridge>) => {
@@ -688,6 +704,123 @@ export function TexturePackInstallerToolPanel({
     }
   }, [geometryDashFound, mobileShell, selectLibraryPack, t]);
 
+  const refreshAppliedConfig = useCallback(async (): Promise<void> => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    try {
+      const result = await readTextureLoaderApplied();
+      suppressAppliedAutoSaveRef.current = true;
+      setBridge({
+        appliedEntries: result.entries,
+        appliedConfigPath: result.savedJsonPath || null,
+        appliedSupported: result.supported,
+        appliedDirty: false,
+      });
+      window.requestAnimationFrame(() => {
+        suppressAppliedAutoSaveRef.current = false;
+      });
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.appliedLoadFailed"),
+        ),
+      );
+    }
+  }, [setBridge, t]);
+
+  const persistAppliedEntries = useCallback(
+    async (entries: AppliedPackEntry[]): Promise<void> => {
+      if (!packIoReady) {
+        return;
+      }
+      if (!isTauriRuntime()) {
+        return;
+      }
+      if (entries.some((entry) => entry.missing)) {
+        return;
+      }
+
+      setBridge({ appliedSaving: true });
+      try {
+        await writeTextureLoaderApplied(entries.map((entry) => entry.path));
+        setBridge({ appliedSaving: false, appliedDirty: false });
+      } catch (err: unknown) {
+        setBridge({ appliedSaving: false });
+        setStatusTone("error");
+        setStatusMessage(
+          redactAbsolutePathsInText(
+            err instanceof Error
+              ? err.message
+              : t("errors:packInstaller.appliedSaveFailed"),
+          ),
+        );
+      }
+    },
+    [packIoReady, setBridge, t],
+  );
+
+  const scheduleAppliedAutoSave = useCallback(
+    (entries: AppliedPackEntry[]) => {
+      if (suppressAppliedAutoSaveRef.current) {
+        return;
+      }
+      if (appliedAutoSaveTimerRef.current !== null) {
+        window.clearTimeout(appliedAutoSaveTimerRef.current);
+      }
+      appliedAutoSaveTimerRef.current = window.setTimeout(() => {
+        appliedAutoSaveTimerRef.current = null;
+        void persistAppliedEntries(entries);
+      }, 300);
+    },
+    [persistAppliedEntries],
+  );
+
+  const commitAppliedEntries = useCallback(
+    (entries: AppliedPackEntry[]): void => {
+      setBridge({ appliedEntries: entries, appliedDirty: true });
+      scheduleAppliedAutoSave(entries);
+    },
+    [scheduleAppliedAutoSave, setBridge],
+  );
+
+  const addPackToApplied = useCallback(
+    (pack: InstalledPack): void => {
+      const entries = bridgeRef.current.appliedEntries;
+      if (entries.some((entry) => entry.folderName === pack.folderName)) {
+        return;
+      }
+      const nextEntry: AppliedPackEntry = {
+        folderName: pack.folderName,
+        path: pack.path,
+        displayName: libraryPackTitle(pack),
+        packPngPath: pack.packPngPath,
+        missing: false,
+      };
+      const nextEntries = [...entries, nextEntry];
+      setBridge({
+        appliedEntries: nextEntries,
+        appliedDirty: true,
+        libraryRailTab: "applied",
+      });
+      scheduleAppliedAutoSave(nextEntries);
+    },
+    [scheduleAppliedAutoSave, setBridge],
+  );
+
+  usePackLibraryDropListener(addPackToApplied);
+
+  useEffect(() => {
+    return () => {
+      if (appliedAutoSaveTimerRef.current !== null) {
+        window.clearTimeout(appliedAutoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
   // Reload whenever Library is shown — including remount after leaving the tool
   // with Library still selected (local grid state is empty on mount).
   useEffect(() => {
@@ -695,7 +828,8 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     void refreshLibrary();
-  }, [bridge.mode, refreshLibrary]);
+    void refreshAppliedConfig();
+  }, [bridge.mode, refreshAppliedConfig, refreshLibrary]);
 
   const browsePackPng = useCallback(async (): Promise<void> => {
     if (!isTauriRuntime()) {
@@ -900,7 +1034,12 @@ export function TexturePackInstallerToolPanel({
     const pack = bridgeRef.current.libraryPack;
     if (!pack?.metadata) {
       setStatusTone("error");
-      setStatusMessage(t("errors:packInstaller.noLibraryPackSelected"));
+      setStatusMessage(t("errors:packInstaller.metadataNoPackJson"));
+      return;
+    }
+    if (!isPackMetadataValid(pack.metadata)) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.metadataInvalid"));
       return;
     }
     if (!isTauriRuntime()) {
@@ -1208,6 +1347,9 @@ export function TexturePackInstallerToolPanel({
           setLibraryDeleteError(null);
           setLibraryDeleteConfirm(pack);
           break;
+        case "applyToGame":
+          addPackToApplied(pack);
+          break;
         default: {
           const _exhaustive: never = action;
           void _exhaustive;
@@ -1216,6 +1358,7 @@ export function TexturePackInstallerToolPanel({
       }
     },
     [
+      addPackToApplied,
       libraryContextMenu?.pack,
       openLibraryPackFolder,
       openLibrarySplitPanel,
@@ -1275,10 +1418,18 @@ export function TexturePackInstallerToolPanel({
       saveLibraryMetadata: () => {
         void saveLibraryMetadata();
       },
+      addPackToApplied,
+      commitAppliedEntries,
+      libraryPacks,
+      libraryPreviews,
     });
   }, [
+    addPackToApplied,
     browsePackPng,
     clearPackPng,
+    commitAppliedEntries,
+    libraryPacks,
+    libraryPreviews,
     onSidebarActionsChange,
     saveLibraryMetadata,
     updateLibraryPackMetadata,
@@ -1608,6 +1759,11 @@ export function TexturePackInstallerToolPanel({
       setStatusMessage(t("errors:packInstaller.convertVersionRequired"));
       return;
     }
+    if (installPlanHasInvalidPackMetadata(plan)) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.metadataInvalid"));
+      return;
+    }
 
     setBusy("install");
     setStatusMessage(null);
@@ -1701,12 +1857,19 @@ export function TexturePackInstallerToolPanel({
       setStatusMessage(t("errors:packInstaller.folderNameRequired"));
       return;
     }
+    if (!isPackMetadataValid(bridge.createMetadata)) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.metadataInvalid"));
+      return;
+    }
 
     const metadata: PackMetadata = {
       ...bridge.createMetadata,
-      name: bridge.createMetadata.name.trim() || resolvedFolder,
-      textureldr: bridge.createMetadata.textureldr.trim() || DEFAULT_PACK_METADATA.textureldr,
-      version: bridge.createMetadata.version.trim() || DEFAULT_PACK_METADATA.version,
+      textureldr: bridge.createMetadata.textureldr.trim(),
+      name: bridge.createMetadata.name.trim(),
+      id: bridge.createMetadata.id.trim(),
+      version: bridge.createMetadata.version.trim(),
+      author: bridge.createMetadata.author.trim(),
     };
 
     setBusy("create");
@@ -2080,7 +2243,12 @@ export function TexturePackInstallerToolPanel({
               type="button"
               className="tm-tool-run-btn"
               onClick={() => void runInstall()}
-              disabled={busy !== null || !plan || !packIoReady}
+              disabled={
+                busy !== null ||
+                !plan ||
+                !packIoReady ||
+                installPlanHasInvalidPackMetadata(plan)
+              }
             >
               {busy === "install" || busy === "discover" ? (
                 <LoaderCircle size={16} className="tm-pack-spin" />
@@ -2171,7 +2339,11 @@ export function TexturePackInstallerToolPanel({
               type="button"
               className="tm-tool-run-btn"
               onClick={() => void runCreate()}
-              disabled={busy !== null || !packIoReady}
+              disabled={
+                busy !== null ||
+                !packIoReady ||
+                !isPackMetadataValid(bridge.createMetadata)
+              }
             >
               {busy === "create" ? (
                 <LoaderCircle size={16} className="tm-pack-spin" />
@@ -2257,10 +2429,25 @@ export function TexturePackInstallerToolPanel({
                         busy !== null ? " is-disabled" : ""
                       }`}
                     >
-                      <button
-                        type="button"
+                      <PackLibraryDragSurface
+                        as="div"
+                        role="button"
+                        tabIndex={busy !== null ? -1 : 0}
                         className="tm-pack-library-card-main"
-                        onClick={() => void selectLibraryPack(pack)}
+                        pack={pack}
+                        disabled={busy !== null}
+                        onTap={() => {
+                          void selectLibraryPack(pack);
+                        }}
+                        onKeyDown={(event) => {
+                          if (busy !== null) {
+                            return;
+                          }
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            void selectLibraryPack(pack);
+                          }
+                        }}
                         onContextMenu={
                           mobileShell
                             ? undefined
@@ -2288,7 +2475,6 @@ export function TexturePackInstallerToolPanel({
                         onTouchEnd={mobileShell ? clearLibraryLongPressTimer : undefined}
                         onTouchMove={mobileShell ? clearLibraryLongPressTimer : undefined}
                         onTouchCancel={mobileShell ? clearLibraryLongPressTimer : undefined}
-                        disabled={busy !== null}
                       >
                         <div className="tm-pack-library-preview">
                           {preview ? (
@@ -2296,6 +2482,7 @@ export function TexturePackInstallerToolPanel({
                               className="tm-pack-library-thumb"
                               src={preview}
                               alt=""
+                              draggable={false}
                             />
                           ) : (
                             <div className="tm-pack-library-thumb-missing" aria-hidden>
@@ -2310,7 +2497,7 @@ export function TexturePackInstallerToolPanel({
                             version,
                           })}
                         </div>
-                      </button>
+                      </PackLibraryDragSurface>
                       {mobileShell ? (
                         <>
                           <button

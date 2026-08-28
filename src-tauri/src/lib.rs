@@ -63,6 +63,11 @@ use crate::core::particle_editor::{
 };
 use crate::core::particle_sprites::{particle_editor_sheet_frame_data_url, ParticlePreviewSprite};
 use crate::core::report::OperationReport;
+use crate::core::texture_loader_applied::{
+    read_texture_loader_applied as read_texture_loader_applied_core,
+    write_texture_loader_applied as write_texture_loader_applied_core,
+    ReadTextureLoaderAppliedResult, WriteTextureLoaderAppliedRequest,
+};
 use crate::core::settings::{
     add_custom_app_background as add_custom_app_background_core,
     app_background_png_data_url as app_background_png_data_url_core, apply_save_request,
@@ -798,6 +803,29 @@ async fn update_installed_pack_metadata(
 }
 
 #[tauri::command]
+async fn read_texture_loader_applied(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<ReadTextureLoaderAppliedResult, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        read_texture_loader_applied_core(&layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn write_texture_loader_applied(
+    game_files: tauri::State<'_, GameFilesState>,
+    request: WriteTextureLoaderAppliedRequest,
+) -> Result<(), String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        write_texture_loader_applied_core(&layout, &request).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn delete_installed_pack(
     game_files: tauri::State<'_, GameFilesState>,
     pack_dir: String,
@@ -1022,6 +1050,8 @@ pub fn run() {
             update_installed_pack_metadata,
             delete_installed_pack,
             run_pack_operation,
+            read_texture_loader_applied,
+            write_texture_loader_applied,
             validate_operation_request,
             run_operation,
             cancel_operation,
