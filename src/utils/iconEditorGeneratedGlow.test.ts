@@ -40,11 +40,34 @@ describe("glowGenKeyForComponent", () => {
 });
 
 describe("resolveGlowGenSettings", () => {
-  it("defaults to 4px glow with compositing when unset", () => {
+  it("defaults to 4px glow with compositing when unset at UHD scale", () => {
     expect(resolveGlowGenSettings({}, "icon")).toEqual({
       enabled: false,
       thickness: 4,
       compositeLayers: true,
+    });
+  });
+
+  it("scales only the default UI thickness for HD and low tiers", () => {
+    expect(resolveGlowGenSettings({}, "icon", 2)).toEqual({
+      enabled: false,
+      thickness: 2,
+      compositeLayers: true,
+    });
+    expect(resolveGlowGenSettings({}, "icon", 4)).toEqual({
+      enabled: false,
+      thickness: 1,
+      compositeLayers: true,
+    });
+  });
+
+  it("uses saved thickness as-is without tier conversion", () => {
+    expect(
+      resolveGlowGenSettings({ icon: { enabled: true, thickness: 6, compositeLayers: false } }, "icon", 4),
+    ).toEqual({
+      enabled: true,
+      thickness: 6,
+      compositeLayers: false,
     });
   });
 });

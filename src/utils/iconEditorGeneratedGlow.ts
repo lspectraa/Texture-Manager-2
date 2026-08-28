@@ -1,3 +1,5 @@
+import { glowThicknessForContentScale } from "./iconEditorGraphicsTier";
+
 export type GlowGenPartId = "01" | "02" | "03" | "04";
 
 export type GlowGenSettings = {
@@ -58,8 +60,15 @@ export function glowGenKeyForComponent(args: {
 export function resolveGlowGenSettings(
   settingsByKey: Record<string, GlowGenSettings>,
   key: string,
+  contentScale = 1,
 ): GlowGenSettings {
-  return settingsByKey[key] ?? DEFAULT_GLOW_GEN_SETTINGS;
+  if (settingsByKey[key]) {
+    return settingsByKey[key];
+  }
+  return {
+    ...DEFAULT_GLOW_GEN_SETTINGS,
+    thickness: glowThicknessForContentScale(DEFAULT_GLOW_GEN_SETTINGS.thickness, contentScale),
+  };
 }
 
 export type GlowPlistPoint = { x: number; y: number };

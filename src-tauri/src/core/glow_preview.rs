@@ -20,7 +20,7 @@ use crate::core::contracts::{phase_defaults, GlowMakerOptions};
 use crate::core::discovery::{discover_sheet_pairs, SheetCandidate};
 use crate::core::errors::AppError;
 use crate::core::game_files::GameFilesLayout;
-use crate::core::glow::{parse_hex_rgb, render_icon_glow_from_primary, tint_glow_rgb};
+use crate::core::glow::{parse_hex_rgb, glow_maker_options_for_stem, render_icon_glow_from_primary, tint_glow_rgb};
 use crate::core::glow_composite::{
     composite_icon_layers_for_glow, icon_stem_from_frame_name, sprite_offset_for_frame,
     trimmed_sprite_anchor,
@@ -869,8 +869,9 @@ pub fn glow_maker_preview_data_url(
         PreviewIconAudience::GlowMaker,
         icon_plist_path,
     )?;
-    let source = glow_source_for_preview(&options, &sample);
-    let glow = render_icon_glow_from_primary(&source, &options);
+    let tier_options = glow_maker_options_for_stem(&options, &sample.sheet_stem);
+    let source = glow_source_for_preview(&tier_options, &sample);
+    let glow = render_icon_glow_from_primary(&source, &tier_options);
     // Overlay the same composite used for glow so extras stay visible at native size.
     let composed = compose_glow_under_icon(&glow, &source);
     rgba_to_png_data_url(&composed)

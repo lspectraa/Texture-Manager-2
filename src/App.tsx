@@ -1837,11 +1837,13 @@ function App() {
               mobileReportSwipe.dragging ? " tm-report--swipe-dragging" : ""
             }`}
             style={mobileShell ? mobileReportSwipe.style : undefined}
-            {...(mobileShell && mobileSideOpen ? mobileReportSwipe.captureHandlers : {})}
           >
             <GlassFrost />
             {mobileShell ? (
-              <div className="tm-shell-panel-title tm-nav-btn tm-nav-btn-sky tm-shell-panel-title--static">
+              <div
+                className="tm-shell-panel-title tm-nav-btn tm-nav-btn-sky tm-shell-panel-title--static"
+                {...(mobileSideOpen ? mobileReportSwipe.captureHandlers : {})}
+              >
                 <span className="tm-nav-btn-icon" aria-hidden>
                   {showPackMetadataRail ? (
                     <Package size={16} strokeWidth={1.85} />

@@ -45,6 +45,7 @@ import { getAppI18n } from "../../i18n";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { usePinchZoom } from "../../hooks/usePinchZoom";
 import { isMobileShell } from "../../utils/platform";
+import { contentScaleForPlistPath } from "../../utils/iconEditorGraphicsTier";
 import {
   markSuppressNextMobilePopState,
 } from "../../utils/mobileHistory";
@@ -211,17 +212,19 @@ function computeSpiderFrontLegEchoWrapAnchor(
   variant: SpiderFrontLegEchoVariant,
   primaryOffset: IconEditorPoint,
   stageOriginY: number,
+  contentScale: number,
 ): { baseX: number; baseY: number } {
   const viewNudge = SPIDER_PART_VIEW_OFFSET["02"];
   const extra = variant === "flipH" ? SPIDER_FRONT_LEG_ECHO_NUDGE_FLIP : SPIDER_FRONT_LEG_ECHO_NUDGE_COPY;
   return {
     baseX:
       STAGE_ORIGIN_X +
-      primaryOffset.x * OFFSET_SCALE +
+      stageOffset(primaryOffset.x, contentScale) +
       viewNudge.x +
       SPIDER_FRONT_LEG_ECHO_SHIFT_X +
       extra.x,
-    baseY: stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y + extra.y,
+    baseY:
+      stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y + extra.y,
   };
 }
 
@@ -229,6 +232,7 @@ function computeRobotEchoWrapAnchor(
   partId: RobotPartId,
   primaryOffset: IconEditorPoint,
   stageOriginY: number,
+  contentScale: number,
 ): { baseX: number; baseY: number } {
   const viewNudge = ROBOT_PART_VIEW_OFFSET[partId];
   const extra =
@@ -240,11 +244,12 @@ function computeRobotEchoWrapAnchor(
   return {
     baseX:
       STAGE_ORIGIN_X +
-      primaryOffset.x * OFFSET_SCALE +
+      stageOffset(primaryOffset.x, contentScale) +
       viewNudge.x +
       ROBOT_ECHO_SHIFT_X +
       extra.x,
-    baseY: stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y + extra.y,
+    baseY:
+      stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y + extra.y,
   };
 }
 const STAGE_BASE_WIDTH = 980;
@@ -257,11 +262,37 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const OFFSET_STEP = 0.5;
 const OFFSET_BUMP_COARSE = 1;
-/** Plist `spriteOffset` units map 1:1 to stage pixels (do not double-apply). */
+/** Plist `spriteOffset` units map 1:1 to stage pixels at UHD; lower tiers scale up in preview. */
 const OFFSET_SCALE = 1;
 /** Nearest-neighbor display scale for stage (icons + backdrop); multiplied by zoom on the stage transform. */
 const VIEW_PIXEL_SCALE = 2;
 const ICON_VISUAL_SCALE = 1;
+
+function stageOffset(value: number, contentScale: number): number {
+  return value * OFFSET_SCALE * contentScale;
+}
+
+/** Trim inset px from the atlas — scale with tier like sprite dimensions. */
+function stageTrimPx(value: number, contentScale: number): number {
+  return value * contentScale;
+}
+
+function layerDisplaySize(
+  displayCanvas: HTMLCanvasElement | null | undefined,
+  spriteSize: IconEditorSize | undefined,
+  contentScale: number,
+): { width: number; height: number } {
+  if (displayCanvas) {
+    return {
+      width: Math.max(1, displayCanvas.width * contentScale),
+      height: Math.max(1, displayCanvas.height * contentScale),
+    };
+  }
+  return {
+    width: Math.max(1, (spriteSize?.width ?? 1) * ICON_VISUAL_SCALE * contentScale),
+    height: Math.max(1, (spriteSize?.height ?? 1) * ICON_VISUAL_SCALE * contentScale),
+  };
+}
 /** Only this fraction of the floor strip is visible (anchored to bottom). */
 const FLOOR_VISIBLE_FRACTION = 0.25;
 
@@ -957,9 +988,11 @@ function multiplyTintSkipPureBlack(imageData: ImageData, tintRgb: Rgb): void {
 type LayerCanvasProps = {
   sourceCanvas: HTMLCanvasElement | null;
   tint: string | null;
+  /** Upscale low-res tier sheets for in-editor preview (HD 2×, low 4×). */
+  contentScale?: number;
 };
 
-function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
+function LayerCanvas({ sourceCanvas, tint, contentScale = 1 }: LayerCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -970,8 +1003,8 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
     if (!canvas) {
       return;
     }
-    const width = Math.max(1, sourceCanvas.width);
-    const height = Math.max(1, sourceCanvas.height);
+    const width = Math.max(1, Math.round(sourceCanvas.width * contentScale));
+    const height = Math.max(1, Math.round(sourceCanvas.height * contentScale));
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
@@ -999,7 +1032,7 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
         context.restore();
       }
     }
-  }, [sourceCanvas, tint]);
+  }, [sourceCanvas, tint, contentScale]);
 
   return <canvas ref={canvasRef} className="tm-icon-editor-layer-canvas" />;
 }
@@ -1446,6 +1479,11 @@ export function IconEditorToolPanel() {
     return out;
   }, [generatedGlowFrames, pendingTextureEdits, splitFrameCanvases]);
 
+  const contentScale = useMemo(
+    () => contentScaleForPlistPath(sheetInfo?.plistPath ?? ""),
+    [sheetInfo?.plistPath],
+  );
+
   /** Vertical anchor from floor + primary plist geometry (base offset only; ignores unsaved drag edits). */
   const stageOriginY = useMemo(() => {
     const floorTop = computeFloorTopY();
@@ -1466,11 +1504,9 @@ export function IconEditorToolPanel() {
           const trim = effectiveTrimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
           const effectiveOffset = mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
           const displayCanvas = displayFrameCanvases[frameName];
-          const displayHeight = displayCanvas
-            ? Math.max(1, displayCanvas.height)
-            : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
+          const displayHeight = layerDisplaySize(displayCanvas, frame.spriteSize, contentScale).height;
           // Origin needed for this layer's visual bottom to sit on the floor line.
-          return floorTop + effectiveOffset.y * OFFSET_SCALE - displayHeight / 2;
+          return floorTop + stageOffset(effectiveOffset.y, contentScale) - displayHeight / 2;
         })
         .filter((value): value is number => value !== null);
       if (snapCandidates.length === 0) {
@@ -1507,12 +1543,10 @@ export function IconEditorToolPanel() {
     }
     const footCanvas = displayFrameCanvases[anchorFrameName];
     const trimBottom = footCanvas ? 0 : (effectiveTrimByFrameName[anchorFrameName]?.bottom ?? 0);
-    const h = footCanvas
-      ? Math.max(1, footCanvas.height)
-      : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
+    const h = layerDisplaySize(footCanvas, frame.spriteSize, contentScale).height;
     const oy = frame.spriteOffset.y;
-    return floorTop + oy * OFFSET_SCALE - h / 2 + trimBottom;
-  }, [sheetInfo, roleMap.primary, frameMap, effectiveTrimByFrameName, displayFrameCanvases]);
+    return floorTop + stageOffset(oy, contentScale) - h / 2 + stageTrimPx(trimBottom, contentScale);
+  }, [sheetInfo, roleMap.primary, frameMap, effectiveTrimByFrameName, displayFrameCanvases, contentScale]);
 
   const buildEditSnapshot = useCallback(
     (
@@ -2355,18 +2389,9 @@ export function IconEditorToolPanel() {
     const fromPrimary = roleMap.primary ? parseIconFrameStem(roleMap.primary) : null;
     return fromPrimary ?? inferStemFromFrames(sheetInfo?.frames ?? Array.from(frameMap.values())) ?? "";
   }, [frameMap, roleMap.primary, sheetInfo?.frames]);
-  /** Bird/UFO capsule art sits ~30 game px higher; UHD sheets use 2× nudge. Applied as screen Y (smaller = up). */
+
+  /** Bird/UFO capsule art sits ~30px higher on HD/low sheets (UHD-tuned editor nudge; not tier-scaled). */
   const isBirdOrUfoIcon = /^(bird|ufo)_\d+$/i.test(iconStem);
-  const capsuleStageVerticalNudge = useMemo(() => {
-    if (!isBirdOrUfoIcon) {
-      return 0;
-    }
-    const plistName = sheetInfo?.plistPath.split(/[/\\]/).pop()?.toLowerCase() ?? "";
-    if (plistName.includes("-uhd")) {
-      return 0;
-    }
-    return -30;
-  }, [sheetInfo?.plistPath, isBirdOrUfoIcon]);
   const isRobotIcon =
     /^robot_\d+_0[1-4]$/i.test(iconStem) || (sheetInfo?.frames ?? []).some((frame) => Boolean(parseRobotPartFrame(frame.name)));
   const isSpiderIcon =
@@ -2378,7 +2403,7 @@ export function IconEditorToolPanel() {
     robotPartId: selectedRobotPartId,
     spiderPartId: selectedSpiderPartId,
   });
-  const activeGlowGen = resolveGlowGenSettings(glowGenByKey, activeGlowGenKey);
+  const activeGlowGen = resolveGlowGenSettings(glowGenByKey, activeGlowGenKey, contentScale);
 
   const glowGenJobs = useMemo((): GlowGenJob[] => {
     const sourceCanvasFor = (frameName: string): HTMLCanvasElement | null => {
@@ -2420,7 +2445,7 @@ export function IconEditorToolPanel() {
       glowName: string,
       fallbackGlowName: string,
     ): GlowGenJob => {
-      const settings = resolveGlowGenSettings(glowGenByKey, key);
+      const settings = resolveGlowGenSettings(glowGenByKey, key, contentScale);
       const resolvedGlowName = glowName || fallbackGlowName;
       const primaryCanvas = sourceCanvasFor(primaryName);
       const primaryOffset = offsetFor(primaryName);
@@ -2519,12 +2544,13 @@ export function IconEditorToolPanel() {
     sheetInfo?.frames,
     spiderPartRoleMap,
     splitFrameCanvases,
+    contentScale,
   ]);
   glowGenJobsRef.current = glowGenJobs;
 
   const updateGlowGenSettings = useCallback((key: string, patch: Partial<GlowGenSettings>) => {
     setGlowGenByKey((previous) => {
-      const current = resolveGlowGenSettings(previous, key);
+      const current = resolveGlowGenSettings(previous, key, contentScale);
       return {
         ...previous,
         [key]: {
@@ -2534,7 +2560,7 @@ export function IconEditorToolPanel() {
         },
       };
     });
-  }, []);
+  }, [contentScale]);
 
   const { isGenerating: isGeneratingGlow, error: generatedGlowError } = useIconEditorGeneratedGlow({
     jobs: glowGenJobs,
@@ -3102,8 +3128,9 @@ export function IconEditorToolPanel() {
     const viewScale = VIEW_PIXEL_SCALE * zoom;
     const dx = (event.clientX - dragState.startClientX) / viewScale;
     const dy = (event.clientY - dragState.startClientY) / viewScale;
-    const offsetX = quantizeOffset(dragState.startOffset.x + dx / OFFSET_SCALE);
-    const offsetY = quantizeOffset(dragState.startOffset.y - dy / OFFSET_SCALE);
+    const offsetScale = OFFSET_SCALE * contentScale;
+    const offsetX = quantizeOffset(dragState.startOffset.x + dx / offsetScale);
+    const offsetY = quantizeOffset(dragState.startOffset.y - dy / offsetScale);
     setOffsetEdits((previous) => ({
       ...previous,
       [frameName]: { x: offsetX, y: offsetY },
@@ -3239,7 +3266,7 @@ export function IconEditorToolPanel() {
             aria-hidden={!previewCanvas}
           >
             {previewCanvas ? (
-              <LayerCanvas sourceCanvas={previewCanvas} tint={previewTint} />
+              <LayerCanvas sourceCanvas={previewCanvas} tint={previewTint} contentScale={contentScale} />
             ) : (
               <span className="tm-icon-editor-role-preview-empty">{t("frames.none")}</span>
             )}
@@ -3387,6 +3414,30 @@ export function IconEditorToolPanel() {
     </div>
   );
 
+  const saveToolbarButton = (
+    <IconEditorToolbarTip
+      label={saveTooltip}
+      shortcut={canWriteSheet && !isBusy ? t("toolbar.saveShortcut") : undefined}
+    >
+      <button
+        type="button"
+        className={`tm-primary-btn tm-icon-editor-toolbar-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}${
+          mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
+        }`}
+        aria-label={
+          canWriteSheet && !isBusy
+            ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
+            : saveTooltip
+        }
+        onClick={() => saveOffsets().catch(() => {})}
+        disabled={!canWriteSheet || isBusy}
+      >
+        <Save size={toolbarIconSize} aria-hidden />
+        {mobileShell ? null : isBusy ? t("saveStatus.saving") : saveStatusLabel}
+      </button>
+    </IconEditorToolbarTip>
+  );
+
   return (
     <div
       className={`tm-icon-editor${mobileShell ? " tm-icon-editor--mobile" : ""}`}
@@ -3456,6 +3507,7 @@ export function IconEditorToolPanel() {
                       onChange={(event) => setRenameValue(event.target.value)}
                       placeholder="icons-hd"
                     />
+                    {!mobileShell ? saveToolbarButton : null}
                     <IconEditorToolbarTip label={t("toolbar.renameTooltip")}>
                       <button
                         type="button"
@@ -3534,30 +3586,12 @@ export function IconEditorToolPanel() {
                 </button>
               </IconEditorToolbarTip>
             </div>
-            <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-            <div className="tm-icon-editor-toolbar-group">
-              <IconEditorToolbarTip
-                label={saveTooltip}
-                shortcut={canWriteSheet && !isBusy ? t("toolbar.saveShortcut") : undefined}
-              >
-                <button
-                  type="button"
-                  className={`tm-primary-btn tm-icon-editor-toolbar-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}${
-                    mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
-                  }`}
-                  aria-label={
-                    canWriteSheet && !isBusy
-                      ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
-                      : saveTooltip
-                  }
-                  onClick={() => saveOffsets().catch(() => {})}
-                  disabled={!canWriteSheet || isBusy}
-                >
-                  <Save size={toolbarIconSize} aria-hidden />
-                  {mobileShell ? null : isBusy ? t("saveStatus.saving") : saveStatusLabel}
-                </button>
-              </IconEditorToolbarTip>
-            </div>
+            {mobileShell ? (
+              <>
+                <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+                <div className="tm-icon-editor-toolbar-group">{saveToolbarButton}</div>
+              </>
+            ) : null}
             {mobileShell ? (
               <div className="tm-icon-editor-toolbar-overflow" ref={overflowMenuRef}>
                 <IconEditorToolbarTip label={t("toolbar.moreTooltip")}>
@@ -3813,7 +3847,7 @@ export function IconEditorToolPanel() {
                   </button>
                 </div>
               ) : null}
-              {effectiveInspectorFrameName && !glowOffsetLocked ? (
+              {mobileShell && effectiveInspectorFrameName && !glowOffsetLocked ? (
                 <div
                   className="tm-icon-editor-offset-dpad"
                   role="group"
@@ -4028,17 +4062,16 @@ export function IconEditorToolPanel() {
                           }
                           const primaryOffset = primaryLayer.offset;
                           const viewNudge = ROBOT_PART_VIEW_OFFSET[partId];
-                          const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                          const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                          const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`robot-part-${partId}-glow-back`}
@@ -4070,6 +4103,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -4093,16 +4127,16 @@ export function IconEditorToolPanel() {
                             partId,
                             primaryOffset,
                             stageOriginY,
+                            contentScale,
                           );
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`robot-part-${partId}-echo-glow`}
@@ -4130,6 +4164,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -4153,6 +4188,7 @@ export function IconEditorToolPanel() {
                         partId,
                         primaryOffset,
                         stageOriginY,
+                        contentScale,
                       );
                       const echoZ = ROBOT_ECHO_Z[partId] ?? 120;
                       return (
@@ -4175,15 +4211,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`echo-${layer.role}-${layer.frameName}`}
@@ -4202,6 +4237,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -4222,8 +4258,8 @@ export function IconEditorToolPanel() {
                       }
                       const primaryOffset = primaryLayer.offset;
                       const viewNudge = ROBOT_PART_VIEW_OFFSET[partId];
-                      const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                      const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
+                      const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                      const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
                       const robotPartZBase = ROBOT_PART_Z_BASE[partId];
                       return (
                         <div
@@ -4244,15 +4280,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`${layer.role}-${layer.frameName}`}
@@ -4276,6 +4311,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -4303,17 +4339,16 @@ export function IconEditorToolPanel() {
                           }
                           const primaryOffset = primaryLayer.offset;
                           const viewNudge = SPIDER_PART_VIEW_OFFSET[partId];
-                          const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                          const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                          const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`spider-part-${partId}-glow-back`}
@@ -4345,6 +4380,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -4366,16 +4402,16 @@ export function IconEditorToolPanel() {
                             variant,
                             primaryOffset,
                             stageOriginY,
+                            contentScale,
                           );
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`spider-front-leg-echo-${variant}-glow`}
@@ -4403,6 +4439,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -4427,6 +4464,7 @@ export function IconEditorToolPanel() {
                         variant,
                         primaryOffset,
                         stageOriginY,
+                        contentScale,
                       );
                       const echoZ =
                         variant === "flipH"
@@ -4452,15 +4490,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`spider-echo-${variant}-${layer.role}-${layer.frameName}`}
@@ -4479,6 +4516,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -4499,8 +4537,8 @@ export function IconEditorToolPanel() {
                       }
                       const primaryOffset = primaryLayer.offset;
                       const viewNudge = SPIDER_PART_VIEW_OFFSET[partId];
-                      const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                      const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
+                      const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                      const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
                       const spiderPartZBase = SPIDER_PART_Z_BASE[partId];
                       return (
                         <div
@@ -4521,15 +4559,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`${layer.role}-${layer.frameName}`}
@@ -4553,6 +4590,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -4562,18 +4600,14 @@ export function IconEditorToolPanel() {
                     })}
                   </>
                 ) : layers.map((layer) => {
-                      const capsuleViewYOffset =
-                        layer.role === "capsule" ? capsuleStageVerticalNudge : 0;
-                      const anchorCenterX = STAGE_ORIGIN_X + layer.offset.x * OFFSET_SCALE;
-                      const anchorCenterY =
-                        stageOriginY - layer.offset.y * OFFSET_SCALE + capsuleViewYOffset;
+                      const anchorCenterX = STAGE_ORIGIN_X + stageOffset(layer.offset.x, contentScale);
+                      const anchorCenterY = stageOriginY - stageOffset(layer.offset.y, contentScale);
                       const displayCanvas = displayFrameCanvases[layer.frameName];
-                      const displayW = displayCanvas
-                        ? Math.max(1, displayCanvas.width)
-                        : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                      const displayH = displayCanvas
-                        ? Math.max(1, displayCanvas.height)
-                        : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                      const { width: displayW, height: displayH } = layerDisplaySize(
+                        displayCanvas,
+                        layer.frame.spriteSize,
+                        contentScale,
+                      );
                       return (
                         <div
                           key={`${layer.role}-${layer.frameName}`}
@@ -4596,6 +4630,7 @@ export function IconEditorToolPanel() {
                           <LayerCanvas
                             sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                             tint={layer.tint}
+                            contentScale={contentScale}
                           />
                         </div>
                       );
