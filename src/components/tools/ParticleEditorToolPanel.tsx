@@ -17,8 +17,7 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { save } from "@tauri-apps/plugin-dialog";
-import { pickUserFile } from "../../services/tauriPicker";
+import { pickUserFile, pickUserSaveFile, finalizeUserSave } from "../../services/tauriPicker";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { usePinchZoom } from "../../hooks/usePinchZoom";
 import { isMobileShell } from "../../utils/platform";
@@ -29,12 +28,10 @@ import {
   defaultParticleConfig,
   getParticlePreviewIconDataUrl,
   getParticleEffectSpriteDataUrl,
-  joinGameResourcePath,
   type ParticleConfig,
   type ParticlePreviewSprite,
   type TextureSource,
 } from "../../services/tauriParticleEditor";
-import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import {
   BLEND_PRESETS,
   DEFAULT_PARTICLE_CONFIG,
@@ -47,7 +44,6 @@ import {
   EFFECT_GROUP_ORDER,
   previewModeAnimatesIcon,
   effectUsesCustomizablePreviewIcon,
-  type EffectGroup,
   type GDParticleEffect,
   type PreviewMode,
 } from "../../domain/gdParticleEffects";
@@ -60,7 +56,6 @@ import {
   type ParticleEditorHistoryState,
   type ParticleEditorSnapshot,
 } from "../../services/particleEditorHistory";
-import { AppSelect, type AppSelectOption } from "../AppSelect";
 import { AppTooltip } from "../AppTooltip";
 import { MobileSheet } from "../mobile/MobileSheet";
 import {
@@ -676,25 +671,6 @@ export function ParticleEditorToolPanel() {
     [t],
   );
 
-  const effectOptions = useMemo<AppSelectOption[]>(() => {
-    const options: AppSelectOption[] = [
-      { value: "", label: t("particleEditor.toolbar.effectCustom") },
-    ];
-    for (const group of EFFECT_GROUP_ORDER) {
-      const groupLabel = t(`particleEditor.effectGroups.${group satisfies EffectGroup}`);
-      for (const effect of getEffectsByGroup(group)) {
-        options.push({
-          value: effect.id,
-          label: t(`particleEditor.effects.${effect.id}`, {
-            defaultValue: effect.label,
-          }),
-          group: groupLabel,
-        });
-      }
-    }
-    return options;
-  }, [t]);
-
   const buildSnapshot = useCallback(
     (overrides?: Partial<ParticleEditorSnapshot>): ParticleEditorSnapshot => {
       const base: ParticleEditorSnapshot = {
@@ -940,16 +916,17 @@ export function ParticleEditorToolPanel() {
       }
       setError(null);
       let targetPath = filePath;
+      let needsCommit = false;
       if (!targetPath || saveAs) {
-        const selected = await save({
+        const picked = await pickUserSaveFile({
           title: t("particleEditor.dialogs.saveTitle"),
-          filters: [
-            { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
-          ],
-          defaultPath: filePath ?? undefined,
+          extensions: ["plist"],
+          filterName: t("particleEditor.dialogs.plistFilter"),
+          defaultName: filePath ?? undefined,
         });
-        if (!selected) return;
-        targetPath = selected;
+        if (!picked) return;
+        targetPath = picked.path;
+        needsCommit = picked.needsCommit;
       }
       setBusy(true);
       try {
@@ -964,6 +941,9 @@ export function ParticleEditorToolPanel() {
           writeSiblingPng: hasTexture && hasFileName,
           embedTexture: hasTexture && (textureSource === "embedded" || !hasFileName),
         });
+        if (needsCommit) {
+          await finalizeUserSave(targetPath);
+        }
         setFilePath(targetPath);
         commitHistory({
           config,
@@ -1010,65 +990,6 @@ export function ParticleEditorToolPanel() {
       usePlistSourcePosition,
     });
   }, [commitHistory, usePlistSourcePosition]);
-
-  const handleEffectChange = useCallback(
-    async (effectId: string) => {
-      if (!effectId) {
-        setEffectMeta(null);
-        commitHistory(buildSnapshot({ effectId: null }));
-        return;
-      }
-      const found = EFFECT_GROUP_ORDER.flatMap((g) => getEffectsByGroup(g)).find(
-        (ef) => ef.id === effectId,
-      );
-      if (!found) return;
-      setEffectMeta(found);
-      refreshPreviewIcon(found.defaultIcon === "ship" ? "ship" : null);
-
-      if (!isTauriRuntime()) {
-        commitHistory(buildSnapshot({ effectId: found.id }));
-        return;
-      }
-
-      setBusy(true);
-      setError(null);
-      try {
-        const layout = await getGameFilesLayout();
-        if (!layout.resourcesDir?.trim()) {
-          setError(t("particleEditor.errors.resourcesMissing"));
-          commitHistory(buildSnapshot({ effectId: found.id }));
-          return;
-        }
-        const stockPath = joinGameResourcePath(layout.resourcesDir, `${found.id}.plist`);
-        const result = await openParticleEditor(stockPath);
-        // Copy settings only — do not mark the stock Resources file as opened.
-        setConfig(result.config);
-        setTextureSrc(result.texturePngDataUrl);
-        setTextureSource(result.textureSource);
-        setFilePath(null);
-        setResetKey((k) => k + 1);
-        commitHistory({
-          config: result.config,
-          textureSrc: result.texturePngDataUrl,
-          textureSource: result.textureSource,
-          filePath: null,
-          effectId: found.id,
-          usePlistSourcePosition,
-        });
-        if (result.warnings.length > 0) setError(result.warnings.join(" · "));
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : t("particleEditor.errors.stockEffectFailed", { effect: found.id }),
-        );
-        commitHistory(buildSnapshot({ effectId: found.id }));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [buildSnapshot, commitHistory, refreshPreviewIcon, t, usePlistSourcePosition],
-  );
 
   const handleReplaceTexture = useCallback(async () => {
     if (!isTauriRuntime()) {
@@ -1198,24 +1119,6 @@ export function ParticleEditorToolPanel() {
               <Redo2 size={14} aria-hidden />
             </button>
           </ParticleToolbarTip>
-          <span className="tm-icon-editor-toolbar-divider" aria-hidden />
-          <div className="tm-pe-effect-pick">
-            <span className="tm-pe-effect-pick-label">
-              {t("particleEditor.toolbar.effect")}
-            </span>
-            <AppSelect
-              className="tm-pe-effect-select"
-              menuClassName="tm-pe-effect-menu"
-              aria-label={t("particleEditor.toolbar.effectTooltip")}
-              value={effectMeta?.id ?? ""}
-              options={effectOptions}
-              disabled={busy}
-              portal
-              onChange={(value) => {
-                void handleEffectChange(value);
-              }}
-            />
-          </div>
         </div>
 
         <div className="tm-pe-toolbar-meta">

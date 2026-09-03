@@ -23,6 +23,27 @@ export type GlowGenSourceLayer = {
   offset: { x: number; y: number };
 };
 
+/** Named icon layer used to build glow source pixels and regeneration tokens. */
+export type GlowGenNamedLayer = {
+  name: string;
+  canvas: HTMLCanvasElement | null;
+  offset: { x: number; y: number };
+};
+
+export type GlowGenSourceSpec = {
+  compositeLayers: boolean;
+  primary: GlowGenNamedLayer;
+  secondary: GlowGenNamedLayer;
+  extra: GlowGenNamedLayer;
+};
+
+export type GlowCompositeLayout = {
+  canvas: HTMLCanvasElement;
+  /** Primary sprite center in the composite image (canvas Y-down). */
+  primaryCenterX: number;
+  primaryCenterY: number;
+};
+
 export type GlowGenJob = {
   key: string;
   enabled: boolean;
@@ -133,16 +154,131 @@ export function glowGenJobsSignature(jobs: readonly GlowGenJob[]): string {
     .join("|");
 }
 
+/** Signature of enabled Generate Glow settings, used to know when live glow is unsaved. */
+export function glowGenSettingsSignature(
+  settingsByKey: Record<string, GlowGenSettings>,
+): string {
+  return Object.entries(settingsByKey)
+    .filter(([, settings]) => settings.enabled)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(
+      ([key, settings]) =>
+        `${key}:${settings.thickness}:${settings.compositeLayers ? "composite" : "primary"}`,
+    )
+    .join("|");
+}
+
+const glowSourceCanvasIds = new WeakMap<HTMLCanvasElement, number>();
+let nextGlowSourceCanvasId = 1;
+
+/** Stable identity for a source canvas so pixel replacements retrigger glow without hashing. */
+export function glowSourceCanvasIdentity(canvas: HTMLCanvasElement | null): string {
+  if (!canvas) {
+    return "none";
+  }
+  let id = glowSourceCanvasIds.get(canvas);
+  if (id === undefined) {
+    id = nextGlowSourceCanvasId;
+    nextGlowSourceCanvasId += 1;
+    glowSourceCanvasIds.set(canvas, id);
+  }
+  return `${id}:${canvas.width}x${canvas.height}`;
+}
+
+export function glowGenNamedLayerToken(layer: GlowGenNamedLayer): string {
+  return `${layer.name}:${glowSourceCanvasIdentity(layer.canvas)}@${layer.offset.x},${layer.offset.y}`;
+}
+
+const stripGlowFrameExt = (name: string): string => name.replace(/\.png$/i, "").trim();
+
+/** Capsule (`_3_001`) and existing glow sprites must never feed Generate Glow. */
+export function isExcludedFromGlowComposite(frameName: string): boolean {
+  if (!frameName.trim()) {
+    return false;
+  }
+  const base = stripGlowFrameExt(frameName);
+  if (/_glow_001$/i.test(base)) {
+    return true;
+  }
+  return /^.+_\d+_3_001$/i.test(base);
+}
+
+export function glowGenBodyLayer(
+  name: string,
+  canvas: HTMLCanvasElement | null,
+  offset: { x: number; y: number },
+): GlowGenNamedLayer {
+  if (!name.trim() || isExcludedFromGlowComposite(name)) {
+    return { name, canvas: null, offset: { x: 0, y: 0 } };
+  }
+  return { name, canvas, offset };
+}
+
+/**
+ * Regeneration key for Generate Glow.
+ * Composite: primary + secondary + extra (pixels or offset). Primary-only: the primary sprite.
+ * Cosmetic tint colors are not part of this token. Capsule and glow frames are ignored.
+ */
+export function glowGenSourceToken(spec: GlowGenSourceSpec): string {
+  if (!spec.compositeLayers) {
+    return `primary|${glowGenNamedLayerToken(spec.primary)}`;
+  }
+  return [
+    "composite",
+    glowGenNamedLayerToken(spec.secondary),
+    glowGenNamedLayerToken(spec.primary),
+    glowGenNamedLayerToken(spec.extra),
+  ].join("|");
+}
+
+/** Layers fed into glow: primary alone, or secondary + primary + extra. */
+export function glowGenSourceLayers(spec: GlowGenSourceSpec): GlowGenSourceLayer[] {
+  if (!spec.compositeLayers) {
+    return spec.primary.canvas
+      ? [{ canvas: spec.primary.canvas, offset: spec.primary.offset }]
+      : [];
+  }
+  if (!spec.primary.canvas) {
+    return [];
+  }
+  return [spec.secondary, spec.primary, spec.extra].flatMap((layer) =>
+    layer.canvas ? [{ canvas: layer.canvas, offset: layer.offset }] : [],
+  );
+}
+
+/**
+ * Sprite offset that keeps the composite glow centered on the same node as the primary.
+ * The stage places sprites by image center + spriteOffset; a composite larger than the
+ * primary is not centered on the primary, so the glow must be shifted by that delta.
+ */
+export function glowOffsetForCompositeSource(
+  primaryOffset: { x: number; y: number },
+  compositeWidth: number,
+  compositeHeight: number,
+  primaryCenterX: number,
+  primaryCenterY: number,
+): { x: number; y: number } {
+  return {
+    x: primaryOffset.x - primaryCenterX + compositeWidth / 2,
+    y: primaryOffset.y + primaryCenterY - compositeHeight / 2,
+  };
+}
+
 /** Align secondary/primary/extra the same way Glow Maker composites before glow. */
 export function compositeGlowSourceLayers(
   layers: readonly GlowGenSourceLayer[],
   primaryOffset: { x: number; y: number },
-): HTMLCanvasElement | null {
+): GlowCompositeLayout | null {
   if (layers.length === 0) {
     return null;
   }
   if (layers.length === 1) {
-    return layers[0].canvas;
+    const canvas = layers[0].canvas;
+    return {
+      canvas,
+      primaryCenterX: canvas.width / 2,
+      primaryCenterY: canvas.height / 2,
+    };
   }
 
   const positioned = layers.map((layer) => {
@@ -171,11 +307,20 @@ export function compositeGlowSourceLayers(
   canvas.height = height;
   const context = canvas.getContext("2d");
   if (!context) {
-    return layers[0].canvas;
+    const fallback = layers[0].canvas;
+    return {
+      canvas: fallback,
+      primaryCenterX: fallback.width / 2,
+      primaryCenterY: fallback.height / 2,
+    };
   }
   context.imageSmoothingEnabled = false;
   for (const layer of positioned) {
     context.drawImage(layer.canvas, Math.round(layer.left - minLeft), Math.round(layer.top - minTop));
   }
-  return canvas;
+  return {
+    canvas,
+    primaryCenterX: -minLeft,
+    primaryCenterY: -minTop,
+  };
 }

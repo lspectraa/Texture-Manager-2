@@ -24,3 +24,10 @@ export const exportDirectoryAsZip = async (
   }
   await invoke<void>("export_directory_as_zip", { sourceDir, zipPath });
 };
+
+export const commitUserSave = async (sourcePath: string): Promise<void> => {
+  if (!isTauriRuntime()) {
+    return;
+  }
+  await invoke<void>("android_commit_save", { sourcePath });
+};

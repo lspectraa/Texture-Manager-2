@@ -301,6 +301,23 @@ fn android_pick_file(
 }
 
 #[tauri::command]
+fn android_save_file(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    default_name: Option<String>,
+    extensions: Option<Vec<String>>,
+) -> Result<crate::android_storage::AndroidSavePick, String> {
+    access.save_file(default_name, extensions)
+}
+
+#[tauri::command]
+fn android_commit_save(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    source_path: String,
+) -> Result<(), String> {
+    access.commit_save(source_path)
+}
+
+#[tauri::command]
 async fn android_check_app_update(app: AppHandle) -> Result<serde_json::Value, String> {
     crate::android_apk_update::check_app_update(app).await
 }
@@ -1033,6 +1050,8 @@ pub fn run() {
             android_probe_geode_paths,
             android_pick_folder,
             android_pick_file,
+            android_save_file,
+            android_commit_save,
             android_check_app_update,
             android_download_app_update,
             android_install_app_update,

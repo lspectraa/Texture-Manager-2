@@ -14,6 +14,7 @@ import {
   FileArchive,
   FolderOpen,
   FolderPlus,
+  Layers,
   Library,
   LoaderCircle,
   MoreHorizontal,
@@ -83,6 +84,7 @@ import {
 import {
   FolderPathField,
   ToolActionBar,
+  ToolGlassActionButton,
   ToolCheckboxField,
   ToolNumberField,
   ToolPage,
@@ -1936,19 +1938,28 @@ export function TexturePackInstallerToolPanel({
       ? Math.min(1, Math.max(0, overlayProgressCompleted / overlayProgressTotal))
       : 0;
 
+  const mobileRailPanelLabel =
+    bridge.mode === "library"
+      ? bridge.libraryRailTab === "applied"
+        ? t("packInstaller.appliedPanelTitle")
+        : t("packInstaller.libraryPanelButtonLabel")
+      : t("packInstaller.metadataPanelTitle");
+  const MobileRailPanelIcon =
+    bridge.mode === "library" && bridge.libraryRailTab === "applied" ? Layers : Package;
+
   const mobileMetadataRailButton =
     mobileShell && onOpenMobileSideRail ? (
-      <button
-        type="button"
+      <ToolGlassActionButton
+        variant="output"
         className="tm-tool-rail-btn tm-tool-rail-btn--output"
         onClick={onOpenMobileSideRail}
         aria-label={t("navigation:mobile.showDrawerAria", {
-          panel: t("packInstaller.metadataPanelTitle"),
+          panel: mobileRailPanelLabel,
         })}
       >
-        <Package size={16} strokeWidth={1.85} />
-        {t("packInstaller.metadataPanelTitle")}
-      </button>
+        <MobileRailPanelIcon size={16} strokeWidth={1.85} />
+        {mobileRailPanelLabel}
+      </ToolGlassActionButton>
     ) : null;
 
   return (
@@ -2239,8 +2250,8 @@ export function TexturePackInstallerToolPanel({
           </ToolSection>
 
           <ToolActionBar>
-            <button
-              type="button"
+            <ToolGlassActionButton
+              variant="run"
               className="tm-tool-run-btn"
               onClick={() => void runInstall()}
               disabled={
@@ -2256,7 +2267,7 @@ export function TexturePackInstallerToolPanel({
                 <Check size={16} />
               )}
               {busy === "install" ? t("packInstaller.installing") : t("packInstaller.install")}
-            </button>
+            </ToolGlassActionButton>
             {mobileMetadataRailButton}
           </ToolActionBar>
         </>
@@ -2335,8 +2346,8 @@ export function TexturePackInstallerToolPanel({
           </ToolSection>
 
           <ToolActionBar>
-            <button
-              type="button"
+            <ToolGlassActionButton
+              variant="run"
               className="tm-tool-run-btn"
               onClick={() => void runCreate()}
               disabled={
@@ -2351,7 +2362,7 @@ export function TexturePackInstallerToolPanel({
                 <FolderPlus size={16} />
               )}
               {busy === "create" ? t("packInstaller.creating") : t("packInstaller.createPack")}
-            </button>
+            </ToolGlassActionButton>
             {mobileMetadataRailButton}
             {createdPackDir && !mobileShell ? (
               <button

@@ -30,6 +30,7 @@ import {
 } from "./layout";
 import { MobileEdgeTab } from "../mobile/MobileEdgeTab";
 import { MobileSheet } from "../mobile/MobileSheet";
+import { useRangeDoubleReset } from "../../hooks/useRangeDoubleReset";
 
 type GeodeButtonsToolPanelProps = {
   inputDir: string;
@@ -920,6 +921,13 @@ export function GeodeButtonsToolPanel({
     [onOptionsChange, options, selectedAdjustVariant, selectedFamilyId, selectedHsv],
   );
 
+  const resetHue = useCallback(() => setHsvField({ hueDeg: 0 }), [setHsvField]);
+  const resetSat = useCallback(() => setHsvField({ satDelta: 0 }), [setHsvField]);
+  const resetVal = useCallback(() => setHsvField({ valDelta: 0 }), [setHsvField]);
+  const hueDoubleReset = useRangeDoubleReset(resetHue);
+  const satDoubleReset = useRangeDoubleReset(resetSat);
+  const valDoubleReset = useRangeDoubleReset(resetVal);
+
   const currentTemplatePath = useMemo(() => {
     if (!selectedFamilyId) return "";
     return options.templates.familyTemplates[selectedFamilyId] ?? "";
@@ -990,7 +998,7 @@ export function GeodeButtonsToolPanel({
               onInput={(e) =>
                 setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
               }
-              onDoubleClick={() => setHsvField({ hueDeg: 0 })}
+              {...hueDoubleReset}
             />
           </label>
           <div className="tm-geode-hsv-input">
@@ -1019,7 +1027,7 @@ export function GeodeButtonsToolPanel({
               onInput={(e) =>
                 setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
               }
-              onDoubleClick={() => setHsvField({ satDelta: 0 })}
+              {...satDoubleReset}
             />
           </label>
           <div className="tm-geode-hsv-input">
@@ -1048,7 +1056,7 @@ export function GeodeButtonsToolPanel({
               onInput={(e) =>
                 setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })
               }
-              onDoubleClick={() => setHsvField({ valDelta: 0 })}
+              {...valDoubleReset}
             />
           </label>
           <div className="tm-geode-hsv-input">

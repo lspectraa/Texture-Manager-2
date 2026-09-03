@@ -101,6 +101,12 @@ pub struct IconEditorExtractedFrame {
 }
 
 pub fn icon_editor_sheet_info(plist_path: &Path) -> Result<IconEditorSheetInfo, AppError> {
+    ensure_existing_user_file(plist_path).map_err(|err| {
+        AppError::IoError(format!(
+            "Cannot read plist `{}`: {err}",
+            crate::core::safe_fs::shorten_path_for_display(plist_path)
+        ))
+    })?;
     let plist_root = load_icon_editor_plist(plist_path)?;
     let root_dict = plist_root
         .as_dictionary()
@@ -112,8 +118,12 @@ pub fn icon_editor_sheet_info(plist_path: &Path) -> Result<IconEditorSheetInfo, 
         ));
     }
     let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
-    let atlas_image = image::open(&atlas_path)
-        .map_err(|err| AppError::ParseError(format!("failed to open atlas png: {err}")))?;
+    let atlas_image = image::open(&atlas_path).map_err(|err| {
+        AppError::IoError(format!(
+            "Found atlas `{}` but could not open it as an image: {err}",
+            crate::core::safe_fs::shorten_path_for_display(&atlas_path)
+        ))
+    })?;
     let atlas_size = IconEditorSize {
         width: atlas_image.width(),
         height: atlas_image.height(),
@@ -686,11 +696,7 @@ pub(crate) fn icon_editor_load_sheet_sprites_from_atlas(
 ) -> Result<(Value, BTreeMap<String, RgbaImage>), AppError> {
     strip_incompatible_icon_editor_frames(&mut plist_root)?;
     ensure_existing_user_file(plist_path)?;
-    if !atlas_path.is_file() {
-        return Err(AppError::InvalidPath(
-            "icon sheet PNG not found next to the selected plist (same folder / same stem)",
-        ));
-    }
+    ensure_readable_image_file(atlas_path)?;
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
@@ -1347,10 +1353,18 @@ fn empty_icon_editor_plist(atlas_file_name: &str) -> Value {
 }
 
 fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathBuf, AppError> {
-    crate::core::plist_assets::resolve_image_beside_plist(plist_path, Some(root_dict))
-        .ok_or(AppError::InvalidPath(
-            "icon sheet PNG not found next to the selected plist (same folder / metadata name / same stem)",
-        ))
+    if let Some(path) =
+        crate::core::plist_assets::resolve_image_beside_plist(plist_path, Some(root_dict))
+    {
+        return Ok(path);
+    }
+    let diagnostic =
+        crate::core::plist_assets::diagnose_missing_atlas_image(plist_path, Some(root_dict));
+    #[cfg(debug_assertions)]
+    eprintln!("[icon_editor] atlas resolve failed:\n{diagnostic}");
+    Err(AppError::IoError(format!(
+        "Icon sheet PNG not found beside the plist.\n\n{diagnostic}"
+    )))
 }
 
 fn write_plist_atomically(path: &Path, value: &Value) -> Result<(), AppError> {

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { save } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles,
@@ -64,7 +63,7 @@ import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
 import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { AboutToolPanel } from "./components/tools/AboutToolPanel";
-import { ToolActionBar } from "./components/tools/layout";
+import { ToolActionBar, ToolGlassActionButton } from "./components/tools/layout";
 import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
@@ -122,7 +121,7 @@ import { consumeSuppressNextMobilePopState } from "./utils/mobileHistory";
 import {
   exportDirectoryAsZip,
 } from "./services/tauriMobileFs";
-import { pickUserFolder } from "./services/tauriPicker";
+import { pickUserFolder, pickUserSaveFile, finalizeUserSave } from "./services/tauriPicker";
 import { changeAppLanguage } from "./i18n";
 import { resolveInitialAppLanguage } from "./i18n/languages";
 import type { PickFolderOptions } from "./components/tools/types";
@@ -1060,15 +1059,19 @@ function App() {
     if (!report?.outputDir.trim() || !isTauriRuntime()) {
       return;
     }
-    const dest = await save({
-      defaultPath: `${report.operation || "output"}.zip`,
-      filters: [{ name: "Zip", extensions: ["zip"] }],
+    const picked = await pickUserSaveFile({
+      defaultName: `${report.operation || "output"}.zip`,
+      extensions: ["zip"],
+      filterName: "Zip",
     });
-    if (typeof dest !== "string" || !dest.trim()) {
+    if (!picked) {
       return;
     }
     try {
-      await exportDirectoryAsZip(report.outputDir, dest);
+      await exportDirectoryAsZip(report.outputDir, picked.path);
+      if (picked.needsCommit) {
+        await finalizeUserSave(picked.path);
+      }
     } catch (error) {
       setRunError(
         error instanceof Error ? error.message : t("reports:exportZipFailed"),
@@ -1800,24 +1803,24 @@ function App() {
 
             {showRunAction ? (
               <ToolActionBar>
-                <button
-                  type="button"
+                <ToolGlassActionButton
+                  variant="run"
                   className="tm-tool-run-btn"
                   onClick={executeSelectedOperation}
                   disabled={isRunning}
                 >
                   <Sparkles size={16} />
                   {isRunning ? t("tools:common.running") : t("tools:common.runOperation")}
-                </button>
+                </ToolGlassActionButton>
                 {mobileShell && showOperationAndReport ? (
-                  <button
-                    type="button"
+                  <ToolGlassActionButton
+                    variant="output"
                     className="tm-tool-rail-btn tm-tool-rail-btn--output"
                     onClick={openMobileSideRail}
                   >
                     <Activity size={16} strokeWidth={1.85} />
                     {t("reports:panelTitle")}
-                  </button>
+                  </ToolGlassActionButton>
                 ) : null}
               </ToolActionBar>
             ) : null}
@@ -1857,7 +1860,7 @@ function App() {
                       ? packInstallerBridge.mode === "library" &&
                         packInstallerBridge.libraryRailTab === "applied"
                         ? t("tools:packInstaller.appliedPanelTitle")
-                        : t("tools:packInstaller.metadataPanelTitle")
+                        : t("tools:packInstaller.libraryPanelButtonLabel")
                       : t("reports:panelTitle")}
                   </span>
                 </span>
@@ -1921,7 +1924,7 @@ function App() {
                       ? packInstallerBridge.mode === "library" &&
                         packInstallerBridge.libraryRailTab === "applied"
                         ? t("tools:packInstaller.appliedPanelTitle")
-                        : t("tools:packInstaller.metadataPanelTitle")
+                        : t("tools:packInstaller.libraryPanelButtonLabel")
                       : t("reports:panelTitle")}
                   </span>
                 </span>

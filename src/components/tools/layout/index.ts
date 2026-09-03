@@ -1,5 +1,6 @@
 export { FolderPathField } from "./FolderPathField";
 export { ToolActionBar } from "./ToolActionBar";
+export { ToolGlassActionButton } from "./ToolGlassActionButton";
 export { ToolCheckboxField } from "./ToolCheckboxField";
 export { ToolField } from "./ToolField";
 export { ToolFilePathField } from "./ToolFilePathField";

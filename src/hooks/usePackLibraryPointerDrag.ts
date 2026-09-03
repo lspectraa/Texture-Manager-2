@@ -6,6 +6,7 @@ import {
   type HTMLAttributes,
   type ReactNode,
 } from "react";
+import { GripVertical } from "lucide-react";
 import type { InstalledPack } from "../domain/packInstaller";
 import {
   beginPackLibraryDrag,
@@ -55,15 +56,37 @@ export function usePackLibraryDragSource({
       }
 
       const target = event.target as HTMLElement | null;
-      if (target?.closest("button, a, input, textarea, select, label")) {
+      const interactive = target?.closest("button, a, input, textarea, select, label");
+      // Allow drag when the interactive element is the handle itself (dedicated drag buttons).
+      if (interactive && interactive !== event.currentTarget) {
         return;
       }
 
+      event.preventDefault();
+
+      const captureEl = event.currentTarget;
+      const pointerId = event.pointerId;
       const startX = event.clientX;
       const startY = event.clientY;
       let dragging = false;
 
+      const cleanup = (): void => {
+        captureEl.removeEventListener("pointermove", onPointerMove);
+        captureEl.removeEventListener("pointerup", onPointerUp);
+        captureEl.removeEventListener("pointercancel", onPointerCancel);
+        document.body.classList.remove("tm-pack-library-dragging");
+        clearPackDropHighlight();
+        try {
+          captureEl.releasePointerCapture(pointerId);
+        } catch {
+          // Pointer may already be released.
+        }
+      };
+
       const onPointerMove = (moveEvent: PointerEvent): void => {
+        if (moveEvent.pointerId !== pointerId) {
+          return;
+        }
         if (!dragging) {
           const dx = moveEvent.clientX - startX;
           const dy = moveEvent.clientY - startY;
@@ -71,6 +94,11 @@ export function usePackLibraryDragSource({
             return;
           }
           dragging = true;
+          try {
+            captureEl.setPointerCapture(pointerId);
+          } catch {
+            // setPointerCapture may fail in some environments.
+          }
           beginPackLibraryDrag(packRef.current);
           document.body.classList.add("tm-pack-library-dragging");
         }
@@ -78,10 +106,10 @@ export function usePackLibraryDragSource({
       };
 
       const onPointerUp = (upEvent: PointerEvent): void => {
-        window.removeEventListener("pointermove", onPointerMove);
-        window.removeEventListener("pointerup", onPointerUp);
-        document.body.classList.remove("tm-pack-library-dragging");
-        clearPackDropHighlight();
+        if (upEvent.pointerId !== pointerId) {
+          return;
+        }
+        cleanup();
 
         if (dragging) {
           const dropTarget = document
@@ -103,8 +131,19 @@ export function usePackLibraryDragSource({
         onTap?.();
       };
 
-      window.addEventListener("pointermove", onPointerMove);
-      window.addEventListener("pointerup", onPointerUp);
+      const onPointerCancel = (upEvent: PointerEvent): void => {
+        if (upEvent.pointerId !== pointerId) {
+          return;
+        }
+        cleanup();
+        if (dragging) {
+          endPackLibraryDrag();
+        }
+      };
+
+      captureEl.addEventListener("pointermove", onPointerMove);
+      captureEl.addEventListener("pointerup", onPointerUp);
+      captureEl.addEventListener("pointercancel", onPointerCancel);
     },
     [disabled, onTap],
   );
@@ -155,4 +194,38 @@ export function PackLibraryDragSurface({
 }: PackLibraryDragSurfaceProps): React.ReactElement {
   const { onPointerDown } = usePackLibraryDragSource({ pack, disabled, onTap });
   return createElement(Component, { className, onPointerDown, ...rest }, children);
+}
+
+type PackLibraryDragHandleProps = {
+  pack: InstalledPack;
+  disabled?: boolean;
+  className?: string;
+  ariaLabel: string;
+  iconSize?: number;
+};
+
+/** Dedicated touch-friendly drag handle — does not steal taps from sibling controls. */
+export function PackLibraryDragHandle({
+  pack,
+  disabled = false,
+  className,
+  ariaLabel,
+  iconSize = 14,
+}: PackLibraryDragHandleProps): React.ReactElement {
+  const { onPointerDown } = usePackLibraryDragSource({ pack, disabled });
+  return createElement(
+    "button",
+    {
+      type: "button",
+      className,
+      "aria-label": ariaLabel,
+      disabled,
+      onPointerDown,
+    },
+    createElement(GripVertical, {
+      size: iconSize,
+      strokeWidth: 2,
+      "aria-hidden": true,
+    }),
+  );
 }

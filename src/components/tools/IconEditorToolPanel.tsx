@@ -10,11 +10,11 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { save } from "@tauri-apps/plugin-dialog";
-import { pickUserFile } from "../../services/tauriPicker";
+import { pickUserFile, pickUserSaveFile, finalizeUserSave } from "../../services/tauriPicker";
 import html2canvas from "html2canvas";
 import { useTranslation } from "react-i18next";
 import { AppTooltip } from "../AppTooltip";
+import { GlassFrost } from "../GlassFrost";
 import {
   FolderOpen,
   Save,
@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { getAppI18n } from "../../i18n";
+import { invokeErrorMessage, summarizeBackendErrorMessage, normalizeBackendErrorMessage } from "../../utils/invokeErrorMessage";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { usePinchZoom } from "../../hooks/usePinchZoom";
 import { isMobileShell } from "../../utils/platform";
@@ -84,12 +85,18 @@ import {
 import { useIconEditorGeneratedGlow } from "../../hooks/useIconEditorGeneratedGlow";
 import {
   compositeGlowSourceLayers,
+  glowGenBodyLayer,
   glowGenKeyForComponent,
+  glowGenSettingsSignature,
+  glowGenSourceLayers,
+  glowGenSourceToken,
   glowMakerOwnedOffset,
+  glowOffsetForCompositeSource,
   isGlowMakerOwnedFrame,
   resolveGlowGenSettings,
   type GeneratedGlowFrame,
   type GlowGenJob,
+  type GlowGenNamedLayer,
   type GlowGenSettings,
 } from "../../utils/iconEditorGeneratedGlow";
 import { IconEditorGeneratedGlowControls } from "./IconEditorGeneratedGlowControls";
@@ -394,7 +401,8 @@ type IconEditorErrorInfo = { message: string; detail: string };
 
 function toIconEditorErrorInfo(error: unknown, fallback: string): IconEditorErrorInfo {
   if (error instanceof Error) {
-    const detailParts = [error.message];
+    const normalized = normalizeBackendErrorMessage(error.message || fallback);
+    const detailParts = [normalized];
     if (error.stack && error.stack.trim() !== "") {
       detailParts.push(error.stack);
     }
@@ -409,12 +417,16 @@ function toIconEditorErrorInfo(error: unknown, fallback: string): IconEditorErro
       detailParts.push(`Cause: ${causeText}`);
     }
     return {
-      message: error.message || fallback,
+      message: summarizeBackendErrorMessage(normalized) || fallback,
       detail: detailParts.join("\n\n"),
     };
   }
   if (typeof error === "string" && error.trim() !== "") {
-    return { message: error, detail: error };
+    const normalized = normalizeBackendErrorMessage(error);
+    return {
+      message: summarizeBackendErrorMessage(normalized),
+      detail: normalized,
+    };
   }
   if (error && typeof error === "object") {
     try {
@@ -1215,6 +1227,7 @@ export function IconEditorToolPanel() {
   >({});
   const [generatedGlowFrames, setGeneratedGlowFrames] = useState<GeneratedGlowFrame[]>([]);
   const [glowGenByKey, setGlowGenByKey] = useState<Record<string, GlowGenSettings>>({});
+  const [committedGlowSignature, setCommittedGlowSignature] = useState("");
   const pendingTextureEditsRef = useRef(pendingTextureEdits);
   pendingTextureEditsRef.current = pendingTextureEdits;
   const [trimByFrameName, setTrimByFrameName] = useState<Record<string, TrimInsets>>({});
@@ -1278,7 +1291,12 @@ export function IconEditorToolPanel() {
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
+  const resetZoomAndAlignment = useCallback(() => {
+    setZoom(autoResolutionZoom);
+    setViewportFocusGeneration((generation) => generation + 1);
+  }, [autoResolutionZoom]);
   const glowGenJobsRef = useRef<GlowGenJob[]>([]);
+  const isGeneratingGlowRef = useRef(false);
   const lastObservedScrollportHeightRef = useRef(0);
   const stageScrollPortRef = useRef<HTMLDivElement | null>(null);
   const focusStageAnchorRafRef = useRef<number | null>(null);
@@ -1840,7 +1858,9 @@ export function IconEditorToolPanel() {
 
   const offsetDirty = Object.keys(offsetEdits).length > 0;
   const textureDirty = Object.keys(pendingTextureEdits).length > 0;
-  const generatedGlowDirty = generatedGlowFrames.length > 0;
+  const glowSettingsSignature = glowGenSettingsSignature(glowGenByKey);
+  const generatedGlowDirty =
+    glowSettingsSignature.length > 0 && glowSettingsSignature !== committedGlowSignature;
   const extraMappingDirty =
     sheetInfo !== null && roleMap.extra.trim() !== extraMappingBaseline.trim();
   const dirty = offsetDirty || extraMappingDirty || textureDirty || generatedGlowDirty;
@@ -1949,16 +1969,25 @@ export function IconEditorToolPanel() {
       setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
       return;
     }
-    const selected = await pickUserFile({
-      title: t("dialogs.selectPlistSheet"),
-      extensions: ["plist"],
-      filterName: "Plist",
-    });
-    if (!selected?.trim()) {
-      return;
+    setToolbarError(null);
+    setToolbarErrorDetail(null);
+    try {
+      const selected = await pickUserFile({
+        title: t("dialogs.selectPlistSheet"),
+        extensions: ["plist"],
+        filterName: "Plist",
+      });
+      if (!selected?.trim()) {
+        return;
+      }
+      await loadSheet(selected);
+    } catch (error) {
+      const message = invokeErrorMessage(error, t("errors:iconEditor.loadSheetFailed"));
+      const parsed = toIconEditorErrorInfo(error, message);
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
     }
-    await loadSheet(selected);
-  }, [loadSheet]);
+  }, [loadSheet, t]);
 
   const reloadSheet = useCallback(async () => {
     if (!sheetInfo?.plistPath?.trim()) {
@@ -2002,16 +2031,17 @@ export function IconEditorToolPanel() {
   }, [extraMappingBaseline, generatedGlowFrames, offsetEdits, pendingTextureEdits, roleMap.extra]);
 
   const pickPlistSavePath = useCallback(
-    async (title: string, defaultFileName: string): Promise<string | null> => {
-      const selected = await save({
+    async (title: string, defaultFileName: string): Promise<{ path: string; needsCommit: boolean } | null> => {
+      const picked = await pickUserSaveFile({
         title,
-        defaultPath: defaultFileName,
-        filters: [{ name: "Plist", extensions: ["plist"] }],
+        defaultName: defaultFileName,
+        extensions: ["plist"],
+        filterName: "Plist",
       });
-      if (typeof selected !== "string" || !selected.trim()) {
+      if (!picked) {
         return null;
       }
-      return ensurePlistSavePath(selected);
+      return { path: ensurePlistSavePath(picked.path), needsCommit: picked.needsCommit };
     },
     [],
   );
@@ -2026,15 +2056,17 @@ export function IconEditorToolPanel() {
       return;
     }
     let targetPath = sheetInfo?.plistPath ?? null;
+    let needsCommit = false;
     if (!targetPath) {
-      const selected = await pickPlistSavePath(
+      const picked = await pickPlistSavePath(
         t("dialogs.savePlistSheet"),
         `${renameValue.trim() || "player_01-uhd"}.plist`,
       );
-      if (!selected) {
+      if (!picked) {
         return;
       }
-      targetPath = selected;
+      targetPath = picked.path;
+      needsCommit = picked.needsCommit;
     }
     setIsBusy(true);
     setToolbarError(null);
@@ -2052,8 +2084,20 @@ export function IconEditorToolPanel() {
           frameTextureUpdates,
         );
       }
+      if (needsCommit) {
+        await finalizeUserSave(targetPath);
+      }
       clearIconEditorHistory(targetPath);
       await loadSheet(targetPath, { omitBusy: true, resetHistory: true });
+      const enabledGlowJobs = glowGenJobsRef.current.filter((job) => job.enabled);
+      const glowReadyToCommit =
+        !isGeneratingGlowRef.current &&
+        enabledGlowJobs.every((job) =>
+          generatedGlowFrames.some((frame) => frame.key === job.key),
+        );
+      if (glowReadyToCommit) {
+        setCommittedGlowSignature(glowSettingsSignature);
+      }
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
         error,
@@ -2067,6 +2111,8 @@ export function IconEditorToolPanel() {
   }, [
     collectSheetWritePayload,
     dirty,
+    generatedGlowFrames,
+    glowSettingsSignature,
     loadSheet,
     pickPlistSavePath,
     renameValue,
@@ -2144,13 +2190,14 @@ export function IconEditorToolPanel() {
       return;
     }
     const defaultStem = renameValue.trim() || currentSheetStem || "player_01-uhd";
-    const selected = await pickPlistSavePath(
+    const picked = await pickPlistSavePath(
       t("dialogs.saveCopyPlistSheet"),
       `${defaultStem}.plist`,
     );
-    if (!selected) {
+    if (!picked) {
       return;
     }
+    const selected = picked.path;
     const sourcePath = sheetInfo?.plistPath ?? null;
     if (sourcePath && sameSheetPath(sourcePath, selected)) {
       await saveOffsets();
@@ -2171,6 +2218,9 @@ export function IconEditorToolPanel() {
             frameTextureUpdates,
           )
         : await createIconEditorSheet(selected, updates, frameTextureUpdates);
+      if (picked.needsCommit) {
+        await finalizeUserSave(written.plistPath);
+      }
       await loadSheet(written.plistPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
@@ -2352,18 +2402,24 @@ export function IconEditorToolPanel() {
       "03": {},
       "04": {},
     };
-    for (const frame of sheetInfo?.frames ?? []) {
-      const parsed = parseRobotPartFrame(frame.name);
+    const consider = (name: string): void => {
+      const parsed = parseRobotPartFrame(name);
       if (!parsed) {
-        continue;
+        return;
       }
       if (parsed.role === "extra" && parsed.partId !== "01") {
-        continue;
+        return;
       }
-      byPart[parsed.partId][parsed.role] = frame.name;
+      byPart[parsed.partId][parsed.role] = name;
+    };
+    for (const frame of sheetInfo?.frames ?? []) {
+      consider(frame.name);
+    }
+    for (const name of Object.keys(pendingTextureEdits)) {
+      consider(name);
     }
     return byPart;
-  }, [sheetInfo?.frames]);
+  }, [pendingTextureEdits, sheetInfo?.frames]);
 
   const spiderPartRoleMap = useMemo(() => {
     const byPart: Record<RobotPartId, Partial<Record<IconLayerRole, string>>> = {
@@ -2372,18 +2428,24 @@ export function IconEditorToolPanel() {
       "03": {},
       "04": {},
     };
-    for (const frame of sheetInfo?.frames ?? []) {
-      const parsed = parseSpiderPartFrame(frame.name);
+    const consider = (name: string): void => {
+      const parsed = parseSpiderPartFrame(name);
       if (!parsed) {
-        continue;
+        return;
       }
       if (parsed.role === "extra" && parsed.partId !== "01") {
-        continue;
+        return;
       }
-      byPart[parsed.partId][parsed.role] = frame.name;
+      byPart[parsed.partId][parsed.role] = name;
+    };
+    for (const frame of sheetInfo?.frames ?? []) {
+      consider(frame.name);
+    }
+    for (const name of Object.keys(pendingTextureEdits)) {
+      consider(name);
     }
     return byPart;
-  }, [sheetInfo?.frames]);
+  }, [pendingTextureEdits, sheetInfo?.frames]);
 
   const iconStem = useMemo(() => {
     const fromPrimary = roleMap.primary ? parseIconFrameStem(roleMap.primary) : null;
@@ -2405,22 +2467,28 @@ export function IconEditorToolPanel() {
   });
   const activeGlowGen = resolveGlowGenSettings(glowGenByKey, activeGlowGenKey, contentScale);
 
+  const glowSourceCanvases = useMemo(() => {
+    const out: Record<string, HTMLCanvasElement> = { ...splitFrameCanvases };
+    for (const [name, edit] of Object.entries(pendingTextureEdits)) {
+      const trim = trimTransparentEdgesFromCanvas(edit.sourceCanvas);
+      out[name] = cropCanvasByTrimInsets(edit.sourceCanvas, trim);
+    }
+    return out;
+  }, [pendingTextureEdits, splitFrameCanvases]);
+
   const glowGenJobs = useMemo((): GlowGenJob[] => {
     const sourceCanvasFor = (frameName: string): HTMLCanvasElement | null => {
       if (!frameName) {
         return null;
       }
-      return pendingTextureEdits[frameName]?.sourceCanvas ?? splitFrameCanvases[frameName] ?? null;
+      return glowSourceCanvases[frameName] ?? null;
     };
-    const offsetFor = (frameName: string): IconEditorPoint => {
-      if (!frameName) {
-        return { x: 0, y: 0 };
-      }
-      return (
-        pendingTextureEdits[frameName]?.spriteOffset ??
-        frameMap.get(frameName)?.spriteOffset ?? { x: 0, y: 0 }
+    const namedLayerFor = (frameName: string): GlowGenNamedLayer =>
+      glowGenBodyLayer(
+        frameName,
+        sourceCanvasFor(frameName),
+        frameName ? getEffectiveOffset(frameName) : { x: 0, y: 0 },
       );
-    };
     const frameExists = (frameName: string): boolean => {
       if (!frameName) {
         return false;
@@ -2428,13 +2496,6 @@ export function IconEditorToolPanel() {
       return Boolean(
         sheetInfo?.frames.some((frame) => frame.name === frameName) || pendingTextureEdits[frameName],
       );
-    };
-    const sourceTokenFor = (frameName: string, canvas: HTMLCanvasElement | null): string => {
-      if (!frameName || !canvas) {
-        return "none";
-      }
-      const edited = pendingTextureEdits[frameName] ? "edit" : "split";
-      return `${frameName}:${edited}:${canvas.width}x${canvas.height}`;
     };
     const jobFor = (
       key: string,
@@ -2447,24 +2508,34 @@ export function IconEditorToolPanel() {
     ): GlowGenJob => {
       const settings = resolveGlowGenSettings(glowGenByKey, key, contentScale);
       const resolvedGlowName = glowName || fallbackGlowName;
-      const primaryCanvas = sourceCanvasFor(primaryName);
-      const primaryOffset = offsetFor(primaryName);
-      let sourceCanvas = primaryCanvas;
-      let sourceToken = sourceTokenFor(primaryName, primaryCanvas);
-      if (settings.compositeLayers && primaryCanvas) {
-        const layers = [
-          { name: secondaryName, canvas: sourceCanvasFor(secondaryName) },
-          { name: primaryName, canvas: primaryCanvas },
-          { name: extraName, canvas: sourceCanvasFor(extraName) },
-        ].flatMap((layer) =>
-          layer.canvas
-            ? [{ canvas: layer.canvas, offset: offsetFor(layer.name) }]
-            : [],
+      const primary = {
+        name: primaryName,
+        canvas: sourceCanvasFor(primaryName),
+        offset: primaryName ? getEffectiveOffset(primaryName) : { x: 0, y: 0 },
+      };
+      const sourceSpec = {
+        compositeLayers: settings.compositeLayers,
+        primary,
+        secondary: namedLayerFor(secondaryName),
+        extra: namedLayerFor(extraName),
+      };
+      let sourceCanvas = primary.canvas;
+      let glowOffset = primary.offset;
+      if (settings.enabled && settings.compositeLayers) {
+        const composed = compositeGlowSourceLayers(
+          glowGenSourceLayers(sourceSpec),
+          primary.offset,
         );
-        sourceCanvas = compositeGlowSourceLayers(layers, primaryOffset) ?? primaryCanvas;
-        sourceToken = layers
-          .map((layer) => `${layer.offset.x},${layer.offset.y}:${layer.canvas.width}x${layer.canvas.height}`)
-          .join("+");
+        if (composed) {
+          sourceCanvas = composed.canvas;
+          glowOffset = glowOffsetForCompositeSource(
+            primary.offset,
+            composed.canvas.width,
+            composed.canvas.height,
+            composed.primaryCenterX,
+            composed.primaryCenterY,
+          );
+        }
       }
       return {
         key,
@@ -2472,9 +2543,9 @@ export function IconEditorToolPanel() {
         thickness: settings.thickness,
         compositeLayers: settings.compositeLayers,
         sourceCanvas,
-        sourceToken,
+        sourceToken: glowGenSourceToken(sourceSpec),
         glowFrameName: resolvedGlowName,
-        glowOffset: primaryName ? getEffectiveOffset(primaryName) : primaryOffset,
+        glowOffset,
         isNewFrame: !frameExists(resolvedGlowName),
         partId,
       };
@@ -2529,9 +2600,10 @@ export function IconEditorToolPanel() {
       ),
     ].filter((job) => job.glowFrameName.length > 0);
   }, [
-    frameMap,
+    contentScale,
     getEffectiveOffset,
     glowGenByKey,
+    glowSourceCanvases,
     iconStem,
     isRobotIcon,
     isSpiderIcon,
@@ -2543,8 +2615,6 @@ export function IconEditorToolPanel() {
     roleMap.secondary,
     sheetInfo?.frames,
     spiderPartRoleMap,
-    splitFrameCanvases,
-    contentScale,
   ]);
   glowGenJobsRef.current = glowGenJobs;
 
@@ -2567,6 +2637,7 @@ export function IconEditorToolPanel() {
     plistPath: sheetInfo?.plistPath ?? null,
     onFramesChange: setGeneratedGlowFrames,
   });
+  isGeneratingGlowRef.current = isGeneratingGlow;
 
   const robotInspectorFrameName =
     isRobotIcon && selectedRobotPartId === "01" && inspectorRole === "extra"
@@ -2683,6 +2754,7 @@ export function IconEditorToolPanel() {
     setInspectorFrameOverride(null);
     setGlowGenByKey({});
     setGeneratedGlowFrames([]);
+    setCommittedGlowSignature("");
   }, [sheetInfo?.plistPath]);
 
   useEffect(() => {
@@ -3040,16 +3112,20 @@ export function IconEditorToolPanel() {
       const stem = renameValue.trim() || sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
       const defaultFileName = `${stem}-icon.png`;
       if (isTauriRuntime()) {
-        const savePath = await save({
+        const picked = await pickUserSaveFile({
           title: t("dialogs.saveIconPng"),
-          defaultPath: defaultFileName,
-          filters: [{ name: "PNG", extensions: ["png"] }],
+          defaultName: defaultFileName,
+          extensions: ["png"],
+          filterName: "PNG",
         });
-        if (typeof savePath === "string" && savePath.trim()) {
+        if (picked) {
           await invoke("icon_editor_save_png_data_url", {
-            outputPath: savePath,
+            outputPath: picked.path,
             pngDataUrl,
           });
+          if (picked.needsCommit) {
+            await finalizeUserSave(picked.path);
+          }
         }
       } else {
         const link = document.createElement("a");
@@ -3098,6 +3174,9 @@ export function IconEditorToolPanel() {
       return;
     }
     if (isGlowMakerOwnedFrame(dragFrameName, glowGenJobs, generatedGlowFrames)) {
+      return;
+    }
+    if (mobileShell) {
       return;
     }
     const startOffset = getEffectiveOffset(dragFrameName);
@@ -3493,7 +3572,7 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                   type="button"
                   aria-label={t("toolbar.openAria")}
-                  onClick={() => openSheet().catch(() => {})}
+                  onClick={() => void openSheet()}
                   disabled={isBusy}
                 >
                   <FolderOpen size={toolbarIconSize} aria-hidden />
@@ -3649,7 +3728,7 @@ export function IconEditorToolPanel() {
                       className="tm-icon-editor-overflow-item"
                       role="menuitem"
                       onClick={() => {
-                        setZoom(autoResolutionZoom);
+                        resetZoomAndAlignment();
                         setMobileOverflowOpen(false);
                       }}
                     >
@@ -3711,7 +3790,7 @@ export function IconEditorToolPanel() {
                     type="button"
                     className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                     aria-label={t("toolbar.resetZoom")}
-                    onClick={() => setZoom(autoResolutionZoom)}
+                    onClick={resetZoomAndAlignment}
                   >
                     <RotateCcw size={15} aria-hidden />
                   </button>
@@ -3831,6 +3910,7 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-zoom-hud"
                   aria-label={t("viewport.zoomHudAria")}
                 >
+                  <GlassFrost />
                   <span className="tm-icon-editor-zoom-hud-value">
                     {Math.round(zoom * 100)}%
                   </span>
@@ -3841,7 +3921,7 @@ export function IconEditorToolPanel() {
                     title={t("toolbar.resetZoomTooltip", {
                       percent: Math.round(autoResolutionZoom * 100),
                     })}
-                    onClick={() => setZoom(autoResolutionZoom)}
+                    onClick={resetZoomAndAlignment}
                   >
                     <RotateCcw size={16} aria-hidden />
                   </button>
@@ -3867,7 +3947,10 @@ export function IconEditorToolPanel() {
                       )
                     }
                   >
-                    <ChevronUp size={18} strokeWidth={2.25} aria-hidden />
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronUp size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -3883,7 +3966,10 @@ export function IconEditorToolPanel() {
                       )
                     }
                   >
-                    <ChevronLeft size={18} strokeWidth={2.25} aria-hidden />
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronLeft size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -3899,7 +3985,10 @@ export function IconEditorToolPanel() {
                       )
                     }
                   >
-                    <ChevronRight size={18} strokeWidth={2.25} aria-hidden />
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -3915,7 +4004,10 @@ export function IconEditorToolPanel() {
                       )
                     }
                   >
-                    <ChevronDown size={18} strokeWidth={2.25} aria-hidden />
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronDown size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
                   </button>
                 </div>
               ) : null}

@@ -48,6 +48,14 @@ struct PickPathResponse {
   path: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SavePickResponse {
+  path: Option<String>,
+  #[serde(default)]
+  needs_commit: bool,
+}
+
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PickFolderRequest {
@@ -58,6 +66,19 @@ struct PickFolderRequest {
 #[serde(rename_all = "camelCase")]
 struct PickFileRequest {
   extensions: Option<Vec<String>>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SaveFileRequest {
+  default_name: Option<String>,
+  extensions: Option<Vec<String>>,
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CommitSaveRequest {
+  source_path: String,
 }
 
 pub struct AndroidStorageAccess<R: Runtime> {
@@ -166,6 +187,65 @@ impl<R: Runtime> AndroidStorageAccess<R> {
       Err("Android file picker is only available on Android.".to_string())
     }
   }
+
+  pub fn save_file(
+    &self,
+    default_name: Option<String>,
+    extensions: Option<Vec<String>>,
+  ) -> Result<AndroidSavePick, String> {
+    #[cfg(target_os = "android")]
+    {
+      let response: SavePickResponse = self
+        .handle
+        .run_mobile_plugin(
+          "saveFile",
+          SaveFileRequest {
+            default_name,
+            extensions,
+          },
+        )
+        .map_err(|err| err.to_string())?;
+      let path = response.path.filter(|value| !value.trim().is_empty());
+      return Ok(AndroidSavePick {
+        path,
+        needs_commit: response.needs_commit,
+      });
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+      let _ = default_name;
+      let _ = extensions;
+      Err("Android save picker is only available on Android.".to_string())
+    }
+  }
+
+  pub fn commit_save(&self, source_path: String) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+      let _: () = self
+        .handle
+        .run_mobile_plugin(
+          "commitSave",
+          CommitSaveRequest {
+            source_path,
+          },
+        )
+        .map_err(|err| err.to_string())?;
+      return Ok(());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+      let _ = source_path;
+      Err("Android save commit is only available on Android.".to_string())
+    }
+  }
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidSavePick {
+  pub path: Option<String>,
+  pub needs_commit: bool,
 }
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
