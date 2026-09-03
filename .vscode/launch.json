@@ -1,0 +1,47 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Tauri: Dev (Desktop)",
+      "command": "npm run tauri -- dev",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Tauri: Dev (Android)",
+      "command": "npm run android:dev",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Frontend: Vite Dev",
+      "command": "npm run dev",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Test: Unit (Vitest)",
+      "command": "npm test",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Test: E2E (Playwright)",
+      "command": "npm run test:e2e",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "type": "node-terminal",
+      "request": "launch",
+      "name": "Tauri: Build (Desktop)",
+      "command": "npm run tauri -- build",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}

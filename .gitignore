@@ -17,6 +17,8 @@ target
 .idea/
 *.iml
 .vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 *.swp
 *.swo
 *~

@@ -1409,7 +1409,7 @@ fn sha256_file(path: &Path) -> Result<String, AppError> {
         ))
     })?;
     let digest = Sha256::digest(&bytes);
-    Ok(format!("{digest:x}"))
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn hash_sheet_pair(pair: &SheetCandidate) -> Result<SplitCacheHashEntry, AppError> {

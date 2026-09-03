@@ -154,7 +154,7 @@ fn parse_tier_label(label: &str) -> PortSourceGraphicsTier {
 
 fn sha256_hex(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
-    format!("{digest:x}")
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 fn sha256_file(path: &Path) -> Result<String, AppError> {

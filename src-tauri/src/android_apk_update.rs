@@ -267,7 +267,11 @@ pub async fn download_app_update<R: Runtime>(
       .map_err(|err| format!("Failed to flush APK: {err}"))?;
     drop(file);
 
-    let actual = format!("{:x}", hasher.finalize());
+    let actual: String = hasher
+      .finalize()
+      .iter()
+      .map(|byte| format!("{byte:02x}"))
+      .collect();
     if actual != expected {
       let _ = tokio::fs::remove_file(&tmp).await;
       return Err(format!(

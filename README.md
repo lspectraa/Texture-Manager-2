@@ -147,6 +147,8 @@ npm run tauri dev
 
 This starts the Vite frontend and opens the native Tauri window.
 
+In VS Code / Cursor you can also use **Run and Debug** → `Tauri: Dev (Desktop)` (see `.vscode/launch.json`). Other common scripts are available there and under **Terminal → Run Task…**.
+
 ### Develop (Android)
 
 ```bash
