@@ -1,5 +1,5 @@
-import { ArrowRight, Clock3, Info } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { ArrowRight, Clock3, Folder, FolderOpen, Info, Save } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { COPYRIGHT_HOLDER, COPYRIGHT_YEAR } from "../config/appMeta";
 import {
@@ -11,6 +11,8 @@ import {
   isToolListedOnMobile,
   isUpcomingTool,
 } from "../config/toolNavigation";
+import { getGameFilesLayout } from "../services/tauriGeodeButtons";
+import { openPathInOs } from "../services/tauriSettings";
 import {
   collectHomeSplashTitles,
   HOME_SPLASH_FADE_MS,
@@ -18,7 +20,8 @@ import {
   homeSplashGroupsForDate,
   type HomeSplashGroup,
 } from "../utils/homeSplash";
-import { isMobileShell } from "../utils/platform";
+import { redactAbsolutePathsInText } from "../utils/pathDisplay";
+import { isDesktopPlatform, isMobileShell } from "../utils/platform";
 import { GlassFrost } from "./GlassFrost";
 import { TranslationQualityNotice } from "./TranslationQualityNotice";
 
@@ -27,6 +30,8 @@ type HomeScreenProps = {
   /** Opens the About / copyright dialog (shown on mobile home footer). */
   onAboutClick?: () => void;
 };
+
+type HomeUtilityKind = "packs" | "game" | "save";
 
 function readSplashGroup(t: (key: string, options: { returnObjects: true }) => unknown, group: HomeSplashGroup): string[] {
   const value = t(`homeScreen.splash.${group}`, { returnObjects: true });
@@ -39,6 +44,7 @@ function readSplashGroup(t: (key: string, options: { returnObjects: true }) => u
 export function HomeScreen({ onSelectTool, onAboutClick }: HomeScreenProps) {
   const { t, i18n } = useTranslation("navigation");
   const mobileShell = isMobileShell();
+  const showDesktopUtilities = isDesktopPlatform();
   const showAbout = Boolean(mobileShell && onAboutClick);
   const visibleToolCount = mobileShell ? MOBILE_TOOL_COUNT : TOOL_COUNT;
   const titles = useMemo(() => {
@@ -49,6 +55,8 @@ export function HomeScreen({ onSelectTool, onAboutClick }: HomeScreenProps) {
   }, [i18n.language, t]);
   const [index, setIndex] = useState(0);
   const [fading, setFading] = useState(false);
+  const [utilityError, setUtilityError] = useState<string | null>(null);
+  const [utilityBusy, setUtilityBusy] = useState(false);
 
   useEffect(() => {
     setIndex(Math.floor(Math.random() * titles.length));
@@ -78,6 +86,49 @@ export function HomeScreen({ onSelectTool, onAboutClick }: HomeScreenProps) {
     };
   }, [titles]);
 
+  const openUtilityFolder = useCallback(
+    async (kind: HomeUtilityKind) => {
+      setUtilityError(null);
+      setUtilityBusy(true);
+      try {
+        const layout = await getGameFilesLayout();
+        let path = "";
+        let failKey = "homeScreen.openSaveFolderFailed";
+        switch (kind) {
+          case "packs":
+            path = layout.textureLoaderPacksDir;
+            failKey = "homeScreen.openPacksFolderFailed";
+            break;
+          case "game":
+            path = layout.geometryDashDir;
+            failKey = "homeScreen.openGameFilesFailed";
+            break;
+          case "save":
+            path = layout.geometryDashSaveDir;
+            failKey = "homeScreen.openSaveFolderFailed";
+            break;
+          default: {
+            const _exhaustive: never = kind;
+            return _exhaustive;
+          }
+        }
+        if (!path.trim()) {
+          throw new Error(t(failKey));
+        }
+        await openPathInOs(path);
+      } catch (err: unknown) {
+        setUtilityError(
+          redactAbsolutePathsInText(
+            err instanceof Error ? err.message : t("homeScreen.openSaveFolderFailed"),
+          ),
+        );
+      } finally {
+        setUtilityBusy(false);
+      }
+    },
+    [t],
+  );
+
   return (
     <div className={`tm-home${mobileShell ? " tm-home--mobile" : ""}`}>
       <TranslationQualityNotice variant="banner" />
@@ -86,6 +137,48 @@ export function HomeScreen({ onSelectTool, onAboutClick }: HomeScreenProps) {
         <div className="tm-home-hero-copy">
           <h2 className={`tm-home-title${fading ? " is-fading" : ""}`}>{titles[index] ?? t("homeScreen.title")}</h2>
           <p className="tm-home-lead">{t("homeScreen.lead")}</p>
+          {showDesktopUtilities ? (
+            <div className="tm-home-utilities" role="group" aria-label={t("homeScreen.utilitiesAria")}>
+              <button
+                type="button"
+                className="tm-home-utility-btn"
+                disabled={utilityBusy}
+                onClick={() => {
+                  void openUtilityFolder("packs");
+                }}
+              >
+                <FolderOpen size={15} strokeWidth={1.9} aria-hidden />
+                {t("homeScreen.openPacksFolder")}
+              </button>
+              <button
+                type="button"
+                className="tm-home-utility-btn"
+                disabled={utilityBusy}
+                onClick={() => {
+                  void openUtilityFolder("game");
+                }}
+              >
+                <Folder size={15} strokeWidth={1.9} aria-hidden />
+                {t("homeScreen.openGameFiles")}
+              </button>
+              <button
+                type="button"
+                className="tm-home-utility-btn"
+                disabled={utilityBusy}
+                onClick={() => {
+                  void openUtilityFolder("save");
+                }}
+              >
+                <Save size={15} strokeWidth={1.9} aria-hidden />
+                {t("homeScreen.openSaveFolder")}
+              </button>
+              {utilityError ? (
+                <p className="tm-home-utilities-error" role="status">
+                  {utilityError}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div
           className="tm-home-hero-stats"

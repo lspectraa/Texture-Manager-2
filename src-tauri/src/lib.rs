@@ -392,17 +392,26 @@ fn open_path_in_os(
     std::fs::create_dir_all(&root)
         .map_err(|err| format!("failed to ensure game-files root exists: {err}"))?;
 
-    // Allow game-files root, or Geode config/mods under a resolved GD install
-    // (Create Pack "open folder" targets texture-loader packs).
+    // Allow game-files root, GD install + Geode config/mods, and the user save root.
     let allowed_roots: Vec<std::path::PathBuf> = {
         let mut roots = vec![root];
         if layout.geometry_dash_found() {
+            let gd = layout.geometry_dash_dir.clone();
             let config = layout.geode_config();
             let mods = layout.geode_mods();
+            let packs = layout.texture_loader_packs();
             let _ = std::fs::create_dir_all(&config);
             let _ = std::fs::create_dir_all(&mods);
+            let _ = std::fs::create_dir_all(&packs);
+            roots.push(gd);
             roots.push(config);
             roots.push(mods);
+        }
+        if let Ok(save_dir) =
+            crate::core::game_files::geode_user_data::resolve_geometry_dash_save_dir()
+        {
+            let _ = std::fs::create_dir_all(&save_dir);
+            roots.push(save_dir);
         }
         roots
     };
@@ -418,19 +427,14 @@ fn open_path_in_os(
             Err(err) => last_err = Some(err),
         }
     }
+    let denied_msg = "Only directories under the Texture Manager game-files folder, Geometry Dash install, Geode config/mods, or save folder can be opened.";
     let target_canon = target_canon.ok_or_else(|| {
         last_err
             .map(|err| err.to_string())
-            .unwrap_or_else(|| {
-                "Only directories under the Texture Manager game-files folder or Geode config/mods can be opened."
-                    .to_string()
-            })
+            .unwrap_or_else(|| denied_msg.to_string())
     })?;
     if !target_canon.is_dir() {
-        return Err(
-            "Only directories under the Texture Manager game-files folder or Geode config/mods can be opened."
-                .to_string(),
-        );
+        return Err(denied_msg.to_string());
     }
 
     app.opener()

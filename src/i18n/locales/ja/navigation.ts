@@ -39,6 +39,13 @@ const navigation = {
     aboutTitle: "このアプリについて",
     aboutSubtitle: "著作権・ライセンス・リンク",
     aboutCardLabel: "著作権と情報",
+    openPacksFolder: "パックフォルダを開く",
+    openGameFiles: "ゲームファイルを開く",
+    openSaveFolder: "セーブフォルダを開く",
+    utilitiesAria: "フォルダのショートカット",
+    openPacksFolderFailed: "パックフォルダを開けませんでした。Geometry Dashはインストールされていますか？",
+    openGameFilesFailed: "ゲームファイルフォルダを開けませんでした。Geometry Dashはインストールされていますか？",
+    openSaveFolderFailed: "セーブフォルダを開けませんでした。",
   },
   sections: {
     design: {

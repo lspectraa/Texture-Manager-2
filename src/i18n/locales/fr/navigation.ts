@@ -39,6 +39,13 @@ const navigation = {
     aboutTitle: "À propos",
     aboutSubtitle: "Copyright, licence et liens",
     aboutCardLabel: "Copyright et à propos",
+    openPacksFolder: "Ouvrir le dossier des packs",
+    openGameFiles: "Ouvrir les fichiers du jeu",
+    openSaveFolder: "Ouvrir le dossier de sauvegarde",
+    utilitiesAria: "Raccourcis de dossiers",
+    openPacksFolderFailed: "Impossible d’ouvrir le dossier des packs. Geometry Dash est-il installé ?",
+    openGameFilesFailed: "Impossible d’ouvrir le dossier du jeu. Geometry Dash est-il installé ?",
+    openSaveFolderFailed: "Impossible d’ouvrir le dossier de sauvegarde.",
   },
   sections: {
     design: {

@@ -76,6 +76,13 @@ const navigation = {
     aboutTitle: "About",
     aboutSubtitle: "Copyright, license, and links",
     aboutCardLabel: "Copyright & about",
+    openPacksFolder: "Open packs folder",
+    openGameFiles: "Open game files",
+    openSaveFolder: "Open save folder",
+    utilitiesAria: "Quick folder shortcuts",
+    openPacksFolderFailed: "Couldn’t open the packs folder. Is Geometry Dash installed?",
+    openGameFilesFailed: "Couldn’t open the game files folder. Is Geometry Dash installed?",
+    openSaveFolderFailed: "Couldn’t open the save folder.",
   },
   sections: {
     design: {

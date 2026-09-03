@@ -41,6 +41,13 @@ const navigation: AppLocaleResources["navigation"] = {
     aboutTitle: "Acerca de",
     aboutSubtitle: "Copyright, licencia y enlaces",
     aboutCardLabel: "Copyright y acerca de",
+    openPacksFolder: "Abrir carpeta de packs",
+    openGameFiles: "Abrir archivos del juego",
+    openSaveFolder: "Abrir carpeta de guardado",
+    utilitiesAria: "Accesos rápidos a carpetas",
+    openPacksFolderFailed: "No se pudo abrir la carpeta de packs. ¿Está instalado Geometry Dash?",
+    openGameFilesFailed: "No se pudo abrir la carpeta del juego. ¿Está instalado Geometry Dash?",
+    openSaveFolderFailed: "No se pudo abrir la carpeta de guardado.",
   },
   sections: {
     design: {

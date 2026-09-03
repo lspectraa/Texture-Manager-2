@@ -41,6 +41,13 @@ const navigation: AppLocaleResources["navigation"] = {
     aboutTitle: "О программе",
     aboutSubtitle: "Авторские права, лицензия и ссылки",
     aboutCardLabel: "Авторские права и сведения",
+    openPacksFolder: "Открыть папку паков",
+    openGameFiles: "Открыть файлы игры",
+    openSaveFolder: "Открыть папку сохранений",
+    utilitiesAria: "Быстрые ярлыки папок",
+    openPacksFolderFailed: "Не удалось открыть папку паков. Geometry Dash установлен?",
+    openGameFilesFailed: "Не удалось открыть папку игры. Geometry Dash установлен?",
+    openSaveFolderFailed: "Не удалось открыть папку сохранений.",
   },
   sections: {
     design: {

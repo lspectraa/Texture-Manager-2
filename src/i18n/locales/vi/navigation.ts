@@ -78,6 +78,13 @@ const navigation: AppLocaleResources["navigation"] = {
     aboutTitle: "Giới thiệu",
     aboutSubtitle: "Bản quyền, giấy phép và liên kết",
     aboutCardLabel: "Bản quyền & giới thiệu",
+    openPacksFolder: "Mở thư mục packs",
+    openGameFiles: "Mở tệp game",
+    openSaveFolder: "Mở thư mục save",
+    utilitiesAria: "Phím tắt thư mục nhanh",
+    openPacksFolderFailed: "Không mở được thư mục packs. Geometry Dash đã được cài chưa?",
+    openGameFilesFailed: "Không mở được thư mục game. Geometry Dash đã được cài chưa?",
+    openSaveFolderFailed: "Không mở được thư mục save.",
   },
   sections: {
     design: {

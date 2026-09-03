@@ -39,6 +39,13 @@ const navigation = {
     aboutTitle: "Sobre",
     aboutSubtitle: "Copyright, licença e links",
     aboutCardLabel: "Copyright e sobre",
+    openPacksFolder: "Abrir pasta de packs",
+    openGameFiles: "Abrir arquivos do jogo",
+    openSaveFolder: "Abrir pasta de save",
+    utilitiesAria: "Atalhos rápidos de pastas",
+    openPacksFolderFailed: "Não foi possível abrir a pasta de packs. O Geometry Dash está instalado?",
+    openGameFilesFailed: "Não foi possível abrir a pasta do jogo. O Geometry Dash está instalado?",
+    openSaveFolderFailed: "Não foi possível abrir a pasta de save.",
   },
   sections: {
     design: {

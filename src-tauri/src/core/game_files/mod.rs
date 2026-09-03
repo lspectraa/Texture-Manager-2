@@ -148,6 +148,9 @@ impl GameFilesLayout {
             } else {
                 String::new()
             },
+            geometry_dash_save_dir: geode_user_data::resolve_geometry_dash_save_dir()
+                .map(|dir| dir.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             geometry_dash_found: found,
         }
     }
@@ -203,6 +206,8 @@ pub struct GameFilesLayoutDto {
     pub geode_config_dir: String,
     pub geode_mods_dir: String,
     pub texture_loader_packs_dir: String,
+    /// User save root (`…/GeometryDash`), parent of `geode/` — not the game install.
+    pub geometry_dash_save_dir: String,
     pub geometry_dash_found: bool,
 }
 

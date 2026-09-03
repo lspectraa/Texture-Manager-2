@@ -39,6 +39,13 @@ const navigation = {
     aboutTitle: "关于",
     aboutSubtitle: "版权、许可与链接",
     aboutCardLabel: "版权与关于",
+    openPacksFolder: "打开材质包文件夹",
+    openGameFiles: "打开游戏文件",
+    openSaveFolder: "打开存档文件夹",
+    utilitiesAria: "文件夹快捷方式",
+    openPacksFolderFailed: "无法打开材质包文件夹。是否已安装 Geometry Dash？",
+    openGameFilesFailed: "无法打开游戏文件文件夹。是否已安装 Geometry Dash？",
+    openSaveFolderFailed: "无法打开存档文件夹。",
   },
   sections: {
     design: {
