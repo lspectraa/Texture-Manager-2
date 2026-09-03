@@ -4,9 +4,11 @@
 
 # Texture Manager 2
 
-**Geometry Dash texture tooling** — edit icons, split and merge sheets, add glow, build Geode-style buttons, convert and install packs, upscale textures, and more.
+**Geometry Dash texture tooling** — edit icons, split and merge sheets, add glow, build Geode-style buttons, tweak particles, convert and install packs, upscale textures, and more.
 
 Built by [Spectra](https://www.youtube.com/c/spectraa) · [Discord](https://discord.gg/YFXhJZJCv6) · [GitHub](https://github.com/lspectraa/Texture-Manager-2)
+
+Open beta started at **v0.1.0** (Windows, with a first macOS build). The app now also ships **Android**, a full **Texture Pack Installer** (library + applied-pack order), an AI **Upscaler**, Geometry Dash **2.0** conversion, and a much deeper Icon / Particle / Glow workflow.
 
 ---
 
@@ -25,12 +27,36 @@ Built by [Spectra](https://www.youtube.com/c/spectraa) · [Discord](https://disc
 | Area | Tools |
 | --- | --- |
 | **Design & Effects** | Icon Editor · Glow Maker · Geode Buttons · Particle Editor |
-| **Sheet Pipeline** | Splitter · Merger · Porter · Upscaler *(desktop)* |
-| **Batch & Packs** | Randomizer · Convert to New Version *(desktop)* · Texture Pack Installer |
+| **Gamesheets** | Splitter · Merger · Porter · Upscaler *(desktop)* |
+| **Pack tools** | Randomizer · Convert to New Version *(desktop)* · Texture Pack Installer |
 
-- First-run onboarding for language, theme, and Geometry Dash path
-- Dark / light themes and optional Geometry Dash background art
-- Multi-language UI
+**11 tools** on desktop. Android includes 9 of them — Upscaler and Convert to New Version stay desktop-only (Vulkan sidecars and the game `Resources` folder).
+
+### Design & Effects
+
+- **Icon Editor** — Swap parts, colors, and placement on an icon sheet. Start a new sheet from imported sprites, generate glow from a component (instead of the sheet’s glow sprite), save a copy anywhere, and download a PNG preview.
+- **Glow Maker** — Outline glow with thickness and alpha controls, optional rainbow / composite layers, and a live preview (random game icon or a custom sheet).
+- **Create Geode Buttons** — Build the Geode menu-button gamesheet from BlankSheet (or your own), with per-family colors and HSV shifts.
+- **Particle Editor** — Open Geometry Dash `.plist` effects, copy a built-in GD effect, and edit emitter / motion / look / texture with a live preview (play, pause, icon path, custom icon).
+
+### Gamesheets
+
+- **Splitter** — Cut a gamesheet into individual sprites. Optionally skip the icons folder.
+- **Merger** — Pack sprites back into a gamesheet. Can include images that are not listed in the plist.
+- **Porter** — Make HD, UHD, or low-graphics versions of a sheet.
+- **Upscaler** *(desktop)* — Sharpen and enlarge to HD or UHD. Gamesheets use **Waifu2x**; icons use **Real-ESRGAN**. Optionally copy missing sprites from the newest game afterward. Repeated sprites can be reused from a sprite index instead of running AI again.
+
+### Pack tools
+
+- **Randomizer** — Shuffle icons. Save the shuffle code to get the same mix later.
+- **Convert to New Version** *(desktop)* — Add missing sprites so a pack works on the newest game. Supports converting from **2.0**, **2.11**, and **2.2**.
+- **Texture Pack Installer** — Install packs from a folder or zip (plus Geode configs and `.geode` mods), create a new pack, and manage a **pack library**: edit `pack.json` / `pack.png`, convert / port / split an installed pack, and reorder **applied packs** in-game.
+
+### App-wide
+
+- First-run onboarding for language, light/dark theme, and Geometry Dash path (Android also asks for All files access)
+- Optional Geometry Dash background art, plus custom backgrounds (stored as grayscale)
+- UI in English, Spanish, Russian, Portuguese, German, French, Simplified Chinese, Korean, Japanese, and Vietnamese
 - Progress reporting with warnings and errors you can export
 - Automatic updates from GitHub Releases
 - Mobile-friendly shell on Android
@@ -58,7 +84,8 @@ Built by [Spectra](https://www.youtube.com/c/spectraa) · [Discord](https://disc
 ### Requirements
 
 - **Geometry Dash** installed via Steam (recommended on desktop for auto-detect and game file tools)
-- On Android, grant storage / All files access when prompted so pack and sheet tools can reach game folders
+- **Geode** + **texture-loader** if you want the Pack Installer to drop packs into the game
+- On Android, grant storage / All files access when prompted so pack and sheet tools can reach Geode’s folder (`Android/media/com.geode.launcher/game/geode`)
 
 ### Install (desktop)
 
@@ -68,7 +95,8 @@ Built by [Spectra](https://www.youtube.com/c/spectraa) · [Discord](https://disc
 4. Complete onboarding:
    - Choose language
    - Pick light or dark theme
-   - Confirm or browse to your Geometry Dash folder (desktop)
+   - On Android, grant All files access
+   - Confirm or browse to your Geometry Dash folder (desktop) or Geode media folder (Android)
 
 After that, use **Home** (or the mobile dock) to open a tool, set input/output folders, and run the operation.
 

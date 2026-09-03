@@ -1,0 +1,72 @@
+import type { AppLocaleResources } from "../../types";
+
+const reports: AppLocaleResources["reports"] = {
+  panelTitle: "Kết quả chạy",
+  viewRunOutput: "Xem kết quả chạy",
+  expandPanelAria: "Mở rộng bảng kết quả chạy",
+  collapsePanelAria: "Thu gọn bảng kết quả chạy",
+  showPanel: "Hiện kết quả chạy",
+  hidePanel: "Ẩn kết quả chạy",
+  status: {
+    running: "Đang chạy",
+    complete: "Hoàn tất",
+    warnings: "Cảnh báo",
+    runFailed: "Chạy thất bại",
+    errorsFound: "Có lỗi",
+    ready: "Sẵn sàng",
+  },
+  progress: {
+    aria: "Đang thao tác",
+    cancelling: "Đang hủy…",
+    completed: "Đã hoàn tất",
+    completedWithWarnings: "Hoàn tất kèm cảnh báo",
+    completedWithErrors: "Hoàn tất kèm lỗi",
+    working: "Đang xử lý…",
+    gamesheet: "Gamesheet",
+    sprites_one: "{{completed}} / {{total}} sprite",
+    sprites_other: "{{completed}} / {{total}} sprite",
+    plists_one: "{{completed}} / {{total}} plist",
+    plists_other: "{{completed}} / {{total}} plist",
+    preparing: "Đang chuẩn bị thao tác…",
+    remaining: "Thời gian còn lại ước tính: {{time}}",
+    remainingEstimating: "Thời gian còn lại ước tính: đang tính…",
+    cancel: "Hủy",
+  },
+  alerts: {
+    defaultsLoadError: "Lỗi tải mặc định",
+    runError: "Lỗi chạy",
+  },
+  empty: {
+    title: "Chưa có thao tác nào chạy",
+    hint: "Chạy một công cụ để xem kết quả và sự cố tại đây.",
+  },
+  summary: {
+    processed: "Đã xử lý",
+    elapsed: "Thời gian",
+    output: "Đầu ra",
+    aiUpscaled: "Đã phóng nét AI",
+    fromCache: "Từ bộ nhớ đệm",
+  },
+  issues: {
+    title: "Sự cố",
+    noIssues: "Không có sự cố",
+    copyCsv: "Sao chép CSV",
+    copied: "Đã sao chép",
+    copyCsvTooltip: "Sao chép sự cố dạng CSV",
+    copyCsvAria: "Sao chép sự cố dạng CSV",
+    download: "Tải xuống",
+    downloadCsvTooltip: "Tải sự cố dạng CSV",
+    downloadCsvAria: "Tải sự cố dạng CSV",
+    occurrence: "x{{count}}",
+  },
+  exportZip: "Xuất zip",
+  exportZipAria: "Xuất thư mục đầu ra thành zip",
+  exportZipFailed: "Không xuất được thư mục đầu ra.",
+  severity: {
+    error: "lỗi",
+    warning: "cảnh báo",
+    info: "thông tin",
+  },
+};
+
+export default reports;

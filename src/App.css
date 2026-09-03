@@ -9081,6 +9081,16 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   max-width: 360px;
 }
 
+/* Keep the language list a fixed viewport so long catalogs scroll inside the menu. */
+.tm-settings-language-menu {
+  height: 280px;
+  max-height: 280px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+}
+
 .tm-settings-section-language {
   position: relative;
   z-index: 2;

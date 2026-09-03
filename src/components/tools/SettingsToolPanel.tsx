@@ -448,6 +448,7 @@ export function SettingsToolPanel({
               </span>
               <AppSelect
                 className="tm-settings-language-select"
+                menuClassName="tm-settings-language-menu"
                 size="md"
                 value={settings.language}
                 options={languageOptions}

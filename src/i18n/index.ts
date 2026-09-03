@@ -13,6 +13,7 @@ import ja from "./locales/ja";
 import ko from "./locales/ko";
 import pt from "./locales/pt";
 import ru from "./locales/ru";
+import vi from "./locales/vi";
 import zh from "./locales/zh";
 
 export const I18N_NAMESPACES = [
@@ -36,6 +37,7 @@ const resources = {
   zh,
   ko,
   ja,
+  vi,
 } as const;
 
 let initialized = false;

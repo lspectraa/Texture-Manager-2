@@ -19,7 +19,7 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 const DEFAULT_SHEET_CONCURRENCY: u32 = 5;
 const DEFAULT_LANGUAGE: &str = "en";
 /// Keep in sync with frontend `AppLanguage` / `APP_LANGUAGES`.
-const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja"];
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "vi"];
 /// Default: pick a discovered `game_bg_*` once per frontend session.
 const DEFAULT_APP_BACKGROUND: &str = "random";
 const DEFAULT_APP_BACKGROUND_OPACITY: f32 = 0.75;
@@ -701,7 +701,8 @@ mod tests {
     #[test]
     fn language_roundtrip_supported_codes() {
         for code in [
-            "en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "ES", "ru-RU", "zh-Hans",
+            "en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "vi", "ES", "ru-RU", "zh-Hans",
+            "vi-VN",
         ] {
             let next = apply_save_request(
                 &AppSettings::default(),
