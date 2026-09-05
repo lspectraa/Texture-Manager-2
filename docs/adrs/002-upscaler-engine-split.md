@@ -6,7 +6,7 @@
 
 ## Context
 
-Gamesheets and icon sprites need different AI upscale characteristics; both run as ncnn-Vulkan sidecars.
+Gamesheets and icon sprites need different AI upscale characteristics; both run as ncnn-Vulkan sidecars. Waifu2x would produce feathered edges on black outlines on what should be a crisp edge. Adding AV3 would increase the package size by including its binary.
 
 ## Options
 

@@ -6,7 +6,7 @@
 
 ## Context
 
-Android shares most tools but cannot host Vulkan AI sidecars or reliably reach the desktop Geometry Dash `Resources` tree the same way.
+Android shares most tools but cannot host Vulkan AI sidecars or reliably reach the desktop Geometry Dash `Resources` tree the same way. Upscaler will likely never come to android, converter will require additional resources, likely to be part of 0.5.0 update as part of planned automatic pack installation.
 
 ## Options
 
