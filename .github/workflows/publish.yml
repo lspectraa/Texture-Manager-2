@@ -86,7 +86,7 @@ jobs:
           java-version: "17"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4
 
       - name: Setup Android NDK
         uses: nttld/setup-ndk@v1
@@ -150,9 +150,14 @@ jobs:
           CI: true
           NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dkotlin.compiler.execution.strategy=in-process"
         # Use `npx tauri` (not `npm run tauri`) to skip the desktop upscaler fetch wrapper.
         # `@v0` of tauri-action does not support `mobile: android`, so build here directly.
         run: npx tauri android build --apk --target aarch64 --ci
+
+      - name: Stop Gradle daemons
+        if: always()
+        run: (cd src-tauri/gen/android && bash ./gradlew --stop) || true
 
       - name: Resolve version
         id: ver
