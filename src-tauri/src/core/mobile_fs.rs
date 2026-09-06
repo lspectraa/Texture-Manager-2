@@ -73,6 +73,10 @@ pub fn import_user_path(source_path: &str) -> Result<PathBuf, AppError> {
                     .to_string(),
             ));
         }
+        // If the path is already an accessible absolute filesystem path, pass it through directly.
+        if src.is_absolute() {
+            return Ok(src);
+        }
         let imports = resolve_game_files_root().join("imports");
         fs::create_dir_all(&imports)?;
         let dest = unique_import_dest(&imports, &src);
@@ -87,10 +91,26 @@ pub fn allocate_output_dir(tool_id: &str) -> Result<PathBuf, AppError> {
     } else {
         "tool"
     };
+
+    #[cfg(target_os = "android")]
+    {
+        use crate::core::game_files::android_geode_internal_storage_roots;
+        for root in android_geode_internal_storage_roots() {
+            if !root.exists() {
+                continue;
+            }
+            for sub in &["Download/TextureManager2", "Documents/TextureManager2", "TextureManager2"] {
+                let candidate = root.join(sub).join("outputs").join(safe_tool);
+                if fs::create_dir_all(&candidate).is_ok() {
+                    return Ok(candidate);
+                }
+            }
+        }
+    }
+
     let dir = resolve_game_files_root()
         .join("outputs")
-        .join(safe_tool)
-        .join(timestamp_millis().to_string());
+        .join(safe_tool);
     fs::create_dir_all(&dir)?;
     Ok(dir)
 }
@@ -143,4 +163,29 @@ pub fn export_directory_as_zip(source_dir: &str, zip_path: &str) -> Result<(), A
     zip.finish()
         .map_err(|err| AppError::IoError(format!("failed to finish zip: {err}")))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allocate_output_dir_creates_expected_structure() {
+        let dir = allocate_output_dir("test_tool").expect("allocate_output_dir failed");
+        assert!(dir.exists());
+        assert!(dir.is_dir());
+        let path_str = dir.to_string_lossy().replace('\\', "/");
+        assert!(path_str.contains("/outputs/test_tool"));
+        // Clean up
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn allocate_output_dir_sanitizes_unsafe_tool_name() {
+        let dir = allocate_output_dir("../evil_path").expect("allocate_output_dir failed");
+        assert!(dir.exists());
+        let path_str = dir.to_string_lossy().replace('\\', "/");
+        assert!(path_str.contains("/outputs/tool"));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

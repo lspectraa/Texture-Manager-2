@@ -29,6 +29,20 @@ export function shortenPathForDisplay(path: string): string {
 const WIN_ABS = /(?:[A-Za-z]:\\|\\\\[^\\\s]+)[^\s"'<>|]*/g;
 const UNIX_ABS = /(?:^|[\s("'=])(\/(?:Users|home|tmp|var|opt|mnt|media|Volumes)\/[^\s"'<>|]+)/g;
 
+/** Check whether a path points into internal app sandbox storage on Android. */
+export function isAppSandboxPath(path: string): boolean {
+  if (!path || !path.trim()) {
+    return false;
+  }
+  const normalized = path.replace(/\\/g, "/");
+  return (
+    normalized.includes("/com.spectra.texturemanager2/files/game-files/") ||
+    normalized.includes("/game-files/imports/") ||
+    normalized.includes("/game-files/outputs/") ||
+    normalized.includes("/game-files/staging/")
+  );
+}
+
 /** Replace absolute path substrings in free-form error / issue text. */
 export function redactAbsolutePathsInText(text: string): string {
   if (!text) {

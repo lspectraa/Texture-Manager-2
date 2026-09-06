@@ -47,7 +47,7 @@ export async function pickUserFolder(
   if (!isTauriRuntime()) {
     return null;
   }
-  const importToSandbox = options.importToSandbox ?? true;
+  const importToSandbox = options.importToSandbox ?? false;
 
   if (isAndroidPlatform()) {
     const path = await invoke<string | null>("android_pick_folder", {

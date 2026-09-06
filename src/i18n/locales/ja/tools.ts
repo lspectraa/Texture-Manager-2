@@ -350,6 +350,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet は既定で Steam の geode/resources/geode.loader から読み込まれます。別のゲームシートを使う場合は参照してください",
+    outputFolderRequiredNote:
+      "生成されたボタングループのシートを保存する出力フォルダーを指定してください。",
     inputGamesheet: "入力ゲームシート",
     customPlist: "カスタム plist",
     cachedBlankSheet: "キャッシュ済みの BlankSheet",

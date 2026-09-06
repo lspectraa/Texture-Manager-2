@@ -347,6 +347,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "Uses Geode’s blank button sheet by default. Browse to use a different sheet.",
+    outputFolderRequiredNote:
+      "Specify an output folder where the generated button sheets will be saved.",
     inputGamesheet: "Input gamesheet",
     customPlist: "Custom plist",
     cachedBlankSheet: "Cached BlankSheet",

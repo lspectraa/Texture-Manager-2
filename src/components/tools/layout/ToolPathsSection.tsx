@@ -1,7 +1,6 @@
 import { FolderInput } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { allocateOutputDir } from "../../../services/tauriMobileFs";
-import { isMobileShell } from "../../../utils/platform";
+import { isAppSandboxPath } from "../../../utils/pathDisplay";
 import { PickFolderFn } from "../types";
 import { FolderPathField } from "./FolderPathField";
 import { ToolSection } from "./ToolSection";
@@ -26,13 +25,20 @@ export function ToolPathsSection({
   onOutputDirChange,
   pickFolder,
   pickOutputFolder,
-  outputToolId = "batch",
+  outputToolId: _outputToolId = "batch",
   inputPlaceholder = "C:/path/to/texturepack",
   outputPlaceholder = "C:/path/to/output",
   mirrorOutputOnInputBrowse = true,
 }: ToolPathsSectionProps) {
   const { t } = useTranslation("tools");
-  const mobile = isMobileShell();
+
+  const resolveInputFolder: PickFolderFn = (assign, options) => {
+    // Prefer real filesystem paths on Android rather than sandbox imports.
+    return pickFolder(assign, {
+      ...options,
+      importToSandbox: false,
+    });
+  };
 
   const resolveOutputFolder: PickFolderFn = (assign, options) => {
     if (pickOutputFolder) {
@@ -56,21 +62,12 @@ export function ToolPathsSection({
         label={t("common.inputDirectory")}
         value={inputDir}
         onChange={onInputDirChange}
-        pickFolder={pickFolder}
+        pickFolder={resolveInputFolder}
         placeholder={inputPlaceholder}
-        sandboxImported={mobile && inputDir.trim().length > 0}
+        sandboxImported={isAppSandboxPath(inputDir)}
         onBrowse={(path) => {
           onInputDirChange(path);
           if (outputDir.trim()) {
-            return;
-          }
-          if (mobile) {
-            // Default output into app sandbox so a run can complete without a second pick.
-            void allocateOutputDir(outputToolId).then((dir) => {
-              if (dir.trim()) {
-                onOutputDirChange(dir);
-              }
-            });
             return;
           }
           if (mirrorOutputOnInputBrowse) {
@@ -84,11 +81,9 @@ export function ToolPathsSection({
         onChange={onOutputDirChange}
         pickFolder={resolveOutputFolder}
         placeholder={outputPlaceholder}
-        sandboxImported={mobile && outputDir.trim().length > 0}
+        sandboxImported={isAppSandboxPath(outputDir)}
       />
-      {!mobile ? (
-        <p className="tm-tool-section-note">{t("common.outputMirroringNote")}</p>
-      ) : null}
+      <p className="tm-tool-section-note">{t("common.outputMirroringNote")}</p>
     </ToolSection>
   );
 }

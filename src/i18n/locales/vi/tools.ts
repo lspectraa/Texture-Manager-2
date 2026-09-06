@@ -350,6 +350,8 @@ const tools: AppLocaleResources["tools"] = {
   geodeButtons: {
     sourceDescription:
       "Mặc định dùng sheet nút trống của Geode. Duyệt để dùng sheet khác.",
+    outputFolderRequiredNote:
+      "Chỉ định thư mục đầu ra nơi các trang nút được tạo sẽ được lưu.",
     inputGamesheet: "Gamesheet đầu vào",
     customPlist: "Plist tùy chỉnh",
     cachedBlankSheet: "BlankSheet đã đệm",

@@ -362,6 +362,8 @@ const tools: AppLocaleResources["tools"] = {
   geodeButtons: {
     sourceDescription:
       "По умолчанию BlankSheet загружается из Steam geode/resources/geode.loader; выберите файл, чтобы использовать другой атлас",
+    outputFolderRequiredNote:
+      "Укажите папку вывода, в которую будут сохранены созданные листы кнопок.",
     inputGamesheet: "Входной атлас",
     customPlist: "Пользовательский plist",
     cachedBlankSheet: "Кэшированный BlankSheet",

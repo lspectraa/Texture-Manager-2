@@ -289,7 +289,7 @@ fn android_pick_folder(
     access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
     import_to_sandbox: Option<bool>,
 ) -> Result<Option<String>, String> {
-    access.pick_folder(import_to_sandbox.unwrap_or(true))
+    access.pick_folder(import_to_sandbox.unwrap_or(false))
 }
 
 #[tauri::command]

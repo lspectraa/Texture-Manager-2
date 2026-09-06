@@ -1367,6 +1367,20 @@ fn resolve_atlas_path(plist_path: &Path, root_dict: &Dictionary) -> Result<PathB
     )))
 }
 
+fn resolve_atlas_path_for_write(
+    plist_path: &Path,
+    root_dict: &Dictionary,
+) -> Result<PathBuf, AppError> {
+    if let Ok(path) = resolve_atlas_path(plist_path, root_dict) {
+        return Ok(path);
+    }
+    let stem = plist_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or(AppError::InvalidPath("plist file name is invalid"))?;
+    Ok(plist_path.with_file_name(format!("{stem}.png")))
+}
+
 fn write_plist_atomically(path: &Path, value: &Value) -> Result<(), AppError> {
     let file_name = path
         .file_name()
@@ -1568,7 +1582,7 @@ fn merge_sheet_to_atlas(
     let root_dict = plist_root
         .as_dictionary()
         .ok_or_else(|| AppError::ParseError("plist root must be a dictionary".to_string()))?;
-    let atlas_path = resolve_atlas_path(plist_path, root_dict)?;
+    let atlas_path = resolve_atlas_path_for_write(plist_path, root_dict)?;
     let merger_options = MergerOptions {
         include_outside_plist_files: false,
         dimensions: None,

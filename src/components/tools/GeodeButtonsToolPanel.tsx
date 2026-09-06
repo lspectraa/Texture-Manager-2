@@ -12,6 +12,7 @@ import type {
 import type { AppSettingsView } from "../../domain/settings";
 import { isTauriRuntime } from "../../services/tauriOperations";
 import { isMobileShell } from "../../utils/platform";
+import { isAppSandboxPath } from "../../utils/pathDisplay";
 import { invokeErrorMessage } from "../../utils/invokeErrorMessage";
 import {
   autoSelectGeodeButtonsPlist,
@@ -1114,7 +1115,14 @@ export function GeodeButtonsToolPanel({
             pickFolder(assign, { ...options, importToSandbox: false })
           }
           placeholder="C:/path/to/output"
+          sandboxImported={isAppSandboxPath(outputDir)}
         />
+        <p className="tm-tool-section-note">
+          {t("geodeButtons.outputFolderRequiredNote", {
+            defaultValue:
+              "Specify an output folder where the generated button sheets will be saved.",
+          })}
+        </p>
       </ToolSection>
 
       <div className="tm-geode-workspace">

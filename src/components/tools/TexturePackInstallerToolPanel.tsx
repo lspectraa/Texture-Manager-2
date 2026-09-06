@@ -69,6 +69,7 @@ import { pickUserFile, pickUserFolder } from "../../services/tauriPicker";
 import { openPathInOs } from "../../services/tauriSettings";
 import {
   basenameForDisplay,
+  isAppSandboxPath,
   redactAbsolutePathsInText,
   shortenPathForDisplay,
 } from "../../utils/pathDisplay";
@@ -1261,6 +1262,7 @@ export function TexturePackInstallerToolPanel({
       try {
         const selected = await pickUserFolder({
           title: t("packInstaller.librarySplitOutputBrowse"),
+          importToSandbox: false,
         });
         if (selected) {
           onPicked(selected);
@@ -2664,6 +2666,7 @@ export function TexturePackInstallerToolPanel({
                       onChange={setLibrarySplitOutputDir}
                       pickFolder={pickLibrarySplitOutputFolder}
                       placeholder={t("packInstaller.librarySplitOutputPlaceholder")}
+                      sandboxImported={isAppSandboxPath(librarySplitOutputDir)}
                     />
                     <p className="tm-tool-section-note">
                       {t("packInstaller.librarySplitOutputHint")}

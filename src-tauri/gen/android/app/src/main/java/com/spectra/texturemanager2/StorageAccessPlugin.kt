@@ -35,7 +35,7 @@ import java.util.ArrayDeque
  */
 @InvokeArg
 class PickFolderArgs {
-  var importToSandbox: Boolean? = true
+  var importToSandbox: Boolean? = false
 }
 
 @InvokeArg
@@ -56,7 +56,7 @@ class CommitSaveArgs {
 
 @TauriPlugin
 class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
-  private var pendingImportToSandbox: Boolean = true
+  private var pendingImportToSandbox: Boolean = false
   private var pendingPickFileExtensions: Array<String>? = null
   private var pendingSaveUri: Uri? = null
   private var pendingSaveDefaultName: String? = null
@@ -259,11 +259,12 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
   fun pickFolder(invoke: Invoke) {
     try {
       val args = invoke.parseArgs(PickFolderArgs::class.java)
-      pendingImportToSandbox = args.importToSandbox ?: true
+      pendingImportToSandbox = args.importToSandbox ?: false
       val intent =
         Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
           addFlags(
             Intent.FLAG_GRANT_READ_URI_PERMISSION or
+              Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
               Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION,
           )
         }
@@ -282,20 +283,25 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
       }
       val uri = result.data!!.data!!
       try {
+        val flags =
+          (result.data!!.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
+            .let { if (it != 0) it else (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
         activity.contentResolver.takePersistableUriPermission(
           uri,
-          Intent.FLAG_GRANT_READ_URI_PERMISSION,
+          flags,
         )
       } catch (_: SecurityException) {
         // Some providers do not support persistable grants; read still works for this session.
       }
 
+      val realPath = filesystemPathFromTreeUri(uri)
+      if (realPath != null) {
+        Log.i(TAG, "Using filesystem folder path: $realPath")
+        resolvePath(invoke, realPath)
+        return
+      }
+
       if (!pendingImportToSandbox) {
-        val realPath = filesystemPathFromTreeUri(uri)
-        if (realPath != null) {
-          resolvePath(invoke, realPath)
-          return
-        }
         invoke.reject(
           "Could not resolve a filesystem path for that folder. Grant All files access, then pick again.",
         )
@@ -506,6 +512,12 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
           return
         }
         resolvePath(invoke, plistDest.absolutePath)
+        return
+      }
+      val fsPath = filesystemPathFromDocumentUri(uri)
+      if (fsPath != null && File(fsPath).canRead()) {
+        Log.i(TAG, "Using filesystem file path: $fsPath")
+        resolvePath(invoke, fsPath)
         return
       }
       val destDir = importsRoot()
@@ -1401,7 +1413,7 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
           } else {
             File(root, relative).absolutePath
           }
-        if (File(path).isFile) {
+        if (File(path).exists()) {
           return path
         }
       }

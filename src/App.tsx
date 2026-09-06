@@ -554,7 +554,7 @@ function App() {
     try {
       const selected = await pickUserFolder({
         title: t("common:selectFolder"),
-        importToSandbox: options?.importToSandbox ?? true,
+        importToSandbox: options?.importToSandbox ?? false,
       });
       if (selected) {
         assign(selected);
@@ -870,7 +870,7 @@ function App() {
     }
 
     if (selectedTool === "geodeButtons") {
-      if (!geodeButtonsInputDir || !geodeButtonsOutputDir) {
+      if (!geodeButtonsInputDir.trim() || !geodeButtonsOutputDir.trim()) {
         setRunError(t("errors:validation.geodeButtonsPathsRequired"));
         return;
       }

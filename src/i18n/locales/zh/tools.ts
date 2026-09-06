@@ -345,6 +345,7 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet 默认从 Steam geode/resources/geode.loader 加载；也可以浏览选择自定义 gamesheet",
+    outputFolderRequiredNote: "请指定一个用于保存生成的按钮图集的输出文件夹。",
     inputGamesheet: "输入 gamesheet",
     customPlist: "自定义 plist",
     cachedBlankSheet: "已缓存的 BlankSheet",

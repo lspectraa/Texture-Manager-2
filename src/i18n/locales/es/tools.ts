@@ -362,6 +362,8 @@ const tools: AppLocaleResources["tools"] = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet se carga de Steam geode/resources/geode.loader de forma predeterminada; examina para usar un gamesheet personalizado",
+    outputFolderRequiredNote:
+      "Especifique una carpeta de salida donde se guardarán las hojas de botones generadas.",
     inputGamesheet: "Gamesheet de entrada",
     customPlist: "Plist personalizado",
     cachedBlankSheet: "BlankSheet en caché",

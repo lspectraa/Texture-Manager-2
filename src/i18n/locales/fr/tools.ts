@@ -351,6 +351,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet est chargé depuis Steam geode/resources/geode.loader par défaut ; parcourez pour utiliser une gamesheet personnalisée",
+    outputFolderRequiredNote:
+      "Spécifiez un dossier de sortie où les feuilles de boutons générées seront enregistrées.",
     inputGamesheet: "Gamesheet d’entrée",
     customPlist: "Plist personnalisé",
     cachedBlankSheet: "BlankSheet en cache",

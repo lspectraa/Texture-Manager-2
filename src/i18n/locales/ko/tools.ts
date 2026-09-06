@@ -350,6 +350,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet는 기본적으로 Steam geode/resources/geode.loader에서 불러옵니다. 사용자 지정 게임시트를 쓰려면 직접 선택하세요",
+    outputFolderRequiredNote:
+      "생성된 버튼 시트를 저장할 출력 폴더를 지정하세요.",
     inputGamesheet: "입력 게임시트",
     customPlist: "사용자 지정 plist",
     cachedBlankSheet: "캐시된 BlankSheet",
