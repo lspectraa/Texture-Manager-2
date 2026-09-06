@@ -36,6 +36,16 @@ const navigation = {
     toolsAvailableAria: "{{count}} 個のツールが利用可能",
     comingSoonCount: "+{{count}} 個が近日公開",
     cardComingSoon: "近日公開",
+    aboutTitle: "このアプリについて",
+    aboutSubtitle: "著作権・ライセンス・リンク",
+    aboutCardLabel: "著作権と情報",
+    openPacksFolder: "パックフォルダを開く",
+    openGameFiles: "ゲームファイルを開く",
+    openSaveFolder: "セーブフォルダを開く",
+    utilitiesAria: "フォルダのショートカット",
+    openPacksFolderFailed: "パックフォルダを開けませんでした。Geometry Dashはインストールされていますか？",
+    openGameFilesFailed: "ゲームファイルフォルダを開けませんでした。Geometry Dashはインストールされていますか？",
+    openSaveFolderFailed: "セーブフォルダを開けませんでした。",
   },
   sections: {
     design: {
@@ -99,6 +109,18 @@ const navigation = {
       shortLabel: "パックインストーラー",
       description: "テクスチャパックを Geometry Dash に追加します。",
     },
+  },
+  mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
   },
 } as const;
 

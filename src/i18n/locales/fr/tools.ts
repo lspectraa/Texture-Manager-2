@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "Dossier de sortie",
     outputMirroringNote:
       "La sortie reste distincte, sauf si vous choisissez une entrée alors que le chemin de sortie est vide.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Lancer l’opération",
     running: "En cours…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Les nouveaux sprites copiés du jeu ne sont pas affinés. Vérifiez les icônes à clé de couleur à la fin.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Épaisseur de la ligne de glow",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Seuil alpha du glow",
@@ -65,6 +69,8 @@ const tools = {
       "Choisissez la version du jeu visée et le parallélisme de traitement",
     previousGameVersion: "Version précédente du jeu",
     concurrentGamesheets: "Gamesheets simultanés",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Paramètres du glow",
@@ -141,6 +147,9 @@ const tools = {
       bgChecker: "Damier",
       bgGd: "GD",
       dragHint: "Faites glisser le canvas pour déplacer l’émetteur",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "Contexte {{mode}} · Redémarrez pour relancer",
       chipGravity: "Gravité",
       chipRadius: "Rayon",
@@ -321,11 +330,9 @@ const tools = {
       resetHint: "Double-cliquez pour réinitialiser",
     },
     errors: {
-      desktopOnlyOpen: "L’ouverture de fichiers n’est disponible que dans l’application de bureau.",
-      desktopOnlySave:
-        "L’enregistrement de fichiers n’est disponible que dans l’application de bureau.",
-      desktopOnlyTexture:
-        "Le remplacement de texture n’est disponible que dans l’application de bureau.",
+      desktopOnlyOpen: "L'ouverture de fichiers nécessite l'application Texture Manager installée.",
+      desktopOnlySave: "L'enregistrement de fichiers nécessite l'application Texture Manager installée.",
+      desktopOnlyTexture: "Le remplacement de texture nécessite l'application Texture Manager installée.",
       resourcesMissing:
         "Le dossier Resources de Geometry Dash est introuvable. Définissez le chemin d’installation dans les Paramètres.",
       stockEffectFailed:
@@ -344,6 +351,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet est chargé depuis Steam geode/resources/geode.loader par défaut ; parcourez pour utiliser une gamesheet personnalisée",
+    outputFolderRequiredNote:
+      "Spécifiez un dossier de sortie où les feuilles de boutons générées seront enregistrées.",
     inputGamesheet: "Gamesheet d’entrée",
     customPlist: "Plist personnalisé",
     cachedBlankSheet: "BlankSheet en cache",
@@ -436,6 +445,7 @@ const tools = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "Plus d’actions sur le pack",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -444,6 +454,8 @@ const tools = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "Déposez un dossier ou un .zip ici",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "Parcourez un dossier ou un zip pour découvrir des packs.",
+    mobileDropCreateHint: "Parcourez un dossier de pack ou pack.png comme source.",
     browseFolder: "Parcourir un dossier",
     browseZip: "Parcourir un zip",
     sourceFolder: "Folder",
@@ -510,6 +522,28 @@ const tools = {
     createFailedTitle: "Create pack failed",
     openFolder: "Ouvrir le dossier",
     metadataPanelTitle: "Métadonnées du pack",
+    libraryPanelButtonLabel: "Détails du pack",
+    appliedPanelTitle: "Applied Packs",
+    libraryRailTabsLabel: "Library side panel",
+    libraryRailTabMetadata: "Metadata",
+    libraryRailTabApplied: "Applied",
+    appliedPriorityHint: "Lower position = higher priority (loaded first).",
+    appliedConfigPath: "Config",
+    appliedEmpty: "No packs are applied in-game yet. Add packs below or drag them here.",
+    appliedAvailableTitle: "Available packs",
+    appliedAddPack: "Add",
+    appliedSave: "Save applied order",
+    appliedSaving: "Saving…",
+    appliedSaveSuccess: "Applied pack order saved",
+    appliedMissingPack: "Pack folder missing from the game install",
+    appliedDragHandleAria: "Drag to reorder",
+    appliedDragToAddAria: "Drag to add to applied packs",
+    appliedMoveUpAria: "Move pack up",
+    appliedMoveDownAria: "Move pack down",
+    appliedRemoveAria: "Remove {{name}} from applied packs",
+    appliedUnsupportedTitle: "Applied packs unavailable",
+    appliedUnsupportedHint: "Editing in-game pack order is not supported on this platform yet.",
+    libraryActionApplyToGame: "Apply to game",
     expandPanelAria: "Expand pack metadata panel",
     collapsePanelAria: "Collapse pack metadata panel",
     showPanel: "Show pack metadata",
@@ -517,6 +551,12 @@ const tools = {
     metadataTitle: "pack.json",
     metadataCreateHint: "These fields are written when you create the pack",
     metadataInstallHint: "Edits apply to this pack when you install",
+    metadataInvalidHint:
+      "All pack.json fields (textureldr, name, id, version, author) must be filled in.",
+    metadataNoPackJsonInstallHint:
+      "This pack has no pack.json. Metadata will not be written during install.",
+    metadataNoPackJsonLibraryHint:
+      "This pack has no pack.json. Add a valid pack.json to the pack folder before editing metadata here.",
     metadataEmptyTitle: "No unit selected",
     metadataEmptyHint: "Select a pack, config tree, or mod from the install plan",
     metadataConfigSummary: "Config tree: {{label}}",

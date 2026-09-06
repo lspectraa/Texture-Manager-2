@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   FilePlus,
   FolderOpen,
@@ -17,8 +17,10 @@ import {
   X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { pickUserFile, pickUserSaveFile, finalizeUserSave } from "../../services/tauriPicker";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { usePinchZoom } from "../../hooks/usePinchZoom";
+import { isMobileShell } from "../../utils/platform";
 import {
   openParticleEditor,
   saveParticleEditor,
@@ -26,12 +28,10 @@ import {
   defaultParticleConfig,
   getParticlePreviewIconDataUrl,
   getParticleEffectSpriteDataUrl,
-  joinGameResourcePath,
   type ParticleConfig,
   type ParticlePreviewSprite,
   type TextureSource,
 } from "../../services/tauriParticleEditor";
-import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import {
   BLEND_PRESETS,
   DEFAULT_PARTICLE_CONFIG,
@@ -44,7 +44,6 @@ import {
   EFFECT_GROUP_ORDER,
   previewModeAnimatesIcon,
   effectUsesCustomizablePreviewIcon,
-  type EffectGroup,
   type GDParticleEffect,
   type PreviewMode,
 } from "../../domain/gdParticleEffects";
@@ -57,8 +56,8 @@ import {
   type ParticleEditorHistoryState,
   type ParticleEditorSnapshot,
 } from "../../services/particleEditorHistory";
-import { AppSelect, type AppSelectOption } from "../AppSelect";
 import { AppTooltip } from "../AppTooltip";
+import { MobileSheet } from "../mobile/MobileSheet";
 import {
   ParticlePreviewCanvas,
   ICON_PATH_SPEEDS,
@@ -89,13 +88,21 @@ const ZOOM_AUTO_VIEWPORT_HEIGHT_FULL = 1600;
 /** Baseline auto zoom at 1080p-class viewports — 150%. */
 const ZOOM_AUTO_ZOOM_MIN = 1.5;
 const ZOOM_AUTO_ZOOM_MAX = 2.5;
+/** Mobile default / reset zoom — 100%. */
+const ZOOM_MOBILE_DEFAULT = 1;
 
 const snapZoomToTenth = (value: number): number => Math.round(value * 10) / 10;
-const clampZoom = (value: number): number =>
-  snapZoomToTenth(clamp(value, MIN_ZOOM, MAX_ZOOM));
+const clampZoomContinuous = (value: number): number => clamp(value, MIN_ZOOM, MAX_ZOOM);
+const clampZoom = (value: number): number => snapZoomToTenth(clampZoomContinuous(value));
 
 /** Linear auto zoom from preview viewport height (same curve shape as Icon Editor). */
-function computeAutoResolutionZoom(cssViewportHeight: number): number {
+function computeAutoResolutionZoom(
+  cssViewportHeight: number,
+  mobile = false,
+): number {
+  if (mobile) {
+    return ZOOM_MOBILE_DEFAULT;
+  }
   const height = Math.max(1, cssViewportHeight);
   const span = Math.max(1, ZOOM_AUTO_VIEWPORT_HEIGHT_FULL - ZOOM_AUTO_VIEWPORT_HEIGHT_BASE);
   const linear = ZOOM_AUTO_ZOOM_MIN + (height - ZOOM_AUTO_VIEWPORT_HEIGHT_BASE) / span;
@@ -519,18 +526,29 @@ export function ParticleEditorToolPanel() {
   const [textureSource, setTextureSource] = useState<TextureSource>("none");
   const [running, setRunning] = useState(true);
   const [background, setBackground] = useState<ParticleBackground>("dark");
+  const mobileShell = isMobileShell();
   const [zoom, setZoom] = useState(() =>
     typeof window !== "undefined"
-      ? computeAutoResolutionZoom(window.innerHeight)
-      : ZOOM_AUTO_ZOOM_MIN,
+      ? computeAutoResolutionZoom(window.innerHeight, isMobileShell())
+      : isMobileShell()
+        ? ZOOM_MOBILE_DEFAULT
+        : ZOOM_AUTO_ZOOM_MIN,
   );
   const [viewportCssHeight, setViewportCssHeight] = useState(() =>
     typeof window !== "undefined" ? window.innerHeight : ZOOM_AUTO_VIEWPORT_HEIGHT_BASE,
   );
   const stageViewportRef = useRef<HTMLDivElement | null>(null);
   const lastObservedViewportHeightRef = useRef(0);
+  usePinchZoom(stageViewportRef, {
+    enabled: mobileShell,
+    zoom,
+    setZoom,
+    clamp: clampZoomContinuous,
+    finalize: clampZoom,
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
   const [effectMeta, setEffectMeta] = useState<GDParticleEffect | null>(null);
   const [resetKey, setResetKey] = useState(0);
   const [usePlistSourcePosition, setUsePlistSourcePosition] = useState(false);
@@ -589,8 +607,8 @@ export function ParticleEditorToolPanel() {
   const canUndo = history.past.length > 0;
   const canRedo = history.future.length > 0;
   const autoResolutionZoom = useMemo(
-    () => computeAutoResolutionZoom(viewportCssHeight),
-    [viewportCssHeight],
+    () => computeAutoResolutionZoom(viewportCssHeight, mobileShell),
+    [viewportCssHeight, mobileShell],
   );
   const resetHint = t("particleEditor.fields.resetHint");
 
@@ -652,25 +670,6 @@ export function ParticleEditorToolPanel() {
       ] as const satisfies readonly { id: InspectorTab; label: string }[],
     [t],
   );
-
-  const effectOptions = useMemo<AppSelectOption[]>(() => {
-    const options: AppSelectOption[] = [
-      { value: "", label: t("particleEditor.toolbar.effectCustom") },
-    ];
-    for (const group of EFFECT_GROUP_ORDER) {
-      const groupLabel = t(`particleEditor.effectGroups.${group satisfies EffectGroup}`);
-      for (const effect of getEffectsByGroup(group)) {
-        options.push({
-          value: effect.id,
-          label: t(`particleEditor.effects.${effect.id}`, {
-            defaultValue: effect.label,
-          }),
-          group: groupLabel,
-        });
-      }
-    }
-    return options;
-  }, [t]);
 
   const buildSnapshot = useCallback(
     (overrides?: Partial<ParticleEditorSnapshot>): ParticleEditorSnapshot => {
@@ -771,7 +770,7 @@ export function ParticleEditorToolPanel() {
       setViewportCssHeight((previous) => (previous === h ? previous : h));
       if (Math.abs(h - lastObservedViewportHeightRef.current) > 0.5) {
         lastObservedViewportHeightRef.current = h;
-        const nextZoom = computeAutoResolutionZoom(h);
+        const nextZoom = computeAutoResolutionZoom(h, mobileShell);
         setZoom((current) => (Math.abs(current - nextZoom) < 0.0001 ? current : nextZoom));
       }
     };
@@ -779,7 +778,7 @@ export function ParticleEditorToolPanel() {
     const observer = new ResizeObserver(update);
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
+  }, [mobileShell]);
 
   useEffect(() => {
     let cancelled = false;
@@ -837,15 +836,12 @@ export function ParticleEditorToolPanel() {
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("particleEditor.dialogs.customIconTitle"),
-        filters: [
-          { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["plist"],
+        filterName: t("particleEditor.dialogs.plistFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected?.trim()) return;
       setCustomIconPlistPath(selected);
     } catch {
       // Dialog cancelled / unavailable.
@@ -879,15 +875,12 @@ export function ParticleEditorToolPanel() {
     }
     setError(null);
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("particleEditor.dialogs.openTitle"),
-        filters: [
-          { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["plist"],
+        filterName: t("particleEditor.dialogs.plistFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected?.trim()) return;
       setBusy(true);
       const result = await openParticleEditor(selected);
       const basename = selected.split(/[\\/]/).pop() ?? "";
@@ -923,16 +916,17 @@ export function ParticleEditorToolPanel() {
       }
       setError(null);
       let targetPath = filePath;
+      let needsCommit = false;
       if (!targetPath || saveAs) {
-        const selected = await save({
+        const picked = await pickUserSaveFile({
           title: t("particleEditor.dialogs.saveTitle"),
-          filters: [
-            { name: t("particleEditor.dialogs.plistFilter"), extensions: ["plist"] },
-          ],
-          defaultPath: filePath ?? undefined,
+          extensions: ["plist"],
+          filterName: t("particleEditor.dialogs.plistFilter"),
+          defaultName: filePath ?? undefined,
         });
-        if (!selected) return;
-        targetPath = selected;
+        if (!picked) return;
+        targetPath = picked.path;
+        needsCommit = picked.needsCommit;
       }
       setBusy(true);
       try {
@@ -947,6 +941,9 @@ export function ParticleEditorToolPanel() {
           writeSiblingPng: hasTexture && hasFileName,
           embedTexture: hasTexture && (textureSource === "embedded" || !hasFileName),
         });
+        if (needsCommit) {
+          await finalizeUserSave(targetPath);
+        }
         setFilePath(targetPath);
         commitHistory({
           config,
@@ -994,65 +991,6 @@ export function ParticleEditorToolPanel() {
     });
   }, [commitHistory, usePlistSourcePosition]);
 
-  const handleEffectChange = useCallback(
-    async (effectId: string) => {
-      if (!effectId) {
-        setEffectMeta(null);
-        commitHistory(buildSnapshot({ effectId: null }));
-        return;
-      }
-      const found = EFFECT_GROUP_ORDER.flatMap((g) => getEffectsByGroup(g)).find(
-        (ef) => ef.id === effectId,
-      );
-      if (!found) return;
-      setEffectMeta(found);
-      refreshPreviewIcon(found.defaultIcon === "ship" ? "ship" : null);
-
-      if (!isTauriRuntime()) {
-        commitHistory(buildSnapshot({ effectId: found.id }));
-        return;
-      }
-
-      setBusy(true);
-      setError(null);
-      try {
-        const layout = await getGameFilesLayout();
-        if (!layout.resourcesDir?.trim()) {
-          setError(t("particleEditor.errors.resourcesMissing"));
-          commitHistory(buildSnapshot({ effectId: found.id }));
-          return;
-        }
-        const stockPath = joinGameResourcePath(layout.resourcesDir, `${found.id}.plist`);
-        const result = await openParticleEditor(stockPath);
-        // Copy settings only — do not mark the stock Resources file as opened.
-        setConfig(result.config);
-        setTextureSrc(result.texturePngDataUrl);
-        setTextureSource(result.textureSource);
-        setFilePath(null);
-        setResetKey((k) => k + 1);
-        commitHistory({
-          config: result.config,
-          textureSrc: result.texturePngDataUrl,
-          textureSource: result.textureSource,
-          filePath: null,
-          effectId: found.id,
-          usePlistSourcePosition,
-        });
-        if (result.warnings.length > 0) setError(result.warnings.join(" · "));
-      } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : t("particleEditor.errors.stockEffectFailed", { effect: found.id }),
-        );
-        commitHistory(buildSnapshot({ effectId: found.id }));
-      } finally {
-        setBusy(false);
-      }
-    },
-    [buildSnapshot, commitHistory, refreshPreviewIcon, t, usePlistSourcePosition],
-  );
-
   const handleReplaceTexture = useCallback(async () => {
     if (!isTauriRuntime()) {
       setError(t("particleEditor.errors.desktopOnlyTexture"));
@@ -1060,18 +998,12 @@ export function ParticleEditorToolPanel() {
     }
     setError(null);
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("particleEditor.dialogs.textureTitle"),
-        filters: [
-          {
-            name: t("particleEditor.dialogs.imageFilter"),
-            extensions: ["png", "jpg", "jpeg", "tiff", "bmp"],
-          },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["png", "jpg", "jpeg", "tiff", "bmp"],
+        filterName: t("particleEditor.dialogs.imageFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected?.trim()) return;
       setBusy(true);
       const dataUrl = await loadParticleEditorTexture(selected);
       const name = selected.split(/[\\/]/).pop() ?? "";
@@ -1098,58 +1030,64 @@ export function ParticleEditorToolPanel() {
   }, [commitHistory, t, updateConfig]);
 
   return (
-    <div className="tm-particle-editor">
+    <div
+      className={`tm-particle-editor${mobileShell ? " tm-particle-editor--mobile" : ""}`}
+    >
       <header className="tm-pe-toolbar">
         <div className="tm-pe-toolbar-actions">
           <ParticleToolbarTip label={t("particleEditor.toolbar.openTooltip")}>
             <button
               type="button"
-              className="tm-icon-editor-toolbar-btn"
+              className={`tm-icon-editor-toolbar-btn${mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""}`}
               onClick={() => {
                 void handleOpen();
               }}
               disabled={busy}
+              aria-label={mobileShell ? t("particleEditor.toolbar.open") : undefined}
             >
               <FolderOpen size={14} aria-hidden />
-              <span>{t("particleEditor.toolbar.open")}</span>
+              {mobileShell ? null : <span>{t("particleEditor.toolbar.open")}</span>}
             </button>
           </ParticleToolbarTip>
           <ParticleToolbarTip label={t("particleEditor.toolbar.saveTooltip")}>
             <button
               type="button"
-              className="tm-icon-editor-toolbar-btn"
+              className={`tm-icon-editor-toolbar-btn${mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""}`}
               onClick={() => {
                 void handleSave(false);
               }}
               disabled={busy || !filePath}
+              aria-label={mobileShell ? t("particleEditor.toolbar.save") : undefined}
             >
               <Save size={14} aria-hidden />
-              <span>{t("particleEditor.toolbar.save")}</span>
+              {mobileShell ? null : <span>{t("particleEditor.toolbar.save")}</span>}
             </button>
           </ParticleToolbarTip>
           <ParticleToolbarTip label={t("particleEditor.toolbar.saveAsTooltip")}>
             <button
               type="button"
-              className="tm-icon-editor-toolbar-btn"
+              className={`tm-icon-editor-toolbar-btn${mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""}`}
               onClick={() => {
                 void handleSave(true);
               }}
               disabled={busy}
+              aria-label={mobileShell ? t("particleEditor.toolbar.saveAs") : undefined}
             >
               <SaveAll size={14} aria-hidden />
-              <span>{t("particleEditor.toolbar.saveAs")}</span>
+              {mobileShell ? null : <span>{t("particleEditor.toolbar.saveAs")}</span>}
             </button>
           </ParticleToolbarTip>
           <span className="tm-icon-editor-toolbar-divider" aria-hidden />
           <ParticleToolbarTip label={t("particleEditor.toolbar.newTooltip")}>
             <button
               type="button"
-              className="tm-icon-editor-toolbar-btn"
+              className={`tm-icon-editor-toolbar-btn${mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""}`}
               onClick={handleNew}
               disabled={busy}
+              aria-label={mobileShell ? t("particleEditor.toolbar.newParticle") : undefined}
             >
               <FilePlus size={14} aria-hidden />
-              <span>{t("particleEditor.toolbar.newParticle")}</span>
+              {mobileShell ? null : <span>{t("particleEditor.toolbar.newParticle")}</span>}
             </button>
           </ParticleToolbarTip>
           <span className="tm-icon-editor-toolbar-divider" aria-hidden />
@@ -1181,24 +1119,6 @@ export function ParticleEditorToolPanel() {
               <Redo2 size={14} aria-hidden />
             </button>
           </ParticleToolbarTip>
-          <span className="tm-icon-editor-toolbar-divider" aria-hidden />
-          <div className="tm-pe-effect-pick">
-            <span className="tm-pe-effect-pick-label">
-              {t("particleEditor.toolbar.effect")}
-            </span>
-            <AppSelect
-              className="tm-pe-effect-select"
-              menuClassName="tm-pe-effect-menu"
-              aria-label={t("particleEditor.toolbar.effectTooltip")}
-              value={effectMeta?.id ?? ""}
-              options={effectOptions}
-              disabled={busy}
-              portal
-              onChange={(value) => {
-                void handleEffectChange(value);
-              }}
-            />
-          </div>
         </div>
 
         <div className="tm-pe-toolbar-meta">
@@ -1255,6 +1175,7 @@ export function ParticleEditorToolPanel() {
                 </span>
               </div>
               <div className="tm-pe-stage-transport">
+                {mobileShell ? null : (
                 <div className="tm-pe-zoom" role="group" aria-label={t("particleEditor.stage.zoomIn")}>
                   <ParticleToolbarTip label={t("particleEditor.stage.zoomOut")}>
                     <button
@@ -1290,6 +1211,17 @@ export function ParticleEditorToolPanel() {
                     </button>
                   </ParticleToolbarTip>
                 </div>
+                )}
+                {mobileShell ? (
+                  <button
+                    type="button"
+                    className={`tm-pe-inspector-toggle${mobileInspectorOpen ? " is-open" : ""}`}
+                    aria-expanded={mobileInspectorOpen}
+                    onClick={() => setMobileInspectorOpen((open) => !open)}
+                  >
+                    {t("particleEditor.stage.inspectorTab")}
+                  </button>
+                ) : null}
                 <ParticleToolbarTip
                   label={
                     running
@@ -1299,28 +1231,36 @@ export function ParticleEditorToolPanel() {
                 >
                   <button
                     type="button"
-                    className="tm-icon-editor-toolbar-btn"
+                    className={`tm-icon-editor-toolbar-btn${mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""}`}
                     onClick={() => setRunning((r) => !r)}
+                    aria-label={
+                      running
+                        ? t("particleEditor.stage.pause")
+                        : t("particleEditor.stage.play")
+                    }
                   >
                     {running ? <Pause size={14} aria-hidden /> : <Play size={14} aria-hidden />}
-                    <span>
-                      {running
-                        ? t("particleEditor.stage.pause")
-                        : t("particleEditor.stage.play")}
-                    </span>
+                    {mobileShell ? null : (
+                      <span>
+                        {running
+                          ? t("particleEditor.stage.pause")
+                          : t("particleEditor.stage.play")}
+                      </span>
+                    )}
                   </button>
                 </ParticleToolbarTip>
                 <ParticleToolbarTip label={t("particleEditor.stage.restartTooltip")}>
                   <button
                     type="button"
-                    className="tm-icon-editor-toolbar-btn"
+                    className={`tm-icon-editor-toolbar-btn${mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""}`}
                     onClick={() => {
                       setResetKey((k) => k + 1);
                       setRunning(true);
                     }}
+                    aria-label={t("particleEditor.stage.restart")}
                   >
                     <RotateCcw size={14} aria-hidden />
-                    <span>{t("particleEditor.stage.restart")}</span>
+                    {mobileShell ? null : <span>{t("particleEditor.stage.restart")}</span>}
                   </button>
                 </ParticleToolbarTip>
                 {showsPreviewIconControls ? (
@@ -1464,7 +1404,13 @@ export function ParticleEditorToolPanel() {
           </div>
         </section>
 
-        <aside className="tm-pe-inspector" aria-label={t("particleEditor.stage.title")}>
+        <ParticleInspectorShell
+          mobileShell={mobileShell}
+          mobileOpen={mobileInspectorOpen}
+          onMobileClose={() => setMobileInspectorOpen(false)}
+          title={t("particleEditor.stage.inspectorTab")}
+          ariaLabel={t("particleEditor.stage.inspectorTab")}
+        >
           <nav className="tm-pe-tabs" role="tablist">
             {inspectorTabs.map((item) => (
               <button
@@ -2215,8 +2161,45 @@ export function ParticleEditorToolPanel() {
               </div>
             ) : null}
           </div>
-        </aside>
+        </ParticleInspectorShell>
       </div>
     </div>
+  );
+}
+
+type ParticleInspectorShellProps = {
+  mobileShell: boolean;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+  title: string;
+  ariaLabel: string;
+  children: ReactNode;
+};
+
+function ParticleInspectorShell({
+  mobileShell,
+  mobileOpen,
+  onMobileClose,
+  title,
+  ariaLabel,
+  children,
+}: ParticleInspectorShellProps) {
+  if (mobileShell) {
+    return (
+      <MobileSheet
+        open={mobileOpen}
+        onClose={onMobileClose}
+        title={title}
+        className="tm-pe-inspector-sheet"
+      >
+        {children}
+      </MobileSheet>
+    );
+  }
+
+  return (
+    <aside className="tm-pe-inspector" aria-label={ariaLabel}>
+      {children}
+    </aside>
   );
 }

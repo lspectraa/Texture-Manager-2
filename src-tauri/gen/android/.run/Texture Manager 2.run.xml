@@ -1,0 +1,9 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="true" name="Texture Manager 2" type="CompoundRunConfigurationType">
+    <option name="parallelRun" value="false" />
+    <toRun name="Tauri CLI dev server" type="GradleRunConfiguration" />
+    <toRun name="Wait for Tauri dev CLI" type="GradleRunConfiguration" />
+    <toRun name="app (x86_64 emulator)" type="AndroidRunConfigurationType" />
+    <method v="2" />
+  </configuration>
+</component>

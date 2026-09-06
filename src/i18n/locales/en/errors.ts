@@ -6,6 +6,8 @@ const errors = {
   runtime: {
     folderPickerUnavailable: "Folder picker is available in Tauri runtime.",
     filePickerUnavailable: "File picker is only available in Tauri runtime.",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired: "Splitter requires both input and output directories.",
@@ -34,6 +36,8 @@ const errors = {
   geodeButtons: {
     gameFilesNotFound:
       "Could not resolve geode.loader game files. Set TM_GEOMETRY_DASH_DIR or install Geometry Dash + Geode via Steam.",
+    gameFilesNotFoundMobile:
+      "Could not resolve geode.loader under Android/media/com.geode.launcher/game/geode. Grant all-files access, then return to this screen.",
     resolveDefaultInputFailed: "Failed to resolve default input.",
     blankSheetNotFound:
       "Could not auto-find BlankSheet in geode.loader (or the selected input directory).",
@@ -44,6 +48,15 @@ const errors = {
   packInstaller: {
     geometryDashRequired:
       "Geometry Dash path not found. Set it in Settings (or install GD + Geode via Steam) before installing packs.",
+    geodeRequiredMobile:
+      "Geode folder not found on this phone’s internal storage. Install Geometry Dash with Geode Launcher, then return to this screen.",
+    geodeCheckingAccess: "Checking storage access…",
+    geodeInternalStorageHint:
+      "Looking on internal storage at {{path}}. All-files access is under Android Settings → Special app access (not the normal App permissions list).",
+    allFilesAccessRequired:
+      "Android blocked reading internal storage. Tap Grant all-files access (Special app access), allow Texture Manager 2, then return here.",
+    grantAllFilesAccess: "Grant all-files access",
+    allFilesAccessRequestFailed: "Could not open the Android all-files access settings page.",
     runtimeUnavailable: "Pack Installer is available only in the desktop app.",
     discoverFailed: "Failed to discover install units from the selected source.",
     installFailed: "Failed to install the selected pack units.",
@@ -58,11 +71,15 @@ const errors = {
       "Drop a pack folder or a .png for pack.png (use Install mode for zip archives).",
     listFailed: "Failed to list installed packs.",
     saveMetadataFailed: "Failed to save pack metadata.",
+    appliedLoadFailed: "Failed to load applied pack order.",
+    appliedSaveFailed: "Failed to save applied pack order.",
     operationFailed: "Failed to run the pack operation.",
     noLibraryPackSelected: "Select a pack from the library first.",
     openPacksFolderFailed: "Failed to open the packs folder.",
     deleteFailed: "Failed to delete the pack.",
     splitOutputRequired: "Choose an output folder before splitting the pack.",
+    metadataInvalid: "pack.json is missing required fields (textureldr, name, id, version, author).",
+    metadataNoPackJson: "This pack has no pack.json file.",
   },
   iconEditor: {
     decodeFrameFailed: "Failed to decode extracted frame image.",

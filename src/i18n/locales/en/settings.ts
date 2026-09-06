@@ -53,6 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "The Geometry Dash folder used for game files and Geode",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "Not found",
     manualOverride: "Manual override",
     autoDetected: "Auto-detected",
@@ -62,6 +63,9 @@ const settings = {
     installLocation: "Install location",
     browseHint:
       "Browse to your Geometry Dash folder, or install via Steam and re-detect.",
+    androidHint:
+      "Geode lives on internal storage at Android/media/com.geode.launcher/game/geode. Grant all-files access under Special app access, then Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "Apply path",
     clearOverride: "Clear override",
     redetect: "Re-detect",
@@ -73,14 +77,23 @@ const settings = {
     checking: "Checking…",
     upToDate: "You are on the latest version (v{{version}}).",
     available: "Version {{version}} is available (you have v{{current}}).",
-    unsupported: "Update checks require the installed desktop app.",
+    unsupported: "Update checks require the installed app.",
     checkFailed: "Could not check for updates. {{error}}",
     installBlocked: "Finish the current operation before installing an update.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Downloading and installing…",
     downloading: "Downloading update… {{percent}}%",
     installAndRestart: "Install and restart",
+    installApk: "Download and install",
     availableTitle: "Update available",
     availableMeta: "Install and restart to apply this version.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "Finish the current operation before installing.",
     later: "Later",
     dismiss: "Dismiss update",

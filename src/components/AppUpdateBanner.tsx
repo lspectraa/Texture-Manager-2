@@ -4,10 +4,13 @@ import { useTranslation } from "react-i18next";
 import {
   dismissPendingUpdate,
   downloadAndInstallPendingUpdate,
+  needsInstallPermission,
+  openInstallPermissionSettings,
   relaunchAppAfterUpdate,
   type AvailableAppUpdate,
   type UpdateDownloadProgress,
 } from "../services/tauriUpdater";
+import { isAndroidPlatform, isSimulateUpdateEnabled } from "../utils/platform";
 
 type AppUpdateBannerProps = {
   update: AvailableAppUpdate;
@@ -27,6 +30,13 @@ function shouldShowReleaseNotes(notes: string | null): boolean {
   if (normalized.includes("review assets, then publish when ready")) {
     return false;
   }
+  if (
+    normalized.includes("windows msi") &&
+    normalized.includes("macos dmg") &&
+    normalized.includes("android apk")
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -36,6 +46,8 @@ export function AppUpdateBanner({
   onDismiss,
 }: AppUpdateBannerProps) {
   const { t } = useTranslation("settings");
+  const android = isAndroidPlatform();
+  const simulate = isSimulateUpdateEnabled();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [progress, setProgress] = useState<UpdateDownloadProgress | null>(null);
@@ -47,13 +59,28 @@ export function AppUpdateBanner({
     setBusy(true);
     setError(null);
     try {
+      if (android && !simulate && (await needsInstallPermission())) {
+        await openInstallPermissionSettings();
+        setBusy(false);
+        setError(t("updates.installPermissionRequired"));
+        return;
+      }
+
       await downloadAndInstallPendingUpdate((next) => {
         setProgress(next);
       });
-      await relaunchAppAfterUpdate();
+      if (!android && !simulate) {
+        await relaunchAppAfterUpdate();
+      }
+      setBusy(false);
     } catch (err) {
       setBusy(false);
-      setError(err instanceof Error ? err.message : String(err));
+      const message = err instanceof Error ? err.message : String(err);
+      setError(
+        message === "INTEGRITY_FAILED"
+          ? t("updates.integrityFailed")
+          : message,
+      );
     }
   };
 
@@ -90,10 +117,12 @@ export function AppUpdateBanner({
               </span>
             </div>
             <p className="tm-update-banner-meta">
-              {t("updates.availableMeta", {
-                current: update.currentVersion,
-                version: update.version,
-              })}
+              {android
+                ? t("updates.availableMetaAndroid")
+                : t("updates.availableMeta", {
+                    current: update.currentVersion,
+                    version: update.version,
+                  })}
             </p>
             {showNotes ? (
               <p className="tm-update-banner-notes">{update.notes}</p>
@@ -144,7 +173,11 @@ export function AppUpdateBanner({
               strokeWidth={2}
               className={busy ? "tm-update-banner-spin" : undefined}
             />
-            {busy ? t("updates.installing") : t("updates.installAndRestart")}
+            {busy
+              ? t("updates.installing")
+              : android
+                ? t("updates.installApk")
+                : t("updates.installAndRestart")}
           </button>
           <button
             type="button"

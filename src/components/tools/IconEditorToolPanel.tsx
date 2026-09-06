@@ -8,11 +8,13 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
-import { open, save } from "@tauri-apps/plugin-dialog";
+import { pickUserFile, pickUserSaveFile, finalizeUserSave } from "../../services/tauriPicker";
 import html2canvas from "html2canvas";
 import { useTranslation } from "react-i18next";
 import { AppTooltip } from "../AppTooltip";
+import { GlassFrost } from "../GlassFrost";
 import {
   FolderOpen,
   Save,
@@ -36,11 +38,18 @@ import {
   Layers3,
   Undo2,
   Redo2,
+  MoreHorizontal,
 } from "lucide-react";
 import iconEditorBackgroundManifest from "../../config/iconEditorBackgroundManifest.json";
 import { getAppI18n } from "../../i18n";
+import { invokeErrorMessage, summarizeBackendErrorMessage, normalizeBackendErrorMessage } from "../../utils/invokeErrorMessage";
 import { isTauriRuntime } from "../../services/tauriOperations";
-import { AppSelect, type AppSelectOption } from "../AppSelect";
+import { usePinchZoom } from "../../hooks/usePinchZoom";
+import { isMobileShell } from "../../utils/platform";
+import { contentScaleForPlistPath } from "../../utils/iconEditorGraphicsTier";
+import {
+  markSuppressNextMobilePopState,
+} from "../../utils/mobileHistory";
 import {
   extractIconEditorFrames,
   getIconEditorPngDataUrl,
@@ -76,19 +85,27 @@ import {
 import { useIconEditorGeneratedGlow } from "../../hooks/useIconEditorGeneratedGlow";
 import {
   compositeGlowSourceLayers,
+  glowGenBodyLayer,
   glowGenKeyForComponent,
+  glowGenSettingsSignature,
+  glowGenSourceLayers,
+  glowGenSourceToken,
   glowMakerOwnedOffset,
+  glowOffsetForCompositeSource,
   isGlowMakerOwnedFrame,
   resolveGlowGenSettings,
   type GeneratedGlowFrame,
   type GlowGenJob,
+  type GlowGenNamedLayer,
   type GlowGenSettings,
 } from "../../utils/iconEditorGeneratedGlow";
 import { IconEditorGeneratedGlowControls } from "./IconEditorGeneratedGlowControls";
+import { MobileSheet } from "../mobile/MobileSheet";
 
 type IconLayerRole = "primary" | "secondary" | "extra" | "glow" | "capsule";
 type TintTarget = "primary" | "secondary" | "glow";
 type RobotPartId = "01" | "02" | "03" | "04";
+type IconEditorMobileSurface = "frames" | "inspector" | "colors";
 
 type BackgroundLayer = {
   id: string;
@@ -202,17 +219,19 @@ function computeSpiderFrontLegEchoWrapAnchor(
   variant: SpiderFrontLegEchoVariant,
   primaryOffset: IconEditorPoint,
   stageOriginY: number,
+  contentScale: number,
 ): { baseX: number; baseY: number } {
   const viewNudge = SPIDER_PART_VIEW_OFFSET["02"];
   const extra = variant === "flipH" ? SPIDER_FRONT_LEG_ECHO_NUDGE_FLIP : SPIDER_FRONT_LEG_ECHO_NUDGE_COPY;
   return {
     baseX:
       STAGE_ORIGIN_X +
-      primaryOffset.x * OFFSET_SCALE +
+      stageOffset(primaryOffset.x, contentScale) +
       viewNudge.x +
       SPIDER_FRONT_LEG_ECHO_SHIFT_X +
       extra.x,
-    baseY: stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y + extra.y,
+    baseY:
+      stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y + extra.y,
   };
 }
 
@@ -220,6 +239,7 @@ function computeRobotEchoWrapAnchor(
   partId: RobotPartId,
   primaryOffset: IconEditorPoint,
   stageOriginY: number,
+  contentScale: number,
 ): { baseX: number; baseY: number } {
   const viewNudge = ROBOT_PART_VIEW_OFFSET[partId];
   const extra =
@@ -231,11 +251,12 @@ function computeRobotEchoWrapAnchor(
   return {
     baseX:
       STAGE_ORIGIN_X +
-      primaryOffset.x * OFFSET_SCALE +
+      stageOffset(primaryOffset.x, contentScale) +
       viewNudge.x +
       ROBOT_ECHO_SHIFT_X +
       extra.x,
-    baseY: stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y + extra.y,
+    baseY:
+      stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y + extra.y,
   };
 }
 const STAGE_BASE_WIDTH = 980;
@@ -248,11 +269,37 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const OFFSET_STEP = 0.5;
 const OFFSET_BUMP_COARSE = 1;
-/** Plist `spriteOffset` units map 1:1 to stage pixels (do not double-apply). */
+/** Plist `spriteOffset` units map 1:1 to stage pixels at UHD; lower tiers scale up in preview. */
 const OFFSET_SCALE = 1;
 /** Nearest-neighbor display scale for stage (icons + backdrop); multiplied by zoom on the stage transform. */
 const VIEW_PIXEL_SCALE = 2;
 const ICON_VISUAL_SCALE = 1;
+
+function stageOffset(value: number, contentScale: number): number {
+  return value * OFFSET_SCALE * contentScale;
+}
+
+/** Trim inset px from the atlas — scale with tier like sprite dimensions. */
+function stageTrimPx(value: number, contentScale: number): number {
+  return value * contentScale;
+}
+
+function layerDisplaySize(
+  displayCanvas: HTMLCanvasElement | null | undefined,
+  spriteSize: IconEditorSize | undefined,
+  contentScale: number,
+): { width: number; height: number } {
+  if (displayCanvas) {
+    return {
+      width: Math.max(1, displayCanvas.width * contentScale),
+      height: Math.max(1, displayCanvas.height * contentScale),
+    };
+  }
+  return {
+    width: Math.max(1, (spriteSize?.width ?? 1) * ICON_VISUAL_SCALE * contentScale),
+    height: Math.max(1, (spriteSize?.height ?? 1) * ICON_VISUAL_SCALE * contentScale),
+  };
+}
 /** Only this fraction of the floor strip is visible (anchored to bottom). */
 const FLOOR_VISIBLE_FRACTION = 0.25;
 
@@ -329,6 +376,8 @@ const quantizeOffset = (value: number): number => Math.round(value / OFFSET_STEP
 const snapZoomToTenth = (value: number): number => Math.round(value * 10) / 10;
 const clampZoom = (value: number): number =>
   snapZoomToTenth(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value)));
+const clampZoomContinuous = (value: number): number =>
+  Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
 
 /** Scrollport height mapped to 100% auto zoom (typical 1080p-class layout). */
 const ZOOM_AUTO_VIEWPORT_HEIGHT_BASE = 1000;
@@ -352,7 +401,8 @@ type IconEditorErrorInfo = { message: string; detail: string };
 
 function toIconEditorErrorInfo(error: unknown, fallback: string): IconEditorErrorInfo {
   if (error instanceof Error) {
-    const detailParts = [error.message];
+    const normalized = normalizeBackendErrorMessage(error.message || fallback);
+    const detailParts = [normalized];
     if (error.stack && error.stack.trim() !== "") {
       detailParts.push(error.stack);
     }
@@ -367,12 +417,16 @@ function toIconEditorErrorInfo(error: unknown, fallback: string): IconEditorErro
       detailParts.push(`Cause: ${causeText}`);
     }
     return {
-      message: error.message || fallback,
+      message: summarizeBackendErrorMessage(normalized) || fallback,
       detail: detailParts.join("\n\n"),
     };
   }
   if (typeof error === "string" && error.trim() !== "") {
-    return { message: error, detail: error };
+    const normalized = normalizeBackendErrorMessage(error);
+    return {
+      message: summarizeBackendErrorMessage(normalized),
+      detail: normalized,
+    };
   }
   if (error && typeof error === "object") {
     try {
@@ -946,9 +1000,11 @@ function multiplyTintSkipPureBlack(imageData: ImageData, tintRgb: Rgb): void {
 type LayerCanvasProps = {
   sourceCanvas: HTMLCanvasElement | null;
   tint: string | null;
+  /** Upscale low-res tier sheets for in-editor preview (HD 2×, low 4×). */
+  contentScale?: number;
 };
 
-function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
+function LayerCanvas({ sourceCanvas, tint, contentScale = 1 }: LayerCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -959,8 +1015,8 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
     if (!canvas) {
       return;
     }
-    const width = Math.max(1, sourceCanvas.width);
-    const height = Math.max(1, sourceCanvas.height);
+    const width = Math.max(1, Math.round(sourceCanvas.width * contentScale));
+    const height = Math.max(1, Math.round(sourceCanvas.height * contentScale));
     canvas.width = width;
     canvas.height = height;
     const context = canvas.getContext("2d");
@@ -988,7 +1044,7 @@ function LayerCanvas({ sourceCanvas, tint }: LayerCanvasProps) {
         context.restore();
       }
     }
-  }, [sourceCanvas, tint]);
+  }, [sourceCanvas, tint, contentScale]);
 
   return <canvas ref={canvasRef} className="tm-icon-editor-layer-canvas" />;
 }
@@ -1171,6 +1227,7 @@ export function IconEditorToolPanel() {
   >({});
   const [generatedGlowFrames, setGeneratedGlowFrames] = useState<GeneratedGlowFrame[]>([]);
   const [glowGenByKey, setGlowGenByKey] = useState<Record<string, GlowGenSettings>>({});
+  const [committedGlowSignature, setCommittedGlowSignature] = useState("");
   const pendingTextureEditsRef = useRef(pendingTextureEdits);
   pendingTextureEditsRef.current = pendingTextureEdits;
   const [trimByFrameName, setTrimByFrameName] = useState<Record<string, TrimInsets>>({});
@@ -1223,10 +1280,23 @@ export function IconEditorToolPanel() {
   const [isMiddlePanning, setIsMiddlePanning] = useState(false);
   const [framesPanelCollapsed, setFramesPanelCollapsed] = useState(false);
   const [plistPanelCollapsed, setPlistPanelCollapsed] = useState(false);
+  const [mobileFramesOpen, setMobileFramesOpen] = useState(false);
+  const [mobileInspectorOpen, setMobileInspectorOpen] = useState(false);
+  const [mobileColorsOpen, setMobileColorsOpen] = useState(false);
+  const [mobileOverflowOpen, setMobileOverflowOpen] = useState(false);
+  const mobileShell = isMobileShell();
+  const toolbarIconSize = mobileShell ? 20 : 15;
+  const sheetHistoryPushedRef = useRef(false);
+  const overflowMenuRef = useRef<HTMLDivElement | null>(null);
   const [scrollportSize, setScrollportSize] = useState({ w: STAGE_BASE_WIDTH, h: 660 });
   /** Bumped after each successful sheet load so the scrollport can re-center on the icon anchor. */
   const [viewportFocusGeneration, setViewportFocusGeneration] = useState(0);
+  const resetZoomAndAlignment = useCallback(() => {
+    setZoom(autoResolutionZoom);
+    setViewportFocusGeneration((generation) => generation + 1);
+  }, [autoResolutionZoom]);
   const glowGenJobsRef = useRef<GlowGenJob[]>([]);
+  const isGeneratingGlowRef = useRef(false);
   const lastObservedScrollportHeightRef = useRef(0);
   const stageScrollPortRef = useRef<HTMLDivElement | null>(null);
   const focusStageAnchorRafRef = useRef<number | null>(null);
@@ -1238,6 +1308,131 @@ export function IconEditorToolPanel() {
     startScrollLeft: number;
     startScrollTop: number;
   } | null>(null);
+
+  usePinchZoom(stageScrollPortRef, {
+    enabled: mobileShell,
+    zoom,
+    setZoom,
+    clamp: clampZoomContinuous,
+    finalize: clampZoom,
+  });
+
+  const closeMobileSurface = useCallback(() => {
+    setMobileFramesOpen(false);
+    setMobileInspectorOpen(false);
+    setMobileColorsOpen(false);
+    if (sheetHistoryPushedRef.current) {
+      markSuppressNextMobilePopState();
+      sheetHistoryPushedRef.current = false;
+      window.history.back();
+    }
+  }, []);
+
+  const openMobileSurface = useCallback((surface: IconEditorMobileSurface) => {
+    if (!sheetHistoryPushedRef.current) {
+      window.history.pushState({ tm: "icon-sheet" }, "");
+      sheetHistoryPushedRef.current = true;
+    }
+    setMobileOverflowOpen(false);
+    switch (surface) {
+      case "frames":
+        setMobileFramesOpen(true);
+        setMobileInspectorOpen(false);
+        setMobileColorsOpen(false);
+        setFramesPanelCollapsed(false);
+        break;
+      case "inspector":
+        setMobileFramesOpen(false);
+        setMobileInspectorOpen(true);
+        setMobileColorsOpen(false);
+        setPlistPanelCollapsed(false);
+        break;
+      case "colors":
+        setMobileFramesOpen(false);
+        setMobileInspectorOpen(false);
+        setMobileColorsOpen(true);
+        break;
+      default: {
+        const _exhaustive: never = surface;
+        return _exhaustive;
+      }
+    }
+  }, []);
+
+  const toggleMobileSurface = useCallback(
+    (surface: IconEditorMobileSurface) => {
+      let isOpen = false;
+      switch (surface) {
+        case "frames":
+          isOpen = mobileFramesOpen;
+          break;
+        case "inspector":
+          isOpen = mobileInspectorOpen;
+          break;
+        case "colors":
+          isOpen = mobileColorsOpen;
+          break;
+        default: {
+          const _exhaustive: never = surface;
+          return _exhaustive;
+        }
+      }
+      if (isOpen) {
+        closeMobileSurface();
+        return;
+      }
+      openMobileSurface(surface);
+    },
+    [
+      closeMobileSurface,
+      mobileColorsOpen,
+      mobileFramesOpen,
+      mobileInspectorOpen,
+      openMobileSurface,
+    ],
+  );
+
+  useEffect(() => {
+    if (!mobileShell) {
+      return;
+    }
+    const onPopState = (event: PopStateEvent) => {
+      if (!sheetHistoryPushedRef.current) {
+        return;
+      }
+      event.stopImmediatePropagation();
+      sheetHistoryPushedRef.current = false;
+      setMobileFramesOpen(false);
+      setMobileInspectorOpen(false);
+      setMobileColorsOpen(false);
+      window.history.pushState({ tm: "tool" }, "");
+    };
+    window.addEventListener("popstate", onPopState, true);
+    return () => window.removeEventListener("popstate", onPopState, true);
+  }, [mobileShell]);
+
+  useEffect(() => {
+    if (!mobileOverflowOpen) {
+      return;
+    }
+    const onPointerDown = (event: PointerEvent) => {
+      const root = overflowMenuRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setMobileOverflowOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMobileOverflowOpen(false);
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [mobileOverflowOpen]);
 
   const frameMap = useMemo(() => {
     const map = new Map<string, IconEditorFrameInfo>();
@@ -1302,6 +1497,11 @@ export function IconEditorToolPanel() {
     return out;
   }, [generatedGlowFrames, pendingTextureEdits, splitFrameCanvases]);
 
+  const contentScale = useMemo(
+    () => contentScaleForPlistPath(sheetInfo?.plistPath ?? ""),
+    [sheetInfo?.plistPath],
+  );
+
   /** Vertical anchor from floor + primary plist geometry (base offset only; ignores unsaved drag edits). */
   const stageOriginY = useMemo(() => {
     const floorTop = computeFloorTopY();
@@ -1322,11 +1522,9 @@ export function IconEditorToolPanel() {
           const trim = effectiveTrimByFrameName[frameName] ?? { left: 0, top: 0, right: 0, bottom: 0 };
           const effectiveOffset = mergeAdjustedSpriteOffset(frame.spriteOffset, trim);
           const displayCanvas = displayFrameCanvases[frameName];
-          const displayHeight = displayCanvas
-            ? Math.max(1, displayCanvas.height)
-            : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
+          const displayHeight = layerDisplaySize(displayCanvas, frame.spriteSize, contentScale).height;
           // Origin needed for this layer's visual bottom to sit on the floor line.
-          return floorTop + effectiveOffset.y * OFFSET_SCALE - displayHeight / 2;
+          return floorTop + stageOffset(effectiveOffset.y, contentScale) - displayHeight / 2;
         })
         .filter((value): value is number => value !== null);
       if (snapCandidates.length === 0) {
@@ -1363,12 +1561,10 @@ export function IconEditorToolPanel() {
     }
     const footCanvas = displayFrameCanvases[anchorFrameName];
     const trimBottom = footCanvas ? 0 : (effectiveTrimByFrameName[anchorFrameName]?.bottom ?? 0);
-    const h = footCanvas
-      ? Math.max(1, footCanvas.height)
-      : Math.max(1, frame.spriteSize.height) * ICON_VISUAL_SCALE;
+    const h = layerDisplaySize(footCanvas, frame.spriteSize, contentScale).height;
     const oy = frame.spriteOffset.y;
-    return floorTop + oy * OFFSET_SCALE - h / 2 + trimBottom;
-  }, [sheetInfo, roleMap.primary, frameMap, effectiveTrimByFrameName, displayFrameCanvases]);
+    return floorTop + stageOffset(oy, contentScale) - h / 2 + stageTrimPx(trimBottom, contentScale);
+  }, [sheetInfo, roleMap.primary, frameMap, effectiveTrimByFrameName, displayFrameCanvases, contentScale]);
 
   const buildEditSnapshot = useCallback(
     (
@@ -1662,7 +1858,9 @@ export function IconEditorToolPanel() {
 
   const offsetDirty = Object.keys(offsetEdits).length > 0;
   const textureDirty = Object.keys(pendingTextureEdits).length > 0;
-  const generatedGlowDirty = generatedGlowFrames.length > 0;
+  const glowSettingsSignature = glowGenSettingsSignature(glowGenByKey);
+  const generatedGlowDirty =
+    glowSettingsSignature.length > 0 && glowSettingsSignature !== committedGlowSignature;
   const extraMappingDirty =
     sheetInfo !== null && roleMap.extra.trim() !== extraMappingBaseline.trim();
   const dirty = offsetDirty || extraMappingDirty || textureDirty || generatedGlowDirty;
@@ -1771,17 +1969,25 @@ export function IconEditorToolPanel() {
       setToolbarErrorDetail(t("errors:iconEditor.runtimeUnavailable"));
       return;
     }
-    const selected = await open({
-      directory: false,
-      multiple: false,
-      title: t("dialogs.selectPlistSheet"),
-      filters: [{ name: "Plist", extensions: ["plist"] }],
-    });
-    if (typeof selected !== "string" || !selected.trim()) {
-      return;
+    setToolbarError(null);
+    setToolbarErrorDetail(null);
+    try {
+      const selected = await pickUserFile({
+        title: t("dialogs.selectPlistSheet"),
+        extensions: ["plist"],
+        filterName: "Plist",
+      });
+      if (!selected?.trim()) {
+        return;
+      }
+      await loadSheet(selected);
+    } catch (error) {
+      const message = invokeErrorMessage(error, t("errors:iconEditor.loadSheetFailed"));
+      const parsed = toIconEditorErrorInfo(error, message);
+      setToolbarError(parsed.message);
+      setToolbarErrorDetail(parsed.detail);
     }
-    await loadSheet(selected);
-  }, [loadSheet]);
+  }, [loadSheet, t]);
 
   const reloadSheet = useCallback(async () => {
     if (!sheetInfo?.plistPath?.trim()) {
@@ -1825,16 +2031,17 @@ export function IconEditorToolPanel() {
   }, [extraMappingBaseline, generatedGlowFrames, offsetEdits, pendingTextureEdits, roleMap.extra]);
 
   const pickPlistSavePath = useCallback(
-    async (title: string, defaultFileName: string): Promise<string | null> => {
-      const selected = await save({
+    async (title: string, defaultFileName: string): Promise<{ path: string; needsCommit: boolean } | null> => {
+      const picked = await pickUserSaveFile({
         title,
-        defaultPath: defaultFileName,
-        filters: [{ name: "Plist", extensions: ["plist"] }],
+        defaultName: defaultFileName,
+        extensions: ["plist"],
+        filterName: "Plist",
       });
-      if (typeof selected !== "string" || !selected.trim()) {
+      if (!picked) {
         return null;
       }
-      return ensurePlistSavePath(selected);
+      return { path: ensurePlistSavePath(picked.path), needsCommit: picked.needsCommit };
     },
     [],
   );
@@ -1849,15 +2056,17 @@ export function IconEditorToolPanel() {
       return;
     }
     let targetPath = sheetInfo?.plistPath ?? null;
+    let needsCommit = false;
     if (!targetPath) {
-      const selected = await pickPlistSavePath(
+      const picked = await pickPlistSavePath(
         t("dialogs.savePlistSheet"),
         `${renameValue.trim() || "player_01-uhd"}.plist`,
       );
-      if (!selected) {
+      if (!picked) {
         return;
       }
-      targetPath = selected;
+      targetPath = picked.path;
+      needsCommit = picked.needsCommit;
     }
     setIsBusy(true);
     setToolbarError(null);
@@ -1875,8 +2084,20 @@ export function IconEditorToolPanel() {
           frameTextureUpdates,
         );
       }
+      if (needsCommit) {
+        await finalizeUserSave(targetPath);
+      }
       clearIconEditorHistory(targetPath);
       await loadSheet(targetPath, { omitBusy: true, resetHistory: true });
+      const enabledGlowJobs = glowGenJobsRef.current.filter((job) => job.enabled);
+      const glowReadyToCommit =
+        !isGeneratingGlowRef.current &&
+        enabledGlowJobs.every((job) =>
+          generatedGlowFrames.some((frame) => frame.key === job.key),
+        );
+      if (glowReadyToCommit) {
+        setCommittedGlowSignature(glowSettingsSignature);
+      }
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
         error,
@@ -1890,6 +2111,8 @@ export function IconEditorToolPanel() {
   }, [
     collectSheetWritePayload,
     dirty,
+    generatedGlowFrames,
+    glowSettingsSignature,
     loadSheet,
     pickPlistSavePath,
     renameValue,
@@ -1967,13 +2190,14 @@ export function IconEditorToolPanel() {
       return;
     }
     const defaultStem = renameValue.trim() || currentSheetStem || "player_01-uhd";
-    const selected = await pickPlistSavePath(
+    const picked = await pickPlistSavePath(
       t("dialogs.saveCopyPlistSheet"),
       `${defaultStem}.plist`,
     );
-    if (!selected) {
+    if (!picked) {
       return;
     }
+    const selected = picked.path;
     const sourcePath = sheetInfo?.plistPath ?? null;
     if (sourcePath && sameSheetPath(sourcePath, selected)) {
       await saveOffsets();
@@ -1994,6 +2218,9 @@ export function IconEditorToolPanel() {
             frameTextureUpdates,
           )
         : await createIconEditorSheet(selected, updates, frameTextureUpdates);
+      if (picked.needsCommit) {
+        await finalizeUserSave(written.plistPath);
+      }
       await loadSheet(written.plistPath, { omitBusy: true, resetHistory: true });
     } catch (error) {
       const parsed = toIconEditorErrorInfo(
@@ -2023,13 +2250,12 @@ export function IconEditorToolPanel() {
         setToolbarErrorDetail(t("errors:iconEditor.textureImportUnavailable"));
         return;
       }
-      const selected = await open({
-        directory: false,
-        multiple: false,
+      const selected = await pickUserFile({
         title: t("dialogs.selectReplacementTexture", { role: t(`roles.${role}`) }),
-        filters: [{ name: "PNG", extensions: ["png"] }],
+        extensions: ["png"],
+        filterName: "PNG",
       });
-      if (typeof selected !== "string" || !selected.trim()) {
+      if (!selected?.trim()) {
         return;
       }
       const selectedTexturePath = selected.trim();
@@ -2176,18 +2402,24 @@ export function IconEditorToolPanel() {
       "03": {},
       "04": {},
     };
-    for (const frame of sheetInfo?.frames ?? []) {
-      const parsed = parseRobotPartFrame(frame.name);
+    const consider = (name: string): void => {
+      const parsed = parseRobotPartFrame(name);
       if (!parsed) {
-        continue;
+        return;
       }
       if (parsed.role === "extra" && parsed.partId !== "01") {
-        continue;
+        return;
       }
-      byPart[parsed.partId][parsed.role] = frame.name;
+      byPart[parsed.partId][parsed.role] = name;
+    };
+    for (const frame of sheetInfo?.frames ?? []) {
+      consider(frame.name);
+    }
+    for (const name of Object.keys(pendingTextureEdits)) {
+      consider(name);
     }
     return byPart;
-  }, [sheetInfo?.frames]);
+  }, [pendingTextureEdits, sheetInfo?.frames]);
 
   const spiderPartRoleMap = useMemo(() => {
     const byPart: Record<RobotPartId, Partial<Record<IconLayerRole, string>>> = {
@@ -2196,35 +2428,32 @@ export function IconEditorToolPanel() {
       "03": {},
       "04": {},
     };
-    for (const frame of sheetInfo?.frames ?? []) {
-      const parsed = parseSpiderPartFrame(frame.name);
+    const consider = (name: string): void => {
+      const parsed = parseSpiderPartFrame(name);
       if (!parsed) {
-        continue;
+        return;
       }
       if (parsed.role === "extra" && parsed.partId !== "01") {
-        continue;
+        return;
       }
-      byPart[parsed.partId][parsed.role] = frame.name;
+      byPart[parsed.partId][parsed.role] = name;
+    };
+    for (const frame of sheetInfo?.frames ?? []) {
+      consider(frame.name);
+    }
+    for (const name of Object.keys(pendingTextureEdits)) {
+      consider(name);
     }
     return byPart;
-  }, [sheetInfo?.frames]);
+  }, [pendingTextureEdits, sheetInfo?.frames]);
 
   const iconStem = useMemo(() => {
     const fromPrimary = roleMap.primary ? parseIconFrameStem(roleMap.primary) : null;
     return fromPrimary ?? inferStemFromFrames(sheetInfo?.frames ?? Array.from(frameMap.values())) ?? "";
   }, [frameMap, roleMap.primary, sheetInfo?.frames]);
-  /** Bird/UFO capsule art sits ~30 game px higher; UHD sheets use 2× nudge. Applied as screen Y (smaller = up). */
+
+  /** Bird/UFO capsule art sits ~30px higher on HD/low sheets (UHD-tuned editor nudge; not tier-scaled). */
   const isBirdOrUfoIcon = /^(bird|ufo)_\d+$/i.test(iconStem);
-  const capsuleStageVerticalNudge = useMemo(() => {
-    if (!isBirdOrUfoIcon) {
-      return 0;
-    }
-    const plistName = sheetInfo?.plistPath.split(/[/\\]/).pop()?.toLowerCase() ?? "";
-    if (plistName.includes("-uhd")) {
-      return 0;
-    }
-    return -30;
-  }, [sheetInfo?.plistPath, isBirdOrUfoIcon]);
   const isRobotIcon =
     /^robot_\d+_0[1-4]$/i.test(iconStem) || (sheetInfo?.frames ?? []).some((frame) => Boolean(parseRobotPartFrame(frame.name)));
   const isSpiderIcon =
@@ -2236,24 +2465,30 @@ export function IconEditorToolPanel() {
     robotPartId: selectedRobotPartId,
     spiderPartId: selectedSpiderPartId,
   });
-  const activeGlowGen = resolveGlowGenSettings(glowGenByKey, activeGlowGenKey);
+  const activeGlowGen = resolveGlowGenSettings(glowGenByKey, activeGlowGenKey, contentScale);
+
+  const glowSourceCanvases = useMemo(() => {
+    const out: Record<string, HTMLCanvasElement> = { ...splitFrameCanvases };
+    for (const [name, edit] of Object.entries(pendingTextureEdits)) {
+      const trim = trimTransparentEdgesFromCanvas(edit.sourceCanvas);
+      out[name] = cropCanvasByTrimInsets(edit.sourceCanvas, trim);
+    }
+    return out;
+  }, [pendingTextureEdits, splitFrameCanvases]);
 
   const glowGenJobs = useMemo((): GlowGenJob[] => {
     const sourceCanvasFor = (frameName: string): HTMLCanvasElement | null => {
       if (!frameName) {
         return null;
       }
-      return pendingTextureEdits[frameName]?.sourceCanvas ?? splitFrameCanvases[frameName] ?? null;
+      return glowSourceCanvases[frameName] ?? null;
     };
-    const offsetFor = (frameName: string): IconEditorPoint => {
-      if (!frameName) {
-        return { x: 0, y: 0 };
-      }
-      return (
-        pendingTextureEdits[frameName]?.spriteOffset ??
-        frameMap.get(frameName)?.spriteOffset ?? { x: 0, y: 0 }
+    const namedLayerFor = (frameName: string): GlowGenNamedLayer =>
+      glowGenBodyLayer(
+        frameName,
+        sourceCanvasFor(frameName),
+        frameName ? getEffectiveOffset(frameName) : { x: 0, y: 0 },
       );
-    };
     const frameExists = (frameName: string): boolean => {
       if (!frameName) {
         return false;
@@ -2261,13 +2496,6 @@ export function IconEditorToolPanel() {
       return Boolean(
         sheetInfo?.frames.some((frame) => frame.name === frameName) || pendingTextureEdits[frameName],
       );
-    };
-    const sourceTokenFor = (frameName: string, canvas: HTMLCanvasElement | null): string => {
-      if (!frameName || !canvas) {
-        return "none";
-      }
-      const edited = pendingTextureEdits[frameName] ? "edit" : "split";
-      return `${frameName}:${edited}:${canvas.width}x${canvas.height}`;
     };
     const jobFor = (
       key: string,
@@ -2278,26 +2506,36 @@ export function IconEditorToolPanel() {
       glowName: string,
       fallbackGlowName: string,
     ): GlowGenJob => {
-      const settings = resolveGlowGenSettings(glowGenByKey, key);
+      const settings = resolveGlowGenSettings(glowGenByKey, key, contentScale);
       const resolvedGlowName = glowName || fallbackGlowName;
-      const primaryCanvas = sourceCanvasFor(primaryName);
-      const primaryOffset = offsetFor(primaryName);
-      let sourceCanvas = primaryCanvas;
-      let sourceToken = sourceTokenFor(primaryName, primaryCanvas);
-      if (settings.compositeLayers && primaryCanvas) {
-        const layers = [
-          { name: secondaryName, canvas: sourceCanvasFor(secondaryName) },
-          { name: primaryName, canvas: primaryCanvas },
-          { name: extraName, canvas: sourceCanvasFor(extraName) },
-        ].flatMap((layer) =>
-          layer.canvas
-            ? [{ canvas: layer.canvas, offset: offsetFor(layer.name) }]
-            : [],
+      const primary = {
+        name: primaryName,
+        canvas: sourceCanvasFor(primaryName),
+        offset: primaryName ? getEffectiveOffset(primaryName) : { x: 0, y: 0 },
+      };
+      const sourceSpec = {
+        compositeLayers: settings.compositeLayers,
+        primary,
+        secondary: namedLayerFor(secondaryName),
+        extra: namedLayerFor(extraName),
+      };
+      let sourceCanvas = primary.canvas;
+      let glowOffset = primary.offset;
+      if (settings.enabled && settings.compositeLayers) {
+        const composed = compositeGlowSourceLayers(
+          glowGenSourceLayers(sourceSpec),
+          primary.offset,
         );
-        sourceCanvas = compositeGlowSourceLayers(layers, primaryOffset) ?? primaryCanvas;
-        sourceToken = layers
-          .map((layer) => `${layer.offset.x},${layer.offset.y}:${layer.canvas.width}x${layer.canvas.height}`)
-          .join("+");
+        if (composed) {
+          sourceCanvas = composed.canvas;
+          glowOffset = glowOffsetForCompositeSource(
+            primary.offset,
+            composed.canvas.width,
+            composed.canvas.height,
+            composed.primaryCenterX,
+            composed.primaryCenterY,
+          );
+        }
       }
       return {
         key,
@@ -2305,9 +2543,9 @@ export function IconEditorToolPanel() {
         thickness: settings.thickness,
         compositeLayers: settings.compositeLayers,
         sourceCanvas,
-        sourceToken,
+        sourceToken: glowGenSourceToken(sourceSpec),
         glowFrameName: resolvedGlowName,
-        glowOffset: primaryName ? getEffectiveOffset(primaryName) : primaryOffset,
+        glowOffset,
         isNewFrame: !frameExists(resolvedGlowName),
         partId,
       };
@@ -2362,9 +2600,10 @@ export function IconEditorToolPanel() {
       ),
     ].filter((job) => job.glowFrameName.length > 0);
   }, [
-    frameMap,
+    contentScale,
     getEffectiveOffset,
     glowGenByKey,
+    glowSourceCanvases,
     iconStem,
     isRobotIcon,
     isSpiderIcon,
@@ -2376,13 +2615,12 @@ export function IconEditorToolPanel() {
     roleMap.secondary,
     sheetInfo?.frames,
     spiderPartRoleMap,
-    splitFrameCanvases,
   ]);
   glowGenJobsRef.current = glowGenJobs;
 
   const updateGlowGenSettings = useCallback((key: string, patch: Partial<GlowGenSettings>) => {
     setGlowGenByKey((previous) => {
-      const current = resolveGlowGenSettings(previous, key);
+      const current = resolveGlowGenSettings(previous, key, contentScale);
       return {
         ...previous,
         [key]: {
@@ -2392,13 +2630,14 @@ export function IconEditorToolPanel() {
         },
       };
     });
-  }, []);
+  }, [contentScale]);
 
   const { isGenerating: isGeneratingGlow, error: generatedGlowError } = useIconEditorGeneratedGlow({
     jobs: glowGenJobs,
     plistPath: sheetInfo?.plistPath ?? null,
     onFramesChange: setGeneratedGlowFrames,
   });
+  isGeneratingGlowRef.current = isGeneratingGlow;
 
   const robotInspectorFrameName =
     isRobotIcon && selectedRobotPartId === "01" && inspectorRole === "extra"
@@ -2515,6 +2754,7 @@ export function IconEditorToolPanel() {
     setInspectorFrameOverride(null);
     setGlowGenByKey({});
     setGeneratedGlowFrames([]);
+    setCommittedGlowSignature("");
   }, [sheetInfo?.plistPath]);
 
   useEffect(() => {
@@ -2872,16 +3112,20 @@ export function IconEditorToolPanel() {
       const stem = renameValue.trim() || sheetInfo?.plistPath.split(/[/\\]/).pop()?.replace(/\.plist$/i, "") || "icon";
       const defaultFileName = `${stem}-icon.png`;
       if (isTauriRuntime()) {
-        const savePath = await save({
+        const picked = await pickUserSaveFile({
           title: t("dialogs.saveIconPng"),
-          defaultPath: defaultFileName,
-          filters: [{ name: "PNG", extensions: ["png"] }],
+          defaultName: defaultFileName,
+          extensions: ["png"],
+          filterName: "PNG",
         });
-        if (typeof savePath === "string" && savePath.trim()) {
+        if (picked) {
           await invoke("icon_editor_save_png_data_url", {
-            outputPath: savePath,
+            outputPath: picked.path,
             pngDataUrl,
           });
+          if (picked.needsCommit) {
+            await finalizeUserSave(picked.path);
+          }
         }
       } else {
         const link = document.createElement("a");
@@ -2932,6 +3176,9 @@ export function IconEditorToolPanel() {
     if (isGlowMakerOwnedFrame(dragFrameName, glowGenJobs, generatedGlowFrames)) {
       return;
     }
+    if (mobileShell) {
+      return;
+    }
     const startOffset = getEffectiveOffset(dragFrameName);
     const historyStartSnapshot = buildEditSnapshot(
       offsetEditsRef.current,
@@ -2960,8 +3207,9 @@ export function IconEditorToolPanel() {
     const viewScale = VIEW_PIXEL_SCALE * zoom;
     const dx = (event.clientX - dragState.startClientX) / viewScale;
     const dy = (event.clientY - dragState.startClientY) / viewScale;
-    const offsetX = quantizeOffset(dragState.startOffset.x + dx / OFFSET_SCALE);
-    const offsetY = quantizeOffset(dragState.startOffset.y - dy / OFFSET_SCALE);
+    const offsetScale = OFFSET_SCALE * contentScale;
+    const offsetX = quantizeOffset(dragState.startOffset.x + dx / offsetScale);
+    const offsetY = quantizeOffset(dragState.startOffset.y - dy / offsetScale);
     setOffsetEdits((previous) => ({
       ...previous,
       [frameName]: { x: offsetX, y: offsetY },
@@ -3064,61 +3312,11 @@ export function IconEditorToolPanel() {
           : spiderPartRoleMap[selectedSpiderPartId][role] ?? ""
         : roleMap[role];
 
-    const frameOptions: AppSelectOption[] = [
-      { value: "", label: t("frames.none") },
-      ...Array.from(frameMap.values())
-        .filter((frame) => {
-          if (isRobotIcon) {
-            const parsed = parseRobotPartFrame(frame.name);
-            if (!parsed) {
-              return false;
-            }
-            return parsed.partId === selectedRobotPartId && parsed.role === role;
-          }
-          if (isSpiderIcon) {
-            const parsed = parseSpiderPartFrame(frame.name);
-            if (!parsed) {
-              return false;
-            }
-            return parsed.partId === selectedSpiderPartId && parsed.role === role;
-          }
-          return true;
-        })
-        .map((frame) => ({
-          value: frame.name,
-          label: frame.name,
-        })),
-    ];
-
-    const handleRoleFrameChange = (nextFrame: string) => {
-      if (isRobotIcon) {
-        if (role === "extra" && selectedRobotPartId === "01") {
-          commitRoleMapExtra(nextFrame);
-          setInspectorFrameOverride(nextFrame || null);
-          setInspectorRole(role);
-          return;
-        }
-        setInspectorFrameOverride(nextFrame || null);
-        setInspectorRole(role);
-        return;
-      }
-      if (isSpiderIcon) {
-        if (role === "extra" && selectedSpiderPartId === "01") {
-          commitRoleMapExtra(nextFrame);
-          setInspectorFrameOverride(nextFrame || null);
-          setInspectorRole(role);
-          return;
-        }
-        setInspectorFrameOverride(nextFrame || null);
-        setInspectorRole(role);
-        return;
-      }
-      if (role === "extra") {
-        commitRoleMapExtra(nextFrame);
-        return;
-      }
-      setRoleMap((previous) => ({ ...previous, [role]: nextFrame }));
-    };
+    const previewCanvas = roleValue ? displayFrameCanvases[roleValue] ?? null : null;
+    const previewTint =
+      role === "primary" || role === "secondary" || role === "glow"
+        ? tintByTarget[role]
+        : null;
 
     return (
       <div
@@ -3128,11 +3326,7 @@ export function IconEditorToolPanel() {
         key={role}
         onClick={(event) => {
           const target = event.target as HTMLElement;
-          if (
-            target.closest("select") ||
-            target.closest("button") ||
-            target.closest(".tm-app-select")
-          ) {
+          if (target.closest("button")) {
             return;
           }
           setInspectorRole(role);
@@ -3142,19 +3336,20 @@ export function IconEditorToolPanel() {
         <div className="tm-icon-editor-role-card-head">
           <span className="tm-icon-editor-role-chip">{t(`roles.${role}`)}</span>
           <span className="tm-icon-editor-role-card-hint">
-            {t("frames.layerFrame")}
+            {roleValue.trim() ? roleValue : t("frames.none")}
           </span>
         </div>
         <div className="tm-icon-editor-role-actions">
-          <AppSelect
-            className="tm-icon-editor-role-select"
-            value={roleValue}
-            options={frameOptions}
-            onChange={handleRoleFrameChange}
-            disabled={isBusy}
-            aria-label={`${t(`roles.${role}`)}: ${t("frames.layerFrame")}`}
-            portal
-          />
+          <div
+            className={`tm-icon-editor-role-preview${previewCanvas ? "" : " is-empty"}`}
+            aria-hidden={!previewCanvas}
+          >
+            {previewCanvas ? (
+              <LayerCanvas sourceCanvas={previewCanvas} tint={previewTint} contentScale={contentScale} />
+            ) : (
+              <span className="tm-icon-editor-role-preview-empty">{t("frames.none")}</span>
+            )}
+          </div>
           <button
             type="button"
             className="tm-icon-editor-import-icon-btn"
@@ -3191,8 +3386,167 @@ export function IconEditorToolPanel() {
     );
   });
 
+  const anyMobileSheetOpen =
+    mobileFramesOpen || mobileInspectorOpen || mobileColorsOpen;
+  const [sharedBackdropOpen, setSharedBackdropOpen] = useState(false);
+
+  useEffect(() => {
+    if (!mobileShell) {
+      setSharedBackdropOpen(false);
+      return;
+    }
+    if (anyMobileSheetOpen) {
+      setSharedBackdropOpen(true);
+      return;
+    }
+    const timeout = window.setTimeout(() => setSharedBackdropOpen(false), 360);
+    return () => window.clearTimeout(timeout);
+  }, [anyMobileSheetOpen, mobileShell]);
+
+  const mobileChromeRef = useRef<HTMLDivElement | null>(null);
+  const [floatingChromeBox, setFloatingChromeBox] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!mobileShell || !anyMobileSheetOpen) {
+      setFloatingChromeBox(null);
+      return;
+    }
+    const update = (): void => {
+      const element = mobileChromeRef.current;
+      if (!element) {
+        return;
+      }
+      const rect = element.getBoundingClientRect();
+      setFloatingChromeBox({
+        top: rect.top,
+        left: rect.left,
+        width: rect.width,
+      });
+    };
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [
+    anyMobileSheetOpen,
+    mobileColorsOpen,
+    mobileFramesOpen,
+    mobileInspectorOpen,
+    mobileShell,
+  ]);
+
+  const renderMobileSurfaceTabs = (floating: boolean): ReactNode => (
+    <div
+      ref={floating ? undefined : mobileChromeRef}
+      className={`tm-icon-editor-mobile-chrome${
+        floating ? " tm-icon-editor-mobile-chrome--floating" : ""
+      }`}
+      role="tablist"
+      aria-label={t("viewport.surfacesAria")}
+      aria-hidden={!floating && anyMobileSheetOpen ? true : undefined}
+      style={
+        floating && floatingChromeBox
+          ? {
+              top: floatingChromeBox.top,
+              left: floatingChromeBox.left,
+              width: floatingChromeBox.width,
+            }
+          : undefined
+      }
+    >
+      <button
+        type="button"
+        role="tab"
+        className={`tm-icon-editor-surface-toggle${mobileFramesOpen ? " is-open" : ""}`}
+        aria-selected={mobileFramesOpen}
+        aria-expanded={mobileFramesOpen}
+        onClick={() => toggleMobileSurface("frames")}
+      >
+        <Layers3 size={16} strokeWidth={2} aria-hidden />
+        {t("viewport.framesTab")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        className={`tm-icon-editor-surface-toggle${mobileInspectorOpen ? " is-open" : ""}`}
+        aria-selected={mobileInspectorOpen}
+        aria-expanded={mobileInspectorOpen}
+        onClick={() => toggleMobileSurface("inspector")}
+      >
+        <FileCode2 size={16} strokeWidth={2} aria-hidden />
+        {t("viewport.inspectorTab")}
+      </button>
+      <button
+        type="button"
+        role="tab"
+        className={`tm-icon-editor-surface-toggle${mobileColorsOpen ? " is-open" : ""}`}
+        aria-selected={mobileColorsOpen}
+        aria-expanded={mobileColorsOpen}
+        onClick={() => toggleMobileSurface("colors")}
+      >
+        <Palette size={16} strokeWidth={2} aria-hidden />
+        {t("viewport.colorsTab")}
+      </button>
+    </div>
+  );
+
+  const saveToolbarButton = (
+    <IconEditorToolbarTip
+      label={saveTooltip}
+      shortcut={canWriteSheet && !isBusy ? t("toolbar.saveShortcut") : undefined}
+    >
+      <button
+        type="button"
+        className={`tm-primary-btn tm-icon-editor-toolbar-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}${
+          mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
+        }`}
+        aria-label={
+          canWriteSheet && !isBusy
+            ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
+            : saveTooltip
+        }
+        onClick={() => saveOffsets().catch(() => {})}
+        disabled={!canWriteSheet || isBusy}
+      >
+        <Save size={toolbarIconSize} aria-hidden />
+        {mobileShell ? null : isBusy ? t("saveStatus.saving") : saveStatusLabel}
+      </button>
+    </IconEditorToolbarTip>
+  );
+
   return (
-    <div className="tm-icon-editor">
+    <div
+      className={`tm-icon-editor${mobileShell ? " tm-icon-editor--mobile" : ""}`}
+      data-frames-open={mobileShell && mobileFramesOpen ? "true" : undefined}
+      data-inspector-open={mobileShell && mobileInspectorOpen ? "true" : undefined}
+      data-colors-open={mobileShell && mobileColorsOpen ? "true" : undefined}
+    >
+      {mobileShell && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className={`tm-mobile-sheet-root tm-icon-editor-shared-backdrop${
+                sharedBackdropOpen ? " is-open" : ""
+              }`}
+              aria-hidden={!sharedBackdropOpen}
+            >
+              <button
+                type="button"
+                className={`tm-mobile-sheet-backdrop${sharedBackdropOpen ? " is-open" : ""}`}
+                aria-label={t("navigation:mobile.closeDrawerAria")}
+                tabIndex={sharedBackdropOpen ? 0 : -1}
+                onClick={() => {
+                  if (anyMobileSheetOpen) {
+                    closeMobileSurface();
+                  }
+                }}
+              />
+            </div>,
+            document.body,
+          )
+        : null}
       <header className="tm-icon-editor-top-bar">
         <div className="tm-icon-editor-top-bar-track">
           <div className="tm-icon-editor-top-bar-primary">
@@ -3210,7 +3564,7 @@ export function IconEditorToolPanel() {
                   onClick={() => reloadSheet().catch(() => {})}
                   disabled={!sheetInfo || isBusy}
                 >
-                  <RefreshCw size={15} aria-hidden />
+                  <RefreshCw size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
               <IconEditorToolbarTip label={t("toolbar.openTooltip")}>
@@ -3218,10 +3572,10 @@ export function IconEditorToolPanel() {
                   className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                   type="button"
                   aria-label={t("toolbar.openAria")}
-                  onClick={() => openSheet().catch(() => {})}
+                  onClick={() => void openSheet()}
                   disabled={isBusy}
                 >
-                  <FolderOpen size={15} aria-hidden />
+                  <FolderOpen size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
               <div className="tm-icon-editor-rename">
@@ -3232,6 +3586,7 @@ export function IconEditorToolPanel() {
                       onChange={(event) => setRenameValue(event.target.value)}
                       placeholder="icons-hd"
                     />
+                    {!mobileShell ? saveToolbarButton : null}
                     <IconEditorToolbarTip label={t("toolbar.renameTooltip")}>
                       <button
                         type="button"
@@ -3261,14 +3616,16 @@ export function IconEditorToolPanel() {
               </div>
               <IconEditorToolbarTip label={t("toolbar.downloadTooltip")}>
                 <button
-                  className="tm-icon-editor-toolbar-btn"
+                  className={`tm-icon-editor-toolbar-btn${
+                    mobileShell ? " tm-icon-editor-toolbar-btn--icon-only" : ""
+                  }`}
                   type="button"
                   aria-label={t("toolbar.downloadAria")}
                   onClick={() => downloadCurrentIconPng().catch(() => {})}
                   disabled={isBusy}
                 >
-                  <Download size={15} aria-hidden />
-                  {t("toolbar.download")}
+                  <Download size={toolbarIconSize} aria-hidden />
+                  {mobileShell ? null : t("toolbar.download")}
                 </button>
               </IconEditorToolbarTip>
             </div>
@@ -3290,7 +3647,7 @@ export function IconEditorToolPanel() {
                   onClick={undoEdits}
                   disabled={isBusy || !canUndoEdits}
                 >
-                  <Undo2 size={15} aria-hidden />
+                  <Undo2 size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
               <IconEditorToolbarTip
@@ -3304,32 +3661,102 @@ export function IconEditorToolPanel() {
                   onClick={redoEdits}
                   disabled={isBusy || !canRedoEdits}
                 >
-                  <Redo2 size={15} aria-hidden />
+                  <Redo2 size={toolbarIconSize} aria-hidden />
                 </button>
               </IconEditorToolbarTip>
             </div>
-            <div className="tm-icon-editor-toolbar-divider" aria-hidden />
-            <div className="tm-icon-editor-toolbar-group">
-              <IconEditorToolbarTip
-                label={saveTooltip}
-                shortcut={canWriteSheet && !isBusy ? t("toolbar.saveShortcut") : undefined}
-              >
-                <button
-                  type="button"
-                  className={`tm-primary-btn tm-icon-editor-viewport-hud-save ${saveStatusClass}`}
-                  aria-label={
-                    canWriteSheet && !isBusy
-                      ? `${saveTooltip} (${t("toolbar.saveShortcut")})`
-                      : saveTooltip
-                  }
-                  onClick={() => saveOffsets().catch(() => {})}
-                  disabled={!canWriteSheet || isBusy}
-                >
-                  <Save size={15} aria-hidden />
-                  {isBusy ? t("saveStatus.saving") : saveStatusLabel}
-                </button>
-              </IconEditorToolbarTip>
-            </div>
+            {mobileShell ? (
+              <>
+                <div className="tm-icon-editor-toolbar-divider" aria-hidden />
+                <div className="tm-icon-editor-toolbar-group">{saveToolbarButton}</div>
+              </>
+            ) : null}
+            {mobileShell ? (
+              <div className="tm-icon-editor-toolbar-overflow" ref={overflowMenuRef}>
+                <IconEditorToolbarTip label={t("toolbar.moreTooltip")}>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
+                    aria-label={t("toolbar.moreAria")}
+                    aria-haspopup="true"
+                    aria-expanded={mobileOverflowOpen}
+                    onClick={() => setMobileOverflowOpen((open) => !open)}
+                  >
+                    <MoreHorizontal size={toolbarIconSize} aria-hidden />
+                  </button>
+                </IconEditorToolbarTip>
+                {mobileOverflowOpen ? (
+                  <div className="tm-icon-editor-overflow-menu" role="menu">
+                    <label className="tm-icon-editor-overflow-rename">
+                      <span className="tm-icon-editor-overflow-label">{t("common:rename")}</span>
+                      <div className="tm-folder-input">
+                        <input
+                          value={renameValue}
+                          onChange={(event) => setRenameValue(event.target.value)}
+                          placeholder="icons-hd"
+                        />
+                        <button
+                          type="button"
+                          className="tm-icon-editor-toolbar-btn"
+                          aria-label={t("toolbar.renameAria")}
+                          disabled={!sheetInfo || isBusy}
+                          onClick={() => {
+                            renameSheet().catch(() => {});
+                            setMobileOverflowOpen(false);
+                          }}
+                        >
+                          <PencilLine size={16} aria-hidden />
+                          {t("common:rename")}
+                        </button>
+                      </div>
+                    </label>
+                    <button
+                      type="button"
+                      className="tm-icon-editor-overflow-item"
+                      role="menuitem"
+                      disabled={!canSaveCopy || isBusy}
+                      onClick={() => {
+                        saveCopy().catch(() => {});
+                        setMobileOverflowOpen(false);
+                      }}
+                    >
+                      <Copy size={16} aria-hidden />
+                      {t("common:saveCopy")}
+                    </button>
+                    <button
+                      type="button"
+                      className="tm-icon-editor-overflow-item"
+                      role="menuitem"
+                      onClick={() => {
+                        resetZoomAndAlignment();
+                        setMobileOverflowOpen(false);
+                      }}
+                    >
+                      <RotateCcw size={16} aria-hidden />
+                      {t("toolbar.resetZoom")}
+                    </button>
+                    <label className="checkbox tm-icon-editor-overflow-check">
+                      <input
+                        type="checkbox"
+                        checked={hideGlow}
+                        onChange={(event) => setHideGlow(event.target.checked)}
+                      />
+                      {t("toolbar.hideGlow")}
+                    </label>
+                    <label className="checkbox tm-icon-editor-overflow-check">
+                      <input
+                        type="checkbox"
+                        checked={hideLayerBorders}
+                        onChange={(event) => setHideLayerBorders(event.target.checked)}
+                      />
+                      {t("toolbar.hideBorder")}
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {mobileShell ? null : (
+              <>
             <div className="tm-icon-editor-toolbar-divider" aria-hidden />
             <div className="tm-icon-editor-toolbar-group">
               <div className="tm-icon-editor-zoom-row">
@@ -3363,7 +3790,7 @@ export function IconEditorToolPanel() {
                     type="button"
                     className="tm-icon-editor-toolbar-btn tm-icon-editor-toolbar-btn--icon-only"
                     aria-label={t("toolbar.resetZoom")}
-                    onClick={() => setZoom(autoResolutionZoom)}
+                    onClick={resetZoomAndAlignment}
                   >
                     <RotateCcw size={15} aria-hidden />
                   </button>
@@ -3393,6 +3820,8 @@ export function IconEditorToolPanel() {
                 </label>
               </IconEditorToolbarTip>
             </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -3472,6 +3901,116 @@ export function IconEditorToolPanel() {
         <div className="tm-icon-editor-viewport">
           <div className="tm-icon-editor-viewport-main">
             <div className="tm-icon-editor-stage-shell">
+              {mobileShell ? renderMobileSurfaceTabs(false) : null}
+              {mobileShell && anyMobileSheetOpen && floatingChromeBox && typeof document !== "undefined"
+                ? createPortal(renderMobileSurfaceTabs(true), document.body)
+                : null}
+              {mobileShell ? (
+                <div
+                  className="tm-icon-editor-zoom-hud"
+                  aria-label={t("viewport.zoomHudAria")}
+                >
+                  <GlassFrost />
+                  <span className="tm-icon-editor-zoom-hud-value">
+                    {Math.round(zoom * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-zoom-hud-reset"
+                    aria-label={t("toolbar.resetZoom")}
+                    title={t("toolbar.resetZoomTooltip", {
+                      percent: Math.round(autoResolutionZoom * 100),
+                    })}
+                    onClick={resetZoomAndAlignment}
+                  >
+                    <RotateCcw size={16} aria-hidden />
+                  </button>
+                </div>
+              ) : null}
+              {mobileShell && effectiveInspectorFrameName && !glowOffsetLocked ? (
+                <div
+                  className="tm-icon-editor-offset-dpad"
+                  role="group"
+                  aria-label={t("viewport.offsetDpadAria")}
+                >
+                  <button
+                    type="button"
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-up"
+                    aria-label={t("plist.increaseOffsetByOne", { axis: "Y" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "y",
+                        1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
+                  >
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronUp size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-left"
+                    aria-label={t("plist.decreaseOffsetByOne", { axis: "X" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "x",
+                        -1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
+                  >
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronLeft size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-right"
+                    aria-label={t("plist.increaseOffsetByOne", { axis: "X" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "x",
+                        1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
+                  >
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-offset-dpad-btn tm-icon-editor-offset-dpad-down"
+                    aria-label={t("plist.decreaseOffsetByOne", { axis: "Y" })}
+                    disabled={isBusy}
+                    onClick={() =>
+                      bumpSpriteOffset(
+                        effectiveInspectorFrameName,
+                        "y",
+                        -1,
+                        OFFSET_BUMP_COARSE,
+                      )
+                    }
+                  >
+                    <GlassFrost />
+                    <span className="tm-icon-editor-offset-dpad-btn-content">
+                      <ChevronDown size={16} strokeWidth={2.25} aria-hidden />
+                    </span>
+                  </button>
+                </div>
+              ) : null}
               <div
                 ref={stageScrollPortRef}
                 className={`tm-icon-editor-stage-scrollport${isMiddlePanning ? " tm-icon-editor-stage-scrollport--panning" : ""}`}
@@ -3481,7 +4020,11 @@ export function IconEditorToolPanel() {
                 onPointerMove={onScrollPortPointerMove}
                 onPointerUp={endScrollPortPan}
                 onPointerCancel={endScrollPortPan}
-                title={t("viewport.panAndZoomHelp")}
+                title={t(
+                  mobileShell
+                    ? "viewport.mobilePanAndZoomHelp"
+                    : "viewport.panAndZoomHelp",
+                )}
               >
                 <div
                   className="tm-icon-editor-stage-zoom-track"
@@ -3611,17 +4154,16 @@ export function IconEditorToolPanel() {
                           }
                           const primaryOffset = primaryLayer.offset;
                           const viewNudge = ROBOT_PART_VIEW_OFFSET[partId];
-                          const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                          const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                          const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`robot-part-${partId}-glow-back`}
@@ -3653,6 +4195,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -3676,16 +4219,16 @@ export function IconEditorToolPanel() {
                             partId,
                             primaryOffset,
                             stageOriginY,
+                            contentScale,
                           );
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`robot-part-${partId}-echo-glow`}
@@ -3713,6 +4256,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -3736,6 +4280,7 @@ export function IconEditorToolPanel() {
                         partId,
                         primaryOffset,
                         stageOriginY,
+                        contentScale,
                       );
                       const echoZ = ROBOT_ECHO_Z[partId] ?? 120;
                       return (
@@ -3758,15 +4303,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`echo-${layer.role}-${layer.frameName}`}
@@ -3785,6 +4329,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -3805,8 +4350,8 @@ export function IconEditorToolPanel() {
                       }
                       const primaryOffset = primaryLayer.offset;
                       const viewNudge = ROBOT_PART_VIEW_OFFSET[partId];
-                      const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                      const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
+                      const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                      const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
                       const robotPartZBase = ROBOT_PART_Z_BASE[partId];
                       return (
                         <div
@@ -3827,15 +4372,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`${layer.role}-${layer.frameName}`}
@@ -3859,6 +4403,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -3886,17 +4431,16 @@ export function IconEditorToolPanel() {
                           }
                           const primaryOffset = primaryLayer.offset;
                           const viewNudge = SPIDER_PART_VIEW_OFFSET[partId];
-                          const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                          const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                          const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`spider-part-${partId}-glow-back`}
@@ -3928,6 +4472,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -3949,16 +4494,16 @@ export function IconEditorToolPanel() {
                             variant,
                             primaryOffset,
                             stageOriginY,
+                            contentScale,
                           );
-                          const localDeltaX = (glowLayer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                          const localDeltaY = -(glowLayer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                          const localDeltaX = stageOffset(glowLayer.offset.x - primaryOffset.x, contentScale);
+                          const localDeltaY = -stageOffset(glowLayer.offset.y - primaryOffset.y, contentScale);
                           const displayCanvas = displayFrameCanvases[glowLayer.frameName];
-                          const displayW = displayCanvas
-                            ? Math.max(1, displayCanvas.width)
-                            : Math.max(1, glowLayer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                          const displayH = displayCanvas
-                            ? Math.max(1, displayCanvas.height)
-                            : Math.max(1, glowLayer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                          const { width: displayW, height: displayH } = layerDisplaySize(
+                            displayCanvas,
+                            glowLayer.frame.spriteSize,
+                            contentScale,
+                          );
                           return (
                             <div
                               key={`spider-front-leg-echo-${variant}-glow`}
@@ -3986,6 +4531,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[glowLayer.frameName] ?? null}
                                   tint={glowLayer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             </div>
@@ -4010,6 +4556,7 @@ export function IconEditorToolPanel() {
                         variant,
                         primaryOffset,
                         stageOriginY,
+                        contentScale,
                       );
                       const echoZ =
                         variant === "flipH"
@@ -4035,15 +4582,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`spider-echo-${variant}-${layer.role}-${layer.frameName}`}
@@ -4062,6 +4608,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -4082,8 +4629,8 @@ export function IconEditorToolPanel() {
                       }
                       const primaryOffset = primaryLayer.offset;
                       const viewNudge = SPIDER_PART_VIEW_OFFSET[partId];
-                      const baseX = STAGE_ORIGIN_X + primaryOffset.x * OFFSET_SCALE + viewNudge.x;
-                      const baseY = stageOriginY - primaryOffset.y * OFFSET_SCALE + viewNudge.y;
+                      const baseX = STAGE_ORIGIN_X + stageOffset(primaryOffset.x, contentScale) + viewNudge.x;
+                      const baseY = stageOriginY - stageOffset(primaryOffset.y, contentScale) + viewNudge.y;
                       const spiderPartZBase = SPIDER_PART_Z_BASE[partId];
                       return (
                         <div
@@ -4104,15 +4651,14 @@ export function IconEditorToolPanel() {
                                   : layer.role === "secondary"
                                     ? 1
                                     : 0;
-                            const localDeltaX = (layer.offset.x - primaryOffset.x) * OFFSET_SCALE;
-                            const localDeltaY = -(layer.offset.y - primaryOffset.y) * OFFSET_SCALE;
+                            const localDeltaX = stageOffset(layer.offset.x - primaryOffset.x, contentScale);
+                            const localDeltaY = -stageOffset(layer.offset.y - primaryOffset.y, contentScale);
                             const displayCanvas = displayFrameCanvases[layer.frameName];
-                            const displayW = displayCanvas
-                              ? Math.max(1, displayCanvas.width)
-                              : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                            const displayH = displayCanvas
-                              ? Math.max(1, displayCanvas.height)
-                              : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                            const { width: displayW, height: displayH } = layerDisplaySize(
+                              displayCanvas,
+                              layer.frame.spriteSize,
+                              contentScale,
+                            );
                             return (
                               <div
                                 key={`${layer.role}-${layer.frameName}`}
@@ -4136,6 +4682,7 @@ export function IconEditorToolPanel() {
                                 <LayerCanvas
                                   sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                                   tint={layer.tint}
+                                  contentScale={contentScale}
                                 />
                               </div>
                             );
@@ -4145,18 +4692,14 @@ export function IconEditorToolPanel() {
                     })}
                   </>
                 ) : layers.map((layer) => {
-                      const capsuleViewYOffset =
-                        layer.role === "capsule" ? capsuleStageVerticalNudge : 0;
-                      const anchorCenterX = STAGE_ORIGIN_X + layer.offset.x * OFFSET_SCALE;
-                      const anchorCenterY =
-                        stageOriginY - layer.offset.y * OFFSET_SCALE + capsuleViewYOffset;
+                      const anchorCenterX = STAGE_ORIGIN_X + stageOffset(layer.offset.x, contentScale);
+                      const anchorCenterY = stageOriginY - stageOffset(layer.offset.y, contentScale);
                       const displayCanvas = displayFrameCanvases[layer.frameName];
-                      const displayW = displayCanvas
-                        ? Math.max(1, displayCanvas.width)
-                        : Math.max(1, layer.frame.spriteSize.width) * ICON_VISUAL_SCALE;
-                      const displayH = displayCanvas
-                        ? Math.max(1, displayCanvas.height)
-                        : Math.max(1, layer.frame.spriteSize.height) * ICON_VISUAL_SCALE;
+                      const { width: displayW, height: displayH } = layerDisplaySize(
+                        displayCanvas,
+                        layer.frame.spriteSize,
+                        contentScale,
+                      );
                       return (
                         <div
                           key={`${layer.role}-${layer.frameName}`}
@@ -4179,6 +4722,7 @@ export function IconEditorToolPanel() {
                           <LayerCanvas
                             sourceCanvas={displayFrameCanvases[layer.frameName] ?? null}
                             tint={layer.tint}
+                            contentScale={contentScale}
                           />
                         </div>
                       );
@@ -4187,45 +4731,50 @@ export function IconEditorToolPanel() {
                   </div>
                 </div>
               </div>
-            <aside
-              className={`tm-icon-editor-roles-overlay${
+            <IconEditorPanelShell
+              mobileShell={mobileShell}
+              mobileOpen={mobileFramesOpen}
+              onMobileClose={closeMobileSurface}
+              title={t("frames.title")}
+              ariaLabel={t("frames.panelAria")}
+              desktopClassName={`tm-icon-editor-roles-overlay${
                 framesPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
               }`}
-              aria-label={t("frames.panelAria")}
-            >
-              <div className="tm-icon-editor-side-panel-head">
-                <div className="tm-icon-editor-side-panel-head-copy">
-                  <h3>
-                    <Layers3 size={14} strokeWidth={2} aria-hidden />
-                    {t("frames.title")}
-                  </h3>
-                  <p className="tm-icon-editor-side-panel-subtitle">
-                    {t("frames.subtitle")}
-                  </p>
+              collapsed={framesPanelCollapsed}
+              desktopHead={
+                <div className="tm-icon-editor-side-panel-head">
+                  <div className="tm-icon-editor-side-panel-head-copy">
+                    <h3>
+                      <Layers3 size={14} strokeWidth={2} aria-hidden />
+                      {t("frames.title")}
+                    </h3>
+                    <p className="tm-icon-editor-side-panel-subtitle">
+                      {t("frames.subtitle")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-side-panel-toggle"
+                    onClick={() => setFramesPanelCollapsed((value) => !value)}
+                    aria-expanded={!framesPanelCollapsed}
+                    aria-label={
+                      framesPanelCollapsed
+                        ? t("frames.expandPanelAria")
+                        : t("frames.collapsePanelAria")
+                    }
+                    title={
+                      framesPanelCollapsed
+                        ? t("frames.showPanel")
+                        : t("frames.hidePanel")
+                    }
+                  >
+                    <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
+                      <ChevronLeft size={15} />
+                    </span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="tm-icon-editor-side-panel-toggle"
-                  onClick={() => setFramesPanelCollapsed((value) => !value)}
-                  aria-expanded={!framesPanelCollapsed}
-                  aria-label={
-                    framesPanelCollapsed
-                      ? t("frames.expandPanelAria")
-                      : t("frames.collapsePanelAria")
-                  }
-                  title={
-                    framesPanelCollapsed
-                      ? t("frames.showPanel")
-                      : t("frames.hidePanel")
-                  }
-                >
-                  <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
-                    <ChevronLeft size={15} />
-                  </span>
-                </button>
-              </div>
-              <div className="tm-icon-editor-side-panel-body" aria-hidden={framesPanelCollapsed}>
-                <div className="tm-icon-editor-side-panel-body-inner">
+              }
+            >
               {isRobotIcon ? (
                 <div
                   className="tm-icon-editor-part-tabs"
@@ -4272,48 +4821,52 @@ export function IconEditorToolPanel() {
               <div className="tm-icon-editor-roles-scroll">
                 <div className="tm-icon-editor-role-grid">{roleControls}</div>
               </div>
-                </div>
-              </div>
-            </aside>
-            <aside
-              className={`tm-icon-editor-plist-overlay${
+            </IconEditorPanelShell>
+            <IconEditorPanelShell
+              mobileShell={mobileShell}
+              mobileOpen={mobileInspectorOpen}
+              onMobileClose={closeMobileSurface}
+              title={t("plist.title")}
+              ariaLabel={t("plist.panelAria")}
+              sheetSize="half"
+              desktopClassName={`tm-icon-editor-plist-overlay${
                 plistPanelCollapsed ? " tm-icon-editor-side-panel--collapsed" : ""
               }`}
-              aria-label={t("plist.panelAria")}
-            >
-              <div className="tm-icon-editor-side-panel-head">
-                <div className="tm-icon-editor-side-panel-head-copy">
-                  <h3>
-                    <FileCode2 size={14} strokeWidth={2} aria-hidden />
-                    {t("plist.title")}
-                  </h3>
-                  <p className="tm-icon-editor-side-panel-subtitle">
-                    {t("plist.subtitle")}
-                  </p>
+              collapsed={plistPanelCollapsed}
+              desktopHead={
+                <div className="tm-icon-editor-side-panel-head">
+                  <div className="tm-icon-editor-side-panel-head-copy">
+                    <h3>
+                      <FileCode2 size={14} strokeWidth={2} aria-hidden />
+                      {t("plist.title")}
+                    </h3>
+                    <p className="tm-icon-editor-side-panel-subtitle">
+                      {t("plist.subtitle")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="tm-icon-editor-side-panel-toggle"
+                    onClick={() => setPlistPanelCollapsed((value) => !value)}
+                    aria-expanded={!plistPanelCollapsed}
+                    aria-label={
+                      plistPanelCollapsed
+                        ? t("plist.expandPanelAria")
+                        : t("plist.collapsePanelAria")
+                    }
+                    title={
+                      plistPanelCollapsed
+                        ? t("plist.showPanel")
+                        : t("plist.hidePanel")
+                    }
+                  >
+                    <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
+                      <ChevronRight size={15} />
+                    </span>
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="tm-icon-editor-side-panel-toggle"
-                  onClick={() => setPlistPanelCollapsed((value) => !value)}
-                  aria-expanded={!plistPanelCollapsed}
-                  aria-label={
-                    plistPanelCollapsed
-                      ? t("plist.expandPanelAria")
-                      : t("plist.collapsePanelAria")
-                  }
-                  title={
-                    plistPanelCollapsed
-                      ? t("plist.showPanel")
-                      : t("plist.hidePanel")
-                  }
-                >
-                  <span className="tm-icon-editor-side-panel-toggle-icon" aria-hidden>
-                    <ChevronRight size={15} />
-                  </span>
-                </button>
-              </div>
-              <div className="tm-icon-editor-side-panel-body" aria-hidden={plistPanelCollapsed}>
-                <div className="tm-icon-editor-side-panel-body-inner">
+              }
+            >
               {isRobotIcon ? (
                 <div
                   className="tm-icon-editor-part-tabs"
@@ -4563,13 +5116,68 @@ export function IconEditorToolPanel() {
                   </div>
                 )}
               </div>
+            </IconEditorPanelShell>
+            {mobileShell ? (
+              <MobileSheet
+                open={mobileColorsOpen}
+                onClose={closeMobileSurface}
+                title={t("viewport.colorsTab")}
+                className="tm-icon-editor-sheet tm-icon-editor-sheet-colors"
+                size="half"
+                showBackdrop={false}
+              >
+                <div className="tm-icon-editor-colors-scroll">
+                  <div
+                    className="tm-icon-editor-tint-targets"
+                    role="group"
+                    aria-label={t("viewport.colorsTargetsAria")}
+                  >
+                    {TINT_TARGETS.map((target) => (
+                      <button
+                        key={target}
+                        type="button"
+                        className={`menu-btn ${activeTintTarget === target ? "active" : ""}`}
+                        onClick={() => {
+                          setActiveTintTarget(target);
+                          setInspectorRole(target);
+                        }}
+                      >
+                        {t(`roles.${target}`)}
+                      </button>
+                    ))}
+                  </div>
+                  <div
+                    className="tm-icon-editor-palette"
+                    role="group"
+                    aria-label={t("viewport.colorsPaletteAria")}
+                  >
+                    {ICON_EDITOR_PALETTE.map((color) => (
+                      <button
+                        key={color}
+                        type="button"
+                        className={`tm-icon-editor-swatch ${
+                          tintByTarget[activeTintTarget] === color ? "active" : ""
+                        }`}
+                        title={color}
+                        aria-label={color}
+                        style={{ background: color }}
+                        onClick={() =>
+                          setTintByTarget((previous) => ({
+                            ...previous,
+                            [activeTintTarget]: color,
+                          }))
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </aside>
+              </MobileSheet>
+            ) : null}
             </div>
           </div>
         </div>
       </div>
+      {mobileShell ? null : (
       <div className="tm-icon-editor-bottom-bar">
         <div className="tm-icon-editor-tint-column">
           <div className="tm-icon-editor-tint-row">
@@ -4608,6 +5216,57 @@ export function IconEditorToolPanel() {
           </div>
         </div>
       </div>
+      )}
     </div>
+  );
+}
+
+type IconEditorPanelShellProps = {
+  mobileShell: boolean;
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+  title: string;
+  ariaLabel: string;
+  desktopClassName: string;
+  collapsed: boolean;
+  desktopHead: ReactNode;
+  children: ReactNode;
+  sheetSize?: "default" | "half";
+};
+
+function IconEditorPanelShell({
+  mobileShell,
+  mobileOpen,
+  onMobileClose,
+  title,
+  ariaLabel,
+  desktopClassName,
+  collapsed,
+  desktopHead,
+  children,
+  sheetSize = "default",
+}: IconEditorPanelShellProps) {
+  if (mobileShell) {
+    return (
+      <MobileSheet
+        open={mobileOpen}
+        onClose={onMobileClose}
+        title={title}
+        className="tm-icon-editor-sheet"
+        size={sheetSize}
+        showBackdrop={false}
+      >
+        {children}
+      </MobileSheet>
+    );
+  }
+
+  return (
+    <aside className={desktopClassName} aria-label={ariaLabel}>
+      {desktopHead}
+      <div className="tm-icon-editor-side-panel-body" aria-hidden={collapsed}>
+        <div className="tm-icon-editor-side-panel-body-inner">{children}</div>
+      </div>
+    </aside>
   );
 }

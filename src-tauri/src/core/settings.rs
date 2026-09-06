@@ -6,8 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::errors::AppError;
 use crate::core::game_files::{
-    detect_geometry_dash_dir, looks_like_geometry_dash_dir, resolve_game_files_root,
-    GameFilesLayout,
+    detect_geometry_dash_dir, looks_like_geometry_dash_dir, normalize_geometry_dash_user_path,
+    resolve_game_files_root, GameFilesLayout,
 };
 use crate::core::image_io::save_dynamic_png_fast;
 use crate::core::safe_fs::{
@@ -19,7 +19,7 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 const DEFAULT_SHEET_CONCURRENCY: u32 = 5;
 const DEFAULT_LANGUAGE: &str = "en";
 /// Keep in sync with frontend `AppLanguage` / `APP_LANGUAGES`.
-const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja"];
+const SUPPORTED_LANGUAGES: &[&str] = &["en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "vi"];
 /// Default: pick a discovered `game_bg_*` once per frontend session.
 const DEFAULT_APP_BACKGROUND: &str = "random";
 const DEFAULT_APP_BACKGROUND_OPACITY: f32 = 0.75;
@@ -542,7 +542,7 @@ pub fn apply_save_request(
         if trimmed.is_empty() {
             next.geometry_dash_dir = None;
         } else {
-            let candidate = PathBuf::from(&trimmed);
+            let candidate = normalize_geometry_dash_user_path(PathBuf::from(&trimmed));
             ensure_user_absolute_path(&candidate)?;
             if !looks_like_geometry_dash_dir(&candidate) {
                 return Err(AppError::IoError(format!(
@@ -550,7 +550,7 @@ pub fn apply_save_request(
                     shorten_path_for_display(&candidate)
                 )));
             }
-            next.geometry_dash_dir = Some(trimmed);
+            next.geometry_dash_dir = Some(candidate.to_string_lossy().to_string());
         }
     }
 
@@ -701,7 +701,8 @@ mod tests {
     #[test]
     fn language_roundtrip_supported_codes() {
         for code in [
-            "en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "ES", "ru-RU", "zh-Hans",
+            "en", "es", "ru", "pt", "de", "fr", "zh", "ko", "ja", "vi", "ES", "ru-RU", "zh-Hans",
+            "vi-VN",
         ] {
             let next = apply_save_request(
                 &AppSettings::default(),

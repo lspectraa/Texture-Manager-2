@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "运行输出",
+  viewRunOutput: "查看运行输出",
   expandPanelAria: "展开运行输出面板",
   collapsePanelAria: "收起运行输出面板",
   showPanel: "显示运行输出",
@@ -56,6 +57,9 @@ const reports = {
     downloadCsvAria: "以 CSV 格式下载问题列表",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "错误",
     warning: "警告",

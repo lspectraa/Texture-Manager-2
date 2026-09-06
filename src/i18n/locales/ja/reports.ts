@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "実行結果",
+  viewRunOutput: "実行結果を表示",
   expandPanelAria: "実行結果パネルを展開",
   collapsePanelAria: "実行結果パネルを折りたたむ",
   showPanel: "実行結果を表示",
@@ -56,6 +57,9 @@ const reports = {
     downloadCsvAria: "問題を CSV としてダウンロード",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "エラー",
     warning: "警告",

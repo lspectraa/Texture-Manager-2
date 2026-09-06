@@ -9,6 +9,8 @@ const tools: AppLocaleResources["tools"] = {
     outputDirectory: "Выходная папка",
     outputMirroringNote:
       "Результаты сохраняются отдельно, если только вы не выберете входную папку при пустом поле выходного пути.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "Запустить операцию",
     running: "Выполняется…",
     range1To64: "1–64",
@@ -47,6 +49,8 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Previous game version",
     convertHint:
       "Новые спрайты из игры не увеличиваются. Проверьте цветовые иконки после завершения.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "Толщина линии свечения",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "Порог альфы свечения",
@@ -73,6 +77,8 @@ const tools: AppLocaleResources["tools"] = {
       "Выберите целевую версию игры и количество параллельных операций",
     previousGameVersion: "Предыдущая версия игры",
     concurrentGamesheets: "Одновременно обрабатываемых атласов",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Параметры свечения",
@@ -152,6 +158,9 @@ const tools: AppLocaleResources["tools"] = {
       bgChecker: "Шахматы",
       bgGd: "GD",
       dragHint: "Перетащите холст, чтобы переместить эмиттер",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "Контекст «{{mode}}» · Перезапустите для повтора",
       chipGravity: "Гравитация",
       chipRadius: "Радиус",
@@ -332,9 +341,9 @@ const tools: AppLocaleResources["tools"] = {
       resetHint: "Двойной щелчок сбрасывает",
     },
     errors: {
-      desktopOnlyOpen: "Открытие файлов доступно только в настольном приложении.",
-      desktopOnlySave: "Сохранение файлов доступно только в настольном приложении.",
-      desktopOnlyTexture: "Замена текстуры доступна только в настольном приложении.",
+      desktopOnlyOpen: "Открытие файлов требует установленного приложения Texture Manager.",
+      desktopOnlySave: "Сохранение файлов требует установленного приложения Texture Manager.",
+      desktopOnlyTexture: "Замена текстуры требует установленного приложения Texture Manager.",
       resourcesMissing:
         "Папка Resources Geometry Dash не найдена. Укажите путь установки в настройках.",
       stockEffectFailed:
@@ -353,6 +362,8 @@ const tools: AppLocaleResources["tools"] = {
   geodeButtons: {
     sourceDescription:
       "По умолчанию BlankSheet загружается из Steam geode/resources/geode.loader; выберите файл, чтобы использовать другой атлас",
+    outputFolderRequiredNote:
+      "Укажите папку вывода, в которую будут сохранены созданные листы кнопок.",
     inputGamesheet: "Входной атлас",
     customPlist: "Пользовательский plist",
     cachedBlankSheet: "Кэшированный BlankSheet",
@@ -445,6 +456,7 @@ const tools: AppLocaleResources["tools"] = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "Другие действия с паком",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -453,6 +465,8 @@ const tools: AppLocaleResources["tools"] = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "Перетащите папку или .zip сюда",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "Выберите папку или zip, чтобы найти паки.",
+    mobileDropCreateHint: "Выберите папку пака или pack.png как источник.",
     browseFolder: "Выбрать папку",
     browseZip: "Выбрать zip",
     sourceFolder: "Folder",
@@ -519,6 +533,28 @@ const tools: AppLocaleResources["tools"] = {
     createFailedTitle: "Create pack failed",
     openFolder: "Открыть папку",
     metadataPanelTitle: "Метаданные пака",
+    libraryPanelButtonLabel: "Детали пака",
+    appliedPanelTitle: "Applied Packs",
+    libraryRailTabsLabel: "Library side panel",
+    libraryRailTabMetadata: "Metadata",
+    libraryRailTabApplied: "Applied",
+    appliedPriorityHint: "Lower position = higher priority (loaded first).",
+    appliedConfigPath: "Config",
+    appliedEmpty: "No packs are applied in-game yet. Add packs below or drag them here.",
+    appliedAvailableTitle: "Available packs",
+    appliedAddPack: "Add",
+    appliedSave: "Save applied order",
+    appliedSaving: "Saving…",
+    appliedSaveSuccess: "Applied pack order saved",
+    appliedMissingPack: "Pack folder missing from the game install",
+    appliedDragHandleAria: "Drag to reorder",
+    appliedDragToAddAria: "Drag to add to applied packs",
+    appliedMoveUpAria: "Move pack up",
+    appliedMoveDownAria: "Move pack down",
+    appliedRemoveAria: "Remove {{name}} from applied packs",
+    appliedUnsupportedTitle: "Applied packs unavailable",
+    appliedUnsupportedHint: "Editing in-game pack order is not supported on this platform yet.",
+    libraryActionApplyToGame: "Apply to game",
     expandPanelAria: "Expand pack metadata panel",
     collapsePanelAria: "Collapse pack metadata panel",
     showPanel: "Show pack metadata",
@@ -526,6 +562,12 @@ const tools: AppLocaleResources["tools"] = {
     metadataTitle: "pack.json",
     metadataCreateHint: "These fields are written when you create the pack",
     metadataInstallHint: "Edits apply to this pack when you install",
+    metadataInvalidHint:
+      "All pack.json fields (textureldr, name, id, version, author) must be filled in.",
+    metadataNoPackJsonInstallHint:
+      "This pack has no pack.json. Metadata will not be written during install.",
+    metadataNoPackJsonLibraryHint:
+      "This pack has no pack.json. Add a valid pack.json to the pack folder before editing metadata here.",
     metadataEmptyTitle: "No unit selected",
     metadataEmptyHint: "Select a pack, config tree, or mod from the install plan",
     metadataConfigSummary: "Config tree: {{label}}",

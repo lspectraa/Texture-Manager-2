@@ -2,6 +2,7 @@ import type { AppLocaleResources } from "../../types";
 
 const reports: AppLocaleResources["reports"] = {
   panelTitle: "Resultado de la ejecución",
+  viewRunOutput: "Ver resultado de la ejecución",
   expandPanelAria: "Expandir el panel de resultados de la ejecución",
   collapsePanelAria: "Contraer el panel de resultados de la ejecución",
   showPanel: "Mostrar resultados de la ejecución",
@@ -59,6 +60,9 @@ const reports: AppLocaleResources["reports"] = {
     downloadCsvAria: "Descargar los problemas como CSV",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "error",
     warning: "advertencia",

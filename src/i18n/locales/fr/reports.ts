@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "Résultat de l’exécution",
+  viewRunOutput: "Afficher le résultat de l’exécution",
   expandPanelAria: "Déplier le panneau de résultats",
   collapsePanelAria: "Replier le panneau de résultats",
   showPanel: "Afficher les résultats",
@@ -56,6 +57,9 @@ const reports = {
     downloadCsvAria: "Télécharger les problèmes au format CSV",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "erreur",
     warning: "avertissement",

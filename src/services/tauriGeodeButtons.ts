@@ -55,6 +55,8 @@ export type GameFilesLayout = {
   geodeConfigDir: string;
   geodeModsDir: string;
   textureLoaderPacksDir: string;
+  /** User save root (`…/GeometryDash`), parent of `geode/`. */
+  geometryDashSaveDir: string;
   geometryDashFound: boolean;
 };
 

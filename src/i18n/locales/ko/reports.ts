@@ -1,5 +1,6 @@
 const reports = {
   panelTitle: "실행 결과",
+  viewRunOutput: "실행 결과 보기",
   expandPanelAria: "실행 결과 패널 펼치기",
   collapsePanelAria: "실행 결과 패널 접기",
   showPanel: "실행 결과 표시",
@@ -56,6 +57,9 @@ const reports = {
     downloadCsvAria: "문제 목록을 CSV로 다운로드",
     occurrence: "x{{count}}",
   },
+  exportZip: "Export zip",
+  exportZipAria: "Export output folder as a zip",
+  exportZipFailed: "Could not export the output folder.",
   severity: {
     error: "오류",
     warning: "경고",

@@ -36,6 +36,16 @@ const navigation = {
     toolsAvailableAria: "{{count}} Werkzeuge verfügbar",
     comingSoonCount: "+{{count}} demnächst",
     cardComingSoon: "Demnächst",
+    aboutTitle: "Info",
+    aboutSubtitle: "Copyright, Lizenz und Links",
+    aboutCardLabel: "Copyright & Info",
+    openPacksFolder: "Pack-Ordner öffnen",
+    openGameFiles: "Spieldateien öffnen",
+    openSaveFolder: "Speicherordner öffnen",
+    utilitiesAria: "Schnellzugriff auf Ordner",
+    openPacksFolderFailed: "Pack-Ordner konnte nicht geöffnet werden. Ist Geometry Dash installiert?",
+    openGameFilesFailed: "Spieldateien-Ordner konnte nicht geöffnet werden. Ist Geometry Dash installiert?",
+    openSaveFolderFailed: "Speicherordner konnte nicht geöffnet werden.",
   },
   sections: {
     design: {
@@ -99,6 +109,18 @@ const navigation = {
       shortLabel: "Pack-Installer",
       description: "Texture Packs in Geometry Dash hinzufügen.",
     },
+  },
+  mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
   },
 } as const;
 

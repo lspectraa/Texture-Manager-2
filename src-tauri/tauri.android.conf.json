@@ -1,0 +1,10 @@
+{
+  "bundle": {
+    "createUpdaterArtifacts": false,
+    "externalBin": [],
+    "resources": [
+      "resources/preview-icons/**/*"
+    ],
+    "targets": []
+  }
+}

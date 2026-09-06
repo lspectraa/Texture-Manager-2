@@ -46,6 +46,8 @@ const iconEditor = {
     hideGlowTooltip: "Masquer les couches de glow dans l’aperçu de l’icône",
     hideBorder: "Masquer la bordure",
     hideBorderTooltip: "Masquer les bordures de sélection sur les couches de l’icône",
+    moreTooltip: "Autres actions",
+    moreAria: "Autres actions de l’éditeur d’icônes",
   },
   saveStatus: {
     save: "Enregistrer",
@@ -60,6 +62,17 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "Faites défiler pour déplacer. Ctrl+molette pour zoomer. Clic milieu maintenu pour déplacer.",
+    mobilePanAndZoomHelp: "Glissez pour déplacer. Pincez pour zoomer.",
+    zoomHudAria: "Zoom du canevas",
+    offsetDpadAria: "Ajuster le décalage du sprite",
+    surfacesAria: "Vues de l’éditeur d’icônes",
+    previewTab: "Aperçu",
+    framesTab: "Images",
+    inspectorTab: "Inspecteur",
+    colorsTab: "Couleurs",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Association des frames aux rôles",

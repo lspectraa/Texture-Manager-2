@@ -542,6 +542,25 @@ fn pin_windows_high_performance_gpu(exe: &Path) {
 #[cfg(not(windows))]
 fn pin_windows_high_performance_gpu(_exe: &Path) {}
 
+/// Real-ESRGAN macOS zips omit the execute bit; fix at resolve time for dev copies and older installs.
+#[cfg(unix)]
+fn ensure_sidecar_executable(binary: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let Ok(meta) = fs::metadata(binary) else {
+        return;
+    };
+    let mut perms = meta.permissions();
+    let mode = perms.mode();
+    if mode & 0o111 == 0 {
+        perms.set_mode(mode | 0o755);
+        let _ = fs::set_permissions(binary, perms);
+    }
+}
+
+#[cfg(not(unix))]
+fn ensure_sidecar_executable(_binary: &Path) {}
+
 /// waifu2x-ncnn-vulkan 2025 links OpenMP (`vcomp140.dll`). Copy it next to the sidecar.
 fn ensure_sidecar_runtime_dlls(binary: &Path) {
     #[cfg(windows)]
@@ -698,6 +717,7 @@ pub fn resolve_sidecar_binary(model: UpscalerModel) -> Result<PathBuf, AppError>
     let base = binary_base_name(model);
     for path in candidate_binary_paths(base) {
         if path.is_file() {
+            ensure_sidecar_executable(&path);
             pin_windows_high_performance_gpu(&path);
             if let Ok(host) = std::env::current_exe() {
                 pin_windows_high_performance_gpu(&host);

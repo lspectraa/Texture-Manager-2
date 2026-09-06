@@ -53,6 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "ゲームファイルと Geode に使う Geometry Dash フォルダー",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "見つかりません",
     manualOverride: "手動指定",
     autoDetected: "自動検出",
@@ -62,6 +63,9 @@ const settings = {
     installLocation: "インストール場所",
     browseHint:
       "Geometry Dash のフォルダーを選ぶか、Steam でインストールしてから再検出してください。",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "パスを適用",
     clearOverride: "手動指定を解除",
     redetect: "再検出",
@@ -76,11 +80,20 @@ const settings = {
     unsupported: "更新の確認にはインストール済みのデスクトップアプリが必要です。",
     checkFailed: "更新を確認できませんでした。{{error}}",
     installBlocked: "更新をインストールする前に現在の処理を終えてください。",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "ダウンロードしてインストール中…",
     downloading: "更新をダウンロード中… {{percent}}%",
     installAndRestart: "インストールして再起動",
+    installApk: "Download and install",
     availableTitle: "アップデートがあります",
     availableMeta: "インストールして再起動すると、v{{current}} から v{{version}} に更新されます。",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "インストールの前に現在の処理を終えてください。",
     later: "後で",
     dismiss: "更新の通知を閉じる",

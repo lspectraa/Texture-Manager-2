@@ -5,12 +5,12 @@ import { AppToolId, TOOL_NAV_SECTIONS } from "../config/toolNavigation";
 import { GlassFrost } from "./GlassFrost";
 
 type AppSidebarProps = {
-  selectedTool: "home" | "settings" | AppToolId;
+  selectedTool: "home" | "settings" | "about" | AppToolId;
   collapsed: boolean;
   animating: boolean;
   onExpand: () => void;
   onCollapse: () => void;
-  onNavigate: (tool: "home" | "settings" | AppToolId) => void;
+  onNavigate: (tool: "home" | "settings" | "about" | AppToolId) => void;
   onCopyrightClick: () => void;
 };
 

@@ -14,7 +14,7 @@ use crate::core::errors::AppError;
 use crate::core::game_files::{
     discover_sheet_pairs_with_game_plist_fallback_in, sheet_uses_external_plist, GameFilesLayout,
 };
-use crate::core::glow::{glow_primary_name_for, render_icon_glow_from_primary};
+use crate::core::glow::{glow_primary_name_for, glow_maker_options_for_stem, render_icon_glow_from_primary};
 use crate::core::glow_composite::composite_icon_layers_for_glow;
 use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
 use crate::core::merger::merge_plist_from_memory;
@@ -183,6 +183,7 @@ where
     check_cancel(cancel.as_ref())?;
     let mut issues: Vec<ReportIssue> = Vec::new();
     let stem = pair.stem.clone();
+    let sheet_glow_options = glow_maker_options_for_stem(options, &stem);
     let completed_ref = Arc::clone(completed);
     let on_progress_ref = Arc::clone(on_progress);
     let plists_ref = Arc::clone(plists_done_atomic);
@@ -259,7 +260,7 @@ where
 
         // Discard the original glow sprite entirely; regenerate only from primary/composite.
         split.sprites.remove(&frame_name);
-        let generated = render_icon_glow_from_primary(&glow_source, options);
+        let generated = render_icon_glow_from_primary(&glow_source, &sheet_glow_options);
         split.sprites.insert(frame_name.clone(), generated);
     }
 

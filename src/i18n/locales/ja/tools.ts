@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "出力ディレクトリ",
     outputMirroringNote:
       "出力先が空のまま入力を選んだ場合を除き、出力は入力とは別のままになります。",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "処理を実行",
     running: "実行中…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "ゲームから追加したスプライトはシャープになりません。終わったらカラーキーのアイコンを確認してください。",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "グロウの線の太さ",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "グロウのアルファしきい値",
@@ -64,6 +68,8 @@ const tools = {
     versionTargetDescription: "対象のゲームバージョンと処理の同時実行数を選びます",
     previousGameVersion: "以前のゲームバージョン",
     concurrentGamesheets: "同時ゲームシート数",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "グロウのパラメーター",
@@ -140,6 +146,9 @@ const tools = {
       bgChecker: "市松",
       bgGd: "GD",
       dragHint: "キャンバスをドラッグしてエミッターを移動",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "{{mode}} の状況 · リスタートで再発射",
       chipGravity: "重力",
       chipRadius: "半径",
@@ -320,9 +329,9 @@ const tools = {
       resetHint: "ダブルクリックでリセット",
     },
     errors: {
-      desktopOnlyOpen: "ファイルを開く操作はデスクトップアプリでのみ利用できます。",
-      desktopOnlySave: "ファイルの保存はデスクトップアプリでのみ利用できます。",
-      desktopOnlyTexture: "テクスチャの置き換えはデスクトップアプリでのみ利用できます。",
+      desktopOnlyOpen: "ファイルを開くには、インストール済みの Texture Manager アプリが必要です。",
+      desktopOnlySave: "ファイルを保存するには、インストール済みの Texture Manager アプリが必要です。",
+      desktopOnlyTexture: "テクスチャの置き換えには、インストール済みの Texture Manager アプリが必要です。",
       resourcesMissing:
         "Geometry Dash の Resources フォルダーが見つかりません。設定でインストールパスを指定してください。",
       stockEffectFailed:
@@ -341,6 +350,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet は既定で Steam の geode/resources/geode.loader から読み込まれます。別のゲームシートを使う場合は参照してください",
+    outputFolderRequiredNote:
+      "生成されたボタングループのシートを保存する出力フォルダーを指定してください。",
     inputGamesheet: "入力ゲームシート",
     customPlist: "カスタム plist",
     cachedBlankSheet: "キャッシュ済みの BlankSheet",
@@ -432,6 +443,7 @@ const tools = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "その他のパック操作",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -440,6 +452,8 @@ const tools = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "フォルダまたは .zip をここにドロップ",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "フォルダまたは zip を参照してパックを検出します。",
+    mobileDropCreateHint: "ソースとしてパックフォルダまたは pack.png を参照します。",
     browseFolder: "フォルダを参照",
     browseZip: "zip を参照",
     sourceFolder: "Folder",
@@ -506,6 +520,28 @@ const tools = {
     createFailedTitle: "Create pack failed",
     openFolder: "フォルダを開く",
     metadataPanelTitle: "パックのメタデータ",
+    libraryPanelButtonLabel: "パックの詳細",
+    appliedPanelTitle: "Applied Packs",
+    libraryRailTabsLabel: "Library side panel",
+    libraryRailTabMetadata: "Metadata",
+    libraryRailTabApplied: "Applied",
+    appliedPriorityHint: "Lower position = higher priority (loaded first).",
+    appliedConfigPath: "Config",
+    appliedEmpty: "No packs are applied in-game yet. Add packs below or drag them here.",
+    appliedAvailableTitle: "Available packs",
+    appliedAddPack: "Add",
+    appliedSave: "Save applied order",
+    appliedSaving: "Saving…",
+    appliedSaveSuccess: "Applied pack order saved",
+    appliedMissingPack: "Pack folder missing from the game install",
+    appliedDragHandleAria: "Drag to reorder",
+    appliedDragToAddAria: "Drag to add to applied packs",
+    appliedMoveUpAria: "Move pack up",
+    appliedMoveDownAria: "Move pack down",
+    appliedRemoveAria: "Remove {{name}} from applied packs",
+    appliedUnsupportedTitle: "Applied packs unavailable",
+    appliedUnsupportedHint: "Editing in-game pack order is not supported on this platform yet.",
+    libraryActionApplyToGame: "Apply to game",
     expandPanelAria: "Expand pack metadata panel",
     collapsePanelAria: "Collapse pack metadata panel",
     showPanel: "Show pack metadata",
@@ -513,6 +549,12 @@ const tools = {
     metadataTitle: "pack.json",
     metadataCreateHint: "These fields are written when you create the pack",
     metadataInstallHint: "Edits apply to this pack when you install",
+    metadataInvalidHint:
+      "All pack.json fields (textureldr, name, id, version, author) must be filled in.",
+    metadataNoPackJsonInstallHint:
+      "This pack has no pack.json. Metadata will not be written during install.",
+    metadataNoPackJsonLibraryHint:
+      "This pack has no pack.json. Add a valid pack.json to the pack folder before editing metadata here.",
     metadataEmptyTitle: "No unit selected",
     metadataEmptyHint: "Select a pack, config tree, or mod from the install plan",
     metadataConfigSummary: "Config tree: {{label}}",

@@ -1,3 +1,5 @@
+mod android_apk_update;
+mod android_storage;
 mod core;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -35,6 +37,11 @@ use crate::core::icon_editor::{
     IconEditorFrameTextureUpdate, IconEditorFrameUpdate, IconEditorRenameResult,
     IconEditorSheetInfo,
 };
+use crate::core::mobile_fs::{
+    allocate_output_dir as allocate_output_dir_core,
+    export_directory_as_zip as export_directory_as_zip_core,
+    import_user_path as import_user_path_core,
+};
 use crate::core::operations::build_operation_plan;
 use crate::core::pack_installer::{
     cleanup_pack_install_temp as cleanup_pack_install_temp_core,
@@ -42,6 +49,7 @@ use crate::core::pack_installer::{
     delete_installed_pack as delete_installed_pack_core,
     discover_pack_install as discover_pack_install_core,
     install_pack_plan as install_pack_plan_core, list_installed_packs as list_installed_packs_core,
+    pack_png_data_url_from_dir as pack_png_data_url_from_dir_core,
     read_pack_metadata as read_pack_metadata_core, run_pack_operation as run_pack_operation_core,
     update_installed_pack_metadata as update_installed_pack_metadata_core,
     CreateTexturePackRequest, CreateTexturePackResult, InstallPackOptions, InstallPackResult,
@@ -55,6 +63,11 @@ use crate::core::particle_editor::{
 };
 use crate::core::particle_sprites::{particle_editor_sheet_frame_data_url, ParticlePreviewSprite};
 use crate::core::report::OperationReport;
+use crate::core::texture_loader_applied::{
+    read_texture_loader_applied as read_texture_loader_applied_core,
+    write_texture_loader_applied as write_texture_loader_applied_core,
+    ReadTextureLoaderAppliedResult, WriteTextureLoaderAppliedRequest,
+};
 use crate::core::settings::{
     add_custom_app_background as add_custom_app_background_core,
     app_background_png_data_url as app_background_png_data_url_core, apply_save_request,
@@ -238,6 +251,109 @@ async fn clear_geometry_dash_dir(
 }
 
 #[tauri::command]
+fn android_check_all_files_access(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+) -> Result<bool, String> {
+    access.check_all_files_access()
+}
+
+#[tauri::command]
+fn android_get_storage_status(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+) -> Result<crate::android_storage::AndroidStorageStatus, String> {
+    access.get_storage_status()
+}
+
+#[tauri::command]
+fn android_request_all_files_access(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+) -> Result<(), String> {
+    access.request_all_files_access()
+}
+
+#[tauri::command]
+fn android_probe_geode_paths() -> Result<serde_json::Value, String> {
+    #[cfg(target_os = "android")]
+    {
+        let paths = crate::core::game_files::probe_android_geode_paths();
+        return serde_json::to_value(paths).map_err(|err| err.to_string());
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        Ok(serde_json::json!([]))
+    }
+}
+
+#[tauri::command]
+fn android_pick_folder(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    import_to_sandbox: Option<bool>,
+) -> Result<Option<String>, String> {
+    access.pick_folder(import_to_sandbox.unwrap_or(false))
+}
+
+#[tauri::command]
+fn android_pick_file(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    extensions: Option<Vec<String>>,
+) -> Result<Option<String>, String> {
+    access.pick_file(extensions)
+}
+
+#[tauri::command]
+fn android_save_file(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    default_name: Option<String>,
+    extensions: Option<Vec<String>>,
+) -> Result<crate::android_storage::AndroidSavePick, String> {
+    access.save_file(default_name, extensions)
+}
+
+#[tauri::command]
+fn android_commit_save(
+    access: tauri::State<'_, crate::android_storage::AndroidStorageAccess<tauri::Wry>>,
+    source_path: String,
+) -> Result<(), String> {
+    access.commit_save(source_path)
+}
+
+#[tauri::command]
+async fn android_check_app_update(app: AppHandle) -> Result<serde_json::Value, String> {
+    crate::android_apk_update::check_app_update(app).await
+}
+
+#[tauri::command]
+async fn android_download_app_update(
+    app: AppHandle,
+    url: String,
+    sha256: String,
+) -> Result<serde_json::Value, String> {
+    crate::android_apk_update::download_app_update(app, url, sha256).await
+}
+
+#[tauri::command]
+fn android_install_app_update(
+    access: tauri::State<'_, crate::android_apk_update::AndroidApkUpdate<tauri::Wry>>,
+    path: String,
+) -> Result<(), String> {
+    access.install_apk(path)
+}
+
+#[tauri::command]
+fn android_can_install_packages(
+    access: tauri::State<'_, crate::android_apk_update::AndroidApkUpdate<tauri::Wry>>,
+) -> Result<bool, String> {
+    access.can_install_packages()
+}
+
+#[tauri::command]
+fn android_open_install_permission_settings(
+    access: tauri::State<'_, crate::android_apk_update::AndroidApkUpdate<tauri::Wry>>,
+) -> Result<(), String> {
+    access.open_install_permission_settings()
+}
+
+#[tauri::command]
 async fn redetect_geometry_dash_dir(
     game_files: tauri::State<'_, GameFilesState>,
 ) -> Result<AppSettingsView, String> {
@@ -276,17 +392,26 @@ fn open_path_in_os(
     std::fs::create_dir_all(&root)
         .map_err(|err| format!("failed to ensure game-files root exists: {err}"))?;
 
-    // Allow game-files root, or Geode config/mods under a resolved GD install
-    // (Create Pack "open folder" targets texture-loader packs).
+    // Allow game-files root, GD install + Geode config/mods, and the user save root.
     let allowed_roots: Vec<std::path::PathBuf> = {
         let mut roots = vec![root];
         if layout.geometry_dash_found() {
+            let gd = layout.geometry_dash_dir.clone();
             let config = layout.geode_config();
             let mods = layout.geode_mods();
+            let packs = layout.texture_loader_packs();
             let _ = std::fs::create_dir_all(&config);
             let _ = std::fs::create_dir_all(&mods);
+            let _ = std::fs::create_dir_all(&packs);
+            roots.push(gd);
             roots.push(config);
             roots.push(mods);
+        }
+        if let Ok(save_dir) =
+            crate::core::game_files::geode_user_data::resolve_geometry_dash_save_dir()
+        {
+            let _ = std::fs::create_dir_all(&save_dir);
+            roots.push(save_dir);
         }
         roots
     };
@@ -302,19 +427,14 @@ fn open_path_in_os(
             Err(err) => last_err = Some(err),
         }
     }
+    let denied_msg = "Only directories under the Texture Manager game-files folder, Geometry Dash install, Geode config/mods, or save folder can be opened.";
     let target_canon = target_canon.ok_or_else(|| {
         last_err
             .map(|err| err.to_string())
-            .unwrap_or_else(|| {
-                "Only directories under the Texture Manager game-files folder or Geode config/mods can be opened."
-                    .to_string()
-            })
+            .unwrap_or_else(|| denied_msg.to_string())
     })?;
     if !target_canon.is_dir() {
-        return Err(
-            "Only directories under the Texture Manager game-files folder or Geode config/mods can be opened."
-                .to_string(),
-        );
+        return Err(denied_msg.to_string());
     }
 
     app.opener()
@@ -349,6 +469,25 @@ impl OperationCancel {
 #[tauri::command]
 fn cancel_operation(cancel: tauri::State<'_, OperationCancel>) {
     cancel.request_cancel();
+}
+
+#[tauri::command]
+fn import_user_path(source_path: String) -> Result<String, String> {
+    import_user_path_core(&source_path)
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn allocate_output_dir(tool_id: String) -> Result<String, String> {
+    allocate_output_dir_core(&tool_id)
+        .map(|path| path.to_string_lossy().into_owned())
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+fn export_directory_as_zip(source_dir: String, zip_path: String) -> Result<(), String> {
+    export_directory_as_zip_core(&source_dir, &zip_path).map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -655,6 +794,14 @@ async fn list_installed_packs(
 }
 
 #[tauri::command]
+async fn pack_png_data_url_from_dir(pack_dir: String) -> Result<Option<String>, String> {
+    run_blocking(move || {
+        pack_png_data_url_from_dir_core(pack_dir.as_str()).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
 async fn update_installed_pack_metadata(
     game_files: tauri::State<'_, GameFilesState>,
     pack_dir: String,
@@ -672,6 +819,29 @@ async fn update_installed_pack_metadata(
             &layout,
         )
         .map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn read_texture_loader_applied(
+    game_files: tauri::State<'_, GameFilesState>,
+) -> Result<ReadTextureLoaderAppliedResult, String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        read_texture_loader_applied_core(&layout).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn write_texture_loader_applied(
+    game_files: tauri::State<'_, GameFilesState>,
+    request: WriteTextureLoaderAppliedRequest,
+) -> Result<(), String> {
+    let layout = game_files.snapshot();
+    run_blocking(move || {
+        write_texture_loader_applied_core(&layout, &request).map_err(|err| err.to_string())
     })
     .await
 }
@@ -836,20 +1006,30 @@ async fn particle_editor_sheet_frame_cmd(
 pub fn run() {
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
-        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init());
 
     #[cfg(desktop)]
     {
-        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        builder = builder
+            .plugin(tauri_plugin_process::init())
+            .plugin(tauri_plugin_updater::Builder::new().build());
     }
 
     builder
+        .plugin(crate::android_storage::init())
+        .plugin(crate::android_apk_update::init())
         .setup(|app| {
+            #[cfg(target_os = "android")]
+            {
+                if let Ok(dir) = app.path().app_data_dir() {
+                    crate::core::game_files::set_game_files_root_override(dir.join("game-files"));
+                }
+            }
             let layout = bootstrap_game_files().map_err(|err| err.to_string())?;
             app.manage(GameFilesState::new(layout));
             // Window starts hidden so bootstrap / Steam detection never flash a blank frame.
+            #[cfg(desktop)]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.set_focus();
@@ -868,6 +1048,19 @@ pub fn run() {
             set_geometry_dash_dir,
             clear_geometry_dash_dir,
             redetect_geometry_dash_dir,
+            android_check_all_files_access,
+            android_get_storage_status,
+            android_request_all_files_access,
+            android_probe_geode_paths,
+            android_pick_folder,
+            android_pick_file,
+            android_save_file,
+            android_commit_save,
+            android_check_app_update,
+            android_download_app_update,
+            android_install_app_update,
+            android_can_install_packages,
+            android_open_install_permission_settings,
             open_path_in_os,
             get_game_files_layout,
             discover_pack_install,
@@ -876,12 +1069,18 @@ pub fn run() {
             read_pack_metadata,
             cleanup_pack_install_temp,
             list_installed_packs,
+            pack_png_data_url_from_dir,
             update_installed_pack_metadata,
             delete_installed_pack,
             run_pack_operation,
+            read_texture_loader_applied,
+            write_texture_loader_applied,
             validate_operation_request,
             run_operation,
             cancel_operation,
+            import_user_path,
+            allocate_output_dir,
+            export_directory_as_zip,
             geode_buttons_target_index_cmd,
             geode_buttons_autoselect_plist_cmd,
             geode_buttons_default_input_dir_cmd,

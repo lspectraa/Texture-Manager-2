@@ -4,7 +4,7 @@ Texture Manager 2 uses `i18next` + `react-i18next` with typed catalogs under `sr
 
 ## Supported languages
 
-Registered in [`languages.ts`](./languages.ts) as `AppLanguage = "en" | "es" | "ru" | "pt" | "de" | "fr" | "zh" | "ko" | "ja"`.
+Registered in [`languages.ts`](./languages.ts) as `AppLanguage = "en" | "es" | "ru" | "pt" | "de" | "fr" | "zh" | "ko" | "ja" | "vi"`.
 
 Each language entry includes:
 

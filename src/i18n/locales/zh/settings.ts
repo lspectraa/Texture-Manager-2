@@ -53,6 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "用于游戏文件和 Geode 的 Geometry Dash 文件夹",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "未找到",
     manualOverride: "手动指定",
     autoDetected: "自动检测",
@@ -61,6 +62,9 @@ const settings = {
     noAutoDetect: "没有自动检测结果",
     installLocation: "安装位置",
     browseHint: "浏览到你的 Geometry Dash 文件夹，或通过 Steam 安装后重新检测。",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "应用路径",
     clearOverride: "清除手动指定",
     redetect: "重新检测",
@@ -75,11 +79,20 @@ const settings = {
     unsupported: "检查更新需要已安装的桌面应用。",
     checkFailed: "无法检查更新。{{error}}",
     installBlocked: "请先完成当前操作，再安装更新。",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "正在下载并安装…",
     downloading: "正在下载更新… {{percent}}%",
     installAndRestart: "安装并重启",
+    installApk: "Download and install",
     availableTitle: "有可用更新",
     availableMeta: "安装并重启即可从 v{{current}} 更新到 v{{version}}。",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "请先完成当前操作，再进行安装。",
     later: "稍后",
     dismiss: "忽略此更新",

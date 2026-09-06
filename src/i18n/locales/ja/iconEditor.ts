@@ -46,6 +46,8 @@ const iconEditor = {
     hideGlowTooltip: "アイコンプレビューでグロウレイヤーを隠す",
     hideBorder: "枠線を隠す",
     hideBorderTooltip: "アイコンレイヤーの選択枠を隠す",
+    moreTooltip: "その他の操作",
+    moreAria: "アイコンエディターのその他の操作",
   },
   saveStatus: {
     save: "保存",
@@ -60,6 +62,17 @@ const iconEditor = {
   viewport: {
     panAndZoomHelp:
       "スクロールで移動、Ctrl+ホイールでズーム、中ボタンドラッグで移動できます。",
+    mobilePanAndZoomHelp: "ドラッグで移動。ピンチでズーム。",
+    zoomHudAria: "キャンバスのズーム",
+    offsetDpadAria: "スプライトのオフセットを調整",
+    surfacesAria: "アイコンエディターの表示",
+    previewTab: "プレビュー",
+    framesTab: "フレーム",
+    inspectorTab: "インスペクター",
+    colorsTab: "色",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "フレームとロールの割り当て",

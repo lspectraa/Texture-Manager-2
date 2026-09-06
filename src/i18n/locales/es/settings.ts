@@ -56,6 +56,7 @@ const settings: AppLocaleResources["settings"] = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "La carpeta de Geometry Dash usada para archivos del juego y Geode",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "No encontrado",
     manualOverride: "Configuración manual",
     autoDetected: "Detectado automáticamente",
@@ -65,6 +66,9 @@ const settings: AppLocaleResources["settings"] = {
     installLocation: "Ubicación de instalación",
     browseHint:
       "Busca la carpeta de Geometry Dash o instálalo mediante Steam y vuelve a detectarlo.",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "Aplicar ruta",
     clearOverride: "Borrar configuración manual",
     redetect: "Volver a detectar",
@@ -81,11 +85,20 @@ const settings: AppLocaleResources["settings"] = {
     checkFailed: "No se pudieron buscar actualizaciones. {{error}}",
     installBlocked:
       "Termina la operación actual antes de instalar una actualización.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Descargando e instalando…",
     downloading: "Descargando actualización… {{percent}}%",
     installAndRestart: "Instalar y reiniciar",
+    installApk: "Download and install",
     availableTitle: "Actualización disponible",
     availableMeta: "Instala y reinicia para pasar de v{{current}} a v{{version}}.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "Termina la operación actual antes de instalar.",
     later: "Más tarde",
     dismiss: "Descartar actualización",

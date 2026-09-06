@@ -10,6 +10,7 @@ import type {
   PackInstallProgress,
   PackOperationKind,
   ReadPackMetadataResult,
+  ReadTextureLoaderAppliedResult,
   RunPackOperationOptions,
   RunPackOperationResult,
   UpdateInstalledPackMetadataRequest,
@@ -84,6 +85,22 @@ export const cleanupPackInstallTemp = async (tempDir: string): Promise<void> => 
 };
 
 /**
+ * Load pack.png from a pack directory as a data URL for library thumbnails.
+ */
+export const getPackPngDataUrlFromDir = async (
+  packDir: string,
+): Promise<string | null> => {
+  if (!isTauriRuntime() || !packDir.trim()) {
+    return null;
+  }
+  try {
+    return await invoke<string | null>("pack_png_data_url_from_dir", { packDir });
+  } catch {
+    return null;
+  }
+};
+
+/**
  * Load pack.png (or any PNG) as a data URL for the metadata sidebar.
  * Uses the shared allowlisted PNG reader until a dedicated pack command exists.
  */
@@ -126,6 +143,27 @@ export const deleteInstalledPack = async (packDir: string): Promise<void> => {
     throw new Error("Delete pack requires the Tauri runtime.");
   }
   await invoke<void>("delete_installed_pack", { packDir });
+};
+
+export const PACK_LIBRARY_DRAG_MIME = "application/x-tm-pack-library";
+
+export const readTextureLoaderApplied =
+  async (): Promise<ReadTextureLoaderAppliedResult> => {
+    if (!isTauriRuntime()) {
+      throw new Error("Read applied packs requires the Tauri runtime.");
+    }
+    return invoke<ReadTextureLoaderAppliedResult>("read_texture_loader_applied");
+  };
+
+export const writeTextureLoaderApplied = async (
+  appliedPaths: string[],
+): Promise<void> => {
+  if (!isTauriRuntime()) {
+    throw new Error("Write applied packs requires the Tauri runtime.");
+  }
+  await invoke<void>("write_texture_loader_applied", {
+    request: { appliedPaths },
+  });
 };
 
 export const runPackOperation = async (

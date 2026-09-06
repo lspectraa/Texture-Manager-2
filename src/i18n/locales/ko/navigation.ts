@@ -36,6 +36,16 @@ const navigation = {
     toolsAvailableAria: "{{count}}개의 도구 사용 가능",
     comingSoonCount: "+{{count}}개 곧 제공",
     cardComingSoon: "곧 제공",
+    aboutTitle: "정보",
+    aboutSubtitle: "저작권, 라이선스 및 링크",
+    aboutCardLabel: "저작권 및 정보",
+    openPacksFolder: "팩 폴더 열기",
+    openGameFiles: "게임 파일 열기",
+    openSaveFolder: "세이브 폴더 열기",
+    utilitiesAria: "폴더 바로가기",
+    openPacksFolderFailed: "팩 폴더를 열 수 없습니다. Geometry Dash가 설치되어 있나요?",
+    openGameFilesFailed: "게임 파일 폴더를 열 수 없습니다. Geometry Dash가 설치되어 있나요?",
+    openSaveFolderFailed: "세이브 폴더를 열 수 없습니다.",
   },
   sections: {
     design: {
@@ -99,6 +109,18 @@ const navigation = {
       shortLabel: "팩 설치기",
       description: "텍스처 팩을 Geometry Dash에 추가합니다.",
     },
+  },
+  mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
   },
 } as const;
 

@@ -53,6 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "Le dossier Geometry Dash utilisé pour les fichiers du jeu et Geode",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "Introuvable",
     manualOverride: "Remplacement manuel",
     autoDetected: "Détecté automatiquement",
@@ -62,6 +63,9 @@ const settings = {
     installLocation: "Emplacement de l’installation",
     browseHint:
       "Accédez à votre dossier Geometry Dash, ou installez-le via Steam puis relancez la détection.",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "Appliquer le chemin",
     clearOverride: "Effacer le remplacement",
     redetect: "Détecter à nouveau",
@@ -76,11 +80,20 @@ const settings = {
     unsupported: "La recherche de mises à jour nécessite l’application de bureau installée.",
     checkFailed: "Impossible de rechercher des mises à jour. {{error}}",
     installBlocked: "Terminez l’opération en cours avant d’installer une mise à jour.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Téléchargement et installation…",
     downloading: "Téléchargement de la mise à jour… {{percent}} %",
     installAndRestart: "Installer et redémarrer",
+    installApk: "Download and install",
     availableTitle: "Mise à jour disponible",
     availableMeta: "Installez et redémarrez pour passer de la v{{current}} à la v{{version}}.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "Terminez l’opération en cours avant d’installer.",
     later: "Plus tard",
     dismiss: "Ignorer la mise à jour",

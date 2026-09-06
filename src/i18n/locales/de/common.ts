@@ -15,6 +15,8 @@ const common = {
   optional: "Optional",
   selectFile: "Datei auswählen",
   selectFolder: "Ordner auswählen",
+  noFolderSelected: "No folder selected",
+  appStorage: "App storage",
   light: "Hell",
   dark: "Dunkel",
   back: "Zurück",
@@ -46,6 +48,8 @@ const common = {
     thirdPartyNcnn: "ncnn — BSD-3-Clause. Copyright (C) 2017 Tencent.",
     thirdPartyLink: "Drittanbieter-Hinweise anzeigen",
     thirdPartyHint: "Öffnet NOTICE auf GitHub",
+    linksHeading: "Links",
+    linksSubtitle: "Quellcode, Videos und Community",
     version: "Version",
     github: "Projekt auf GitHub",
     githubHint: "Quellcode und Issues",
@@ -64,3 +68,4 @@ const common = {
 } as const;
 
 export default common;
+ 

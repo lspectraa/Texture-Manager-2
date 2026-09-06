@@ -182,3 +182,35 @@ export function getToolMeta(toolId: AppToolId): ToolNavEntry | undefined {
 export function isUpcomingTool(toolId: AppToolId): boolean {
   return getToolMeta(toolId)?.upcoming === true;
 }
+
+/**
+ * Tools omitted from the mobile shell.
+ * - `upscaler`: desktop Vulkan sidecars
+ * - `convertToNewVersion`: needs Geometry Dash `Resources` (not accessible on Android)
+ */
+const DESKTOP_ONLY_TOOLS: ReadonlySet<AppToolId> = new Set([
+  "upscaler",
+  "convertToNewVersion",
+]);
+
+export function isDesktopOnlyTool(toolId: AppToolId): boolean {
+  return DESKTOP_ONLY_TOOLS.has(toolId);
+}
+
+export function isToolUnavailableOnMobile(toolId: AppToolId): boolean {
+  return isUpcomingTool(toolId) || isDesktopOnlyTool(toolId);
+}
+
+/** Tools listed in home / dock / grid on Android (desktop-only tools are omitted). */
+export function isToolListedOnMobile(toolId: AppToolId): boolean {
+  return !isDesktopOnlyTool(toolId);
+}
+
+export const MOBILE_TOOL_COUNT = TOOL_NAV_SECTIONS.reduce(
+  (count, section) =>
+    count +
+    section.tools.filter(
+      (tool) => !tool.upcoming && isToolListedOnMobile(tool.id),
+    ).length,
+  0,
+);

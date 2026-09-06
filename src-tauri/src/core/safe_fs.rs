@@ -157,9 +157,31 @@ pub fn ensure_user_directory_path(path: &Path) -> Result<(), AppError> {
 pub fn ensure_existing_user_file(path: &Path) -> Result<(), AppError> {
     ensure_user_absolute_path(path)?;
     if !path.exists() {
-        return Err(AppError::InvalidPath("file does not exist"));
+        #[cfg(target_os = "android")]
+        {
+            return Err(AppError::IoError(format!(
+                "file does not exist or is not readable ({}). Grant All files access if this file is under Geode storage.",
+                shorten_path_for_display(path)
+            )));
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            return Err(AppError::InvalidPath("file does not exist"));
+        }
     }
-    let meta = fs::metadata(path)?;
+    let meta = fs::metadata(path).map_err(|err| {
+        if cfg!(target_os = "android") && err.kind() == std::io::ErrorKind::PermissionDenied {
+            AppError::IoError(format!(
+                "permission denied reading `{}`. Grant All files access for Texture Manager.",
+                shorten_path_for_display(path)
+            ))
+        } else {
+            AppError::IoError(format!(
+                "failed to read metadata for `{}`: {err}",
+                shorten_path_for_display(path)
+            ))
+        }
+    })?;
     if !meta.is_file() {
         return Err(AppError::InvalidPath("path must be a regular file"));
     }

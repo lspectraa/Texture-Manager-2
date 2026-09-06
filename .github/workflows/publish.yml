@@ -61,9 +61,216 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Desktop builds of Texture Manager 2 (Windows MSI + macOS DMG for Apple Silicon and Intel)."
+          releaseBody: |
+            Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+            ### 📥 Which file should I download?
+            - **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+            - **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+            - **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+            - **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: false
           args: ${{ matrix.args }}
+
+  publish-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version-file: ".nvmrc"
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      - name: Setup Android NDK
+        uses: nttld/setup-ndk@v1
+        id: setup-ndk
+        with:
+          ndk-version: r27c
+          link-to-sdk: true
+
+      - name: Install Rust stable (Android targets)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+          key: android-aarch64
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Sync version from package.json
+        run: npm run sync:version
+
+      - name: Configure Android release signing
+        working-directory: src-tauri/gen/android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          REQUIRE_SIGNING=false
+          if [ "${{ github.event_name }}" = "push" ] && { [ "${{ github.ref_type }}" = "tag" ] || [[ "${{ github.ref }}" == refs/tags/v* ]]; }; then
+            REQUIRE_SIGNING=true
+          fi
+
+          if [ -z "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            if [ "$REQUIRE_SIGNING" = true ]; then
+              echo "Tagged Android publish requires ANDROID_KEYSTORE_BASE64 (and alias/password). Refusing debug-signed fallback on tags."
+              exit 1
+            fi
+            echo "No ANDROID_KEYSTORE_BASE64 secret; workflow_dispatch fallback — release APK will be debug-signed for sideload."
+            exit 0
+          fi
+          if [ -z "${ANDROID_KEY_ALIAS:-}" ] || [ -z "${ANDROID_KEYSTORE_PASSWORD:-}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is set but ANDROID_KEY_ALIAS / ANDROID_KEYSTORE_PASSWORD are missing."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/tm2-release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/tm2-release.jks"
+            echo "keyAlias=$ANDROID_KEY_ALIAS"
+            echo "password=$ANDROID_KEYSTORE_PASSWORD"
+          } > keystore.properties
+          echo "Wrote keystore.properties for release signing."
+
+      - name: Build Android APK
+        env:
+          CI: true
+          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dkotlin.compiler.execution.strategy=in-process"
+        # Use `npx tauri` (not `npm run tauri`) to skip the desktop upscaler fetch wrapper.
+        # `@v0` of tauri-action does not support `mobile: android`, so build here directly.
+        run: npx tauri android build --apk --target aarch64 --ci
+
+      - name: Stop Gradle daemons
+        if: always()
+        run: (cd src-tauri/gen/android && bash ./gradlew --stop) || true
+
+      - name: Resolve version
+        id: ver
+        run: echo "version=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload APK to draft GitHub release
+        id: upload-apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          TAG="v${VERSION}"
+          TITLE="Texture Manager 2 v${VERSION}"
+          read -r -d '' NOTES <<'EOF' || true
+Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+### 📥 Which file should I download?
+- **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+- **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+- **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+- **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+> ℹ️ **Note:** Files ending in `.sig`, `latest.json`, or `android-latest.json` are internal update manifests used by the automatic updater. You do not need to download them manually.
+EOF
+          ASSET_NAME="Texture-Manager-2-${VERSION}-android-aarch64.apk"
+
+          mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*release*.apk' ! -name '*-unsigned.apk' | sort)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | sort)
+          fi
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "No APK found under src-tauri/gen/android/app/build/outputs/apk"
+            find src-tauri/gen/android/app/build/outputs -type f | head -n 100 || true
+            exit 1
+          fi
+          APK="${APKS[0]}"
+          echo "Found built APK: ${APK}"
+
+          TARGET_APK="${RUNNER_TEMP}/${ASSET_NAME}"
+          cp "${APK}" "${TARGET_APK}"
+          echo "Staged release APK as: ${TARGET_APK}"
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release ${TAG} already exists; uploading APK."
+          else
+            echo "Creating draft release ${TAG}."
+            gh release create "$TAG" --draft --title "$TITLE" --notes "$NOTES"
+          fi
+
+          gh release upload "$TAG" "${TARGET_APK}" --clobber
+
+          {
+            echo "apk_path=${TARGET_APK}"
+            echo "asset_name=${ASSET_NAME}"
+            echo "tag=${TAG}"
+            echo "version=${VERSION}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Write android-latest.json
+        id: android-latest
+        env:
+          VERSION: ${{ steps.upload-apk.outputs.version }}
+          APK_PATH: ${{ steps.upload-apk.outputs.apk_path }}
+        run: |
+          set -euo pipefail
+          SHA256="$(sha256sum "$APK_PATH" | awk '{print $1}')"
+          PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          APK_URL="https://github.com/lspectraa/Texture-Manager-2/releases/download/v${VERSION}/Texture-Manager-2-${VERSION}-android-aarch64.apk"
+          read -r -d '' NOTES <<'EOF' || true
+Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+### 📥 Which file should I download?
+- **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+- **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+- **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+- **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+> ℹ️ **Note:** Files ending in `.sig`, `latest.json`, or `android-latest.json` are internal update manifests used by the automatic updater. You do not need to download them manually.
+EOF
+
+          jq -n \
+            --arg version "$VERSION" \
+            --arg notes "$NOTES" \
+            --arg pub_date "$PUB_DATE" \
+            --arg url "$APK_URL" \
+            --arg sha256 "$SHA256" \
+            '{
+              version: $version,
+              notes: $notes,
+              pub_date: $pub_date,
+              platforms: {
+                "aarch64-linux-android": {
+                  url: $url,
+                  sha256: $sha256
+                }
+              }
+            }' > android-latest.json
+
+          echo "Wrote android-latest.json (sha256=${SHA256})"
+          cat android-latest.json
+
+      - name: Upload android-latest.json to draft release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.upload-apk.outputs.tag }}
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" android-latest.json --clobber

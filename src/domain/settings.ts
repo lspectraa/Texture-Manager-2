@@ -15,8 +15,14 @@ export type { AppLanguage };
 /** `"random"` (default), a game_bg id, or a custom_*.png id. */
 export type AppBackgroundSetting = typeof APP_BACKGROUND_RANDOM | string;
 
-/** Current first-run onboarding revision. Values below this show onboarding. */
+/** Completed first-run onboarding revision on desktop. */
 export const CURRENT_ONBOARDING_VERSION = 1;
+/** Mobile onboarding includes Android storage access (step 3). */
+export const MOBILE_ONBOARDING_VERSION = 2;
+
+export function requiredOnboardingVersion(mobileShell: boolean): number {
+  return mobileShell ? MOBILE_ONBOARDING_VERSION : CURRENT_ONBOARDING_VERSION;
+}
 
 export type AppSettingsView = {
   geometryDashDir: string | null;

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Texture Manager 2",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "identifier": "com.spectra.texturemanager2",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -36,7 +36,7 @@
       },
       "devCsp": {
         "default-src": "'self' customprotocol:",
-        "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420",
+        "connect-src": "ipc: http://ipc.localhost ws://localhost:1420 http://localhost:1420 ws://tauri.localhost:* http://tauri.localhost:* ws://10.0.2.2:* http://10.0.2.2:* ws://*:1420 http://*:1420 ws://*:1421 http://*:1421",
         "img-src": "'self' blob: data:",
         "style-src": "'unsafe-inline' 'self'",
         "script-src": "'self' 'unsafe-eval'",
@@ -58,7 +58,8 @@
       "binaries/realesrgan-ncnn-vulkan"
     ],
     "resources": [
-      "resources/upscaler/**/*"
+      "resources/upscaler/**/*",
+      "resources/preview-icons/**/*"
     ],
     "icon": [
       "icons/32x32.png",

@@ -53,6 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "Der Geometry-Dash-Ordner für Spieldateien und Geode",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "Nicht gefunden",
     manualOverride: "Manuelle Überschreibung",
     autoDetected: "Automatisch erkannt",
@@ -62,6 +63,9 @@ const settings = {
     installLocation: "Installationsort",
     browseHint:
       "Wähle deinen Geometry-Dash-Ordner oder installiere über Steam und erkenne erneut.",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "Pfad übernehmen",
     clearOverride: "Überschreibung löschen",
     redetect: "Erneut erkennen",
@@ -76,11 +80,20 @@ const settings = {
     unsupported: "Update-Prüfungen erfordern die installierte Desktop-App.",
     checkFailed: "Update-Prüfung fehlgeschlagen. {{error}}",
     installBlocked: "Beende den aktuellen Vorgang, bevor du ein Update installierst.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Wird heruntergeladen und installiert…",
     downloading: "Update wird heruntergeladen… {{percent}} %",
     installAndRestart: "Installieren und neu starten",
+    installApk: "Download and install",
     availableTitle: "Update verfügbar",
     availableMeta: "Installieren und neu starten, um von v{{current}} auf v{{version}} zu wechseln.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "Beende den aktuellen Vorgang vor der Installation.",
     later: "Später",
     dismiss: "Update ausblenden",

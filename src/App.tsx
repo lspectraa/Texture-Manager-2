@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import {
   Sparkles,
@@ -16,6 +15,7 @@ import {
   Files,
   FolderOutput,
   Package,
+  X,
 } from "lucide-react";
 import "./App.css";
 import {
@@ -55,20 +55,26 @@ import {
 } from "./components/tools/TexturePackInstallerToolPanel";
 import { PackInstallerMetadataSidebar } from "./components/tools/PackInstallerMetadataSidebar";
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
+import { useSwipeDismiss } from "./hooks/useSwipeDismiss";
 import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
+import { MobileBottomDock } from "./components/mobile/MobileBottomDock";
+import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
 import { AppGameBackground } from "./components/AppGameBackground";
 import { CopyrightDialog } from "./components/CopyrightDialog";
+import { AboutToolPanel } from "./components/tools/AboutToolPanel";
+import { ToolActionBar, ToolGlassActionButton } from "./components/tools/layout";
 import { GlassFrost } from "./components/GlassFrost";
 import { OnboardingFlow } from "./components/OnboardingFlow";
 import { AppUpdateBanner } from "./components/AppUpdateBanner";
+import { AndroidGeodeAccessBanner } from "./components/tools/AndroidGeodeAccessBanner";
 import {
   allAppBackgroundOptions,
   APP_BACKGROUND_RANDOM,
   DEFAULT_APP_BACKGROUND_OPACITY,
 } from "./config/appBackground";
 import { APP_VERSION } from "./config/appMeta";
-import { isUpcomingTool } from "./config/toolNavigation";
+import { isUpcomingTool, isDesktopOnlyTool } from "./config/toolNavigation";
 import {
   buildIssuesCsvFromReport,
   copyTextToClipboard,
@@ -85,6 +91,8 @@ import type { AppLanguage, AppSettingsView } from "./domain/settings";
 import {
   CURRENT_ONBOARDING_VERSION,
   DEFAULT_APP_SETTINGS_VIEW,
+  MOBILE_ONBOARDING_VERSION,
+  requiredOnboardingVersion,
 } from "./domain/settings";
 import {
   addCustomAppBackground,
@@ -103,12 +111,25 @@ import {
   type AvailableAppUpdate,
 } from "./services/tauriUpdater";
 import { applyTheme, setStoredTheme, type AppTheme } from "./utils/theme";
+import {
+  isAndroidPlatform,
+  isDesktopPlatform,
+  isMobileShell,
+  isSimulateUpdateEnabled,
+} from "./utils/platform";
+import { consumeSuppressNextMobilePopState } from "./utils/mobileHistory";
+import {
+  exportDirectoryAsZip,
+} from "./services/tauriMobileFs";
+import { pickUserFolder, pickUserSaveFile, finalizeUserSave } from "./services/tauriPicker";
 import { changeAppLanguage } from "./i18n";
 import { resolveInitialAppLanguage } from "./i18n/languages";
+import type { PickFolderOptions } from "./components/tools/types";
 
 type PrimaryTool =
   | "home"
   | "settings"
+  | "about"
   | "iconEditor"
   | "splitter"
   | "porter"
@@ -235,6 +256,30 @@ function App() {
     readStoredCollapsed(REPORT_COLLAPSED_STORAGE_KEY),
   );
   const [isCopyrightOpen, setIsCopyrightOpen] = useState(false);
+  const mobileShell = isMobileShell();
+  const [mobileGridOpen, setMobileGridOpen] = useState(false);
+  const [mobileSideOpen, setMobileSideOpen] = useState(false);
+  const mobileGridOpenRef = useRef(mobileGridOpen);
+  const mobileSideOpenRef = useRef(mobileSideOpen);
+  mobileGridOpenRef.current = mobileGridOpen;
+  mobileSideOpenRef.current = mobileSideOpen;
+  const openMobileSideRail = useCallback((): void => {
+    if (!mobileSideOpenRef.current) {
+      window.history.pushState({ tm: "drawer" }, "");
+    }
+    setMobileSideOpen(true);
+  }, []);
+  const closeMobileSideRail = useCallback((): void => {
+    if (mobileSideOpenRef.current) {
+      window.history.back();
+    }
+  }, []);
+  const mobileReportSwipe = useSwipeDismiss({
+    enabled: mobileShell && mobileSideOpen,
+    axis: "horizontal",
+    dismissDirection: "positive",
+    onDismiss: closeMobileSideRail,
+  });
   const [appSettings, setAppSettings] = useState<AppSettingsView>(
     DEFAULT_APP_SETTINGS_VIEW,
   );
@@ -374,7 +419,7 @@ function App() {
         const language = resolveInitialAppLanguage({
           persistedLanguage: settings.language,
           onboardingComplete:
-            settings.onboardingVersion >= CURRENT_ONBOARDING_VERSION,
+            settings.onboardingVersion >= requiredOnboardingVersion(mobileShell),
         });
         const resolvedSettings =
           settings.language === language ? settings : { ...settings, language };
@@ -498,18 +543,28 @@ function App() {
     [applySettingsView],
   );
 
-  const pickFolder = async (assign: (path: string) => void): Promise<void> => {
+  const pickFolder = async (
+    assign: (path: string) => void,
+    options?: PickFolderOptions,
+  ): Promise<void> => {
     if (!isTauriRuntime()) {
       setRunError(t("errors:runtime.folderPickerUnavailable"));
       return;
     }
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: t("common:selectFolder"),
-    });
-    if (typeof selected === "string" && selected.trim().length > 0) {
-      assign(selected);
+    try {
+      const selected = await pickUserFolder({
+        title: t("common:selectFolder"),
+        importToSandbox: options?.importToSandbox ?? false,
+      });
+      if (selected) {
+        assign(selected);
+      }
+    } catch (error) {
+      setRunError(
+        error instanceof Error
+          ? error.message
+          : t("errors:runtime.importFailed"),
+      );
     }
   };
 
@@ -542,7 +597,9 @@ function App() {
         const view = await saveAppSettings({
           language: choices.language,
           theme: choices.theme,
-          onboardingVersion: CURRENT_ONBOARDING_VERSION,
+          onboardingVersion: mobileShell
+            ? MOBILE_ONBOARDING_VERSION
+            : CURRENT_ONBOARDING_VERSION,
         });
         applySettingsView(view);
       } catch (error) {
@@ -553,7 +610,7 @@ function App() {
         setOnboardingBusy(false);
       }
     },
-    [applySettingsView],
+    [applySettingsView, mobileShell],
   );
 
   const handleLanguageChange = useCallback(
@@ -586,7 +643,7 @@ function App() {
 
   const needsOnboarding =
     settingsHydrated &&
-    appSettings.onboardingVersion < CURRENT_ONBOARDING_VERSION;
+    appSettings.onboardingVersion < requiredOnboardingVersion(mobileShell);
 
   const runUpdateCheck = useCallback(
     async (options?: { silent?: boolean }): Promise<void> => {
@@ -656,7 +713,10 @@ function App() {
   );
 
   useEffect(() => {
-    if (!settingsHydrated || needsOnboarding) {
+    const canAutoCheckUpdates =
+      isSimulateUpdateEnabled() ||
+      (isTauriRuntime() && (isDesktopPlatform() || isAndroidPlatform()));
+    if (!settingsHydrated || needsOnboarding || !canAutoCheckUpdates) {
       return;
     }
     const timer = window.setTimeout(() => {
@@ -810,7 +870,7 @@ function App() {
     }
 
     if (selectedTool === "geodeButtons") {
-      if (!geodeButtonsInputDir || !geodeButtonsOutputDir) {
+      if (!geodeButtonsInputDir.trim() || !geodeButtonsOutputDir.trim()) {
         setRunError(t("errors:validation.geodeButtonsPathsRequired"));
         return;
       }
@@ -844,6 +904,9 @@ function App() {
         setOperationProgress(progress);
       });
       setReport(operationReport);
+      if (mobileShell) {
+        openMobileSideRail();
+      }
       const hasError = operationReport.issues.some((issue) => issue.level === "error");
       const hasWarning = operationReport.issues.some((issue) => issue.level === "warning");
       const completeState = hasError ? "error" : hasWarning ? "warning" : "success";
@@ -992,6 +1055,77 @@ function App() {
     );
   }, [report]);
 
+  const handleExportOutputZip = useCallback(async (): Promise<void> => {
+    if (!report?.outputDir.trim() || !isTauriRuntime()) {
+      return;
+    }
+    const picked = await pickUserSaveFile({
+      defaultName: `${report.operation || "output"}.zip`,
+      extensions: ["zip"],
+      filterName: "Zip",
+    });
+    if (!picked) {
+      return;
+    }
+    try {
+      await exportDirectoryAsZip(report.outputDir, picked.path);
+      if (picked.needsCommit) {
+        await finalizeUserSave(picked.path);
+      }
+    } catch (error) {
+      setRunError(
+        error instanceof Error ? error.message : t("reports:exportZipFailed"),
+      );
+    }
+  }, [report, t]);
+
+  const navigateTool = (tool: PrimaryTool): void => {
+    if (tool !== "home" && tool !== "settings" && tool !== "about") {
+      if (isUpcomingTool(tool) || (mobileShell && isDesktopOnlyTool(tool))) {
+        return;
+      }
+    }
+    const closingGrid = mobileGridOpenRef.current;
+    setSelectedTool(tool);
+    setMobileGridOpen(false);
+    if (mobileShell) {
+      // Replace the grid history entry when navigating from the tool sheet so
+      // Android back does not reopen a closed grid layer.
+      if (closingGrid) {
+        window.history.replaceState({ tm: "tool" }, "");
+      } else {
+        window.history.pushState({ tm: "tool" }, "");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!mobileShell) {
+      return;
+    }
+    const onPopState = () => {
+      if (consumeSuppressNextMobilePopState()) {
+        return;
+      }
+      if (mobileGridOpen) {
+        setMobileGridOpen(false);
+        window.history.pushState({ tm: "shell" }, "");
+        return;
+      }
+      if (mobileSideOpen) {
+        setMobileSideOpen(false);
+        window.history.pushState({ tm: "shell" }, "");
+        return;
+      }
+      if (selectedTool !== "home") {
+        setSelectedTool("home");
+        window.history.pushState({ tm: "shell" }, "");
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [mobileGridOpen, mobileShell, mobileSideOpen, selectedTool]);
+
   const reportState: "running" | "error" | "warning" | "success" | "idle" = isRunning
     ? "running"
     : runError
@@ -1019,9 +1153,11 @@ function App() {
   const isParticleEditor = selectedTool === "particleEditor";
   const isHome = selectedTool === "home";
   const isSettings = selectedTool === "settings";
+  const isAbout = selectedTool === "about";
   const isGeodeButtons = selectedTool === "geodeButtons";
   const isPackInstaller = selectedTool === "texturePackInstaller";
-  const isToolPanel = !isIconEditor && !isParticleEditor && !isHome && !isSettings;
+  const isToolPanel =
+    !isIconEditor && !isParticleEditor && !isHome && !isSettings && !isAbout;
   const showRunAction = isToolPanel && !isPackInstaller;
   const showOperationAndReport =
     !isIconEditor &&
@@ -1029,6 +1165,7 @@ function App() {
     !isHome &&
     !isGeodeButtons &&
     !isSettings &&
+    !isAbout &&
     !isPackInstaller;
   const showPackMetadataRail = isPackInstaller;
   const showRightRail = showOperationAndReport || showPackMetadataRail;
@@ -1051,13 +1188,13 @@ function App() {
         return (
           <HomeScreen
             onSelectTool={(toolId) => {
-              if (isUpcomingTool(toolId)) {
-                return;
-              }
-              setSelectedTool(toolId);
+              navigateTool(toolId);
             }}
+            onAboutClick={() => navigateTool("about")}
           />
         );
+      case "about":
+        return <AboutToolPanel />;
       case "settings":
         return (
           <SettingsToolPanel
@@ -1069,7 +1206,9 @@ function App() {
             updateStatusTone={updateStatusTone}
             updateCheckBusy={updateCheckBusy}
             operationRunning={isRunning}
-            pickFolder={pickFolder}
+            pickFolder={(assign) =>
+              pickFolder(assign, { importToSandbox: false })
+            }
             onCheckForUpdates={() => {
               void runUpdateCheck({ silent: false });
             }}
@@ -1256,6 +1395,15 @@ function App() {
           />
         );
       case "upscaler":
+        if (mobileShell) {
+          return (
+            <div className="tm-tool-page tm-tool-page-sky">
+              <p className="tm-tool-section-note" role="status">
+                {t("tools:upscaler.desktopOnly")}
+              </p>
+            </div>
+          );
+        }
         return (
           <UpscalerToolPanel
             inputDir={upscalerInputDir}
@@ -1309,6 +1457,15 @@ function App() {
           />
         );
       case "convertToNewVersion":
+        if (mobileShell) {
+          return (
+            <div className="tm-tool-page tm-tool-page-sky">
+              <p className="tm-tool-section-note" role="status">
+                {t("tools:convertToNewVersion.desktopOnly")}
+              </p>
+            </div>
+          );
+        }
         return (
           <ConvertToNewVersionToolPanel
             inputDir={convertInputDir}
@@ -1345,6 +1502,8 @@ function App() {
             onOutputDirChange={setGeodeButtonsOutputDir}
             onOptionsChange={setGeodeButtonsOptions}
             pickFolder={pickFolder}
+            geometryDashFound={appSettings.geometryDashFound}
+            onAppSettingsUpdated={applySettingsView}
           />
         );
       case "particleEditor":
@@ -1355,7 +1514,9 @@ function App() {
             geometryDashFound={appSettings.geometryDashFound}
             bridge={packInstallerBridge}
             onBridgeChange={setPackInstallerBridge}
+            onAppSettingsUpdated={applySettingsView}
             onSidebarActionsChange={setPackInstallerSidebarActions}
+            onOpenMobileSideRail={mobileShell ? openMobileSideRail : undefined}
           />
         );
       default: {
@@ -1397,6 +1558,7 @@ function App() {
           busy={onboardingBusy}
           error={onboardingError}
           pickFolder={pickFolder}
+          mobileStorageAccess={mobileShell}
           onThemeChange={(theme: AppTheme) => {
             applyTheme(theme);
             setStoredTheme(theme);
@@ -1418,6 +1580,7 @@ function App() {
               // Error surfaced via onboardingError.
             });
           }}
+          onSettingsUpdated={applySettingsView}
           onComplete={(choices) => {
             completeOnboarding(choices).catch(() => {
               // Error surfaced via onboardingError.
@@ -1429,7 +1592,7 @@ function App() {
   }
 
   return (
-    <main className="tm-shell">
+    <main className={`tm-shell${mobileShell ? " tm-shell--mobile" : ""}`}>
       <div className="tm-bg" aria-hidden="true">
         <span className="tm-bg-orb tm-bg-orb-a" />
         <span className="tm-bg-orb tm-bg-orb-b" />
@@ -1547,31 +1710,78 @@ function App() {
 
       <section
         className={`tm-layout ${
-          isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings ? "tm-layout-icon-editor" : ""
+          isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings || isAbout ? "tm-layout-icon-editor" : ""
         }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
           showRightRail && isReportCollapsed ? " tm-layout-report-collapsed" : ""
         }${
           navPanelTransition.animating || reportPanelTransition.animating
             ? " tm-layout--animating"
             : ""
+        }${mobileShell ? " tm-layout--mobile" : ""}${
+          mobileShell && mobileSideOpen ? " tm-layout--mobile-report-open" : ""
         }`}
       >
-        <AppSidebar
-          selectedTool={selectedTool}
-          collapsed={isNavCollapsed}
-          animating={navPanelTransition.animating}
-          onExpand={navPanelTransition.expand}
-          onCollapse={navPanelTransition.collapse}
-          onNavigate={(tool) => {
-            if (tool !== "home" && tool !== "settings" && isUpcomingTool(tool)) {
-              return;
-            }
-            setSelectedTool(tool);
-          }}
-          onCopyrightClick={() => setIsCopyrightOpen(true)}
-        />
+        {mobileShell ? (
+          <>
+            <MobileBottomDock
+              selectedTool={selectedTool}
+              onNavigate={navigateTool}
+              expanded={mobileGridOpen}
+              onExpandedChange={(next) => {
+                if (next) {
+                  if (!mobileGridOpenRef.current) {
+                    window.history.pushState({ tm: "grid" }, "");
+                  }
+                  setMobileGridOpen(true);
+                  return;
+                }
+                if (mobileGridOpenRef.current) {
+                  window.history.back();
+                  return;
+                }
+                setMobileGridOpen(false);
+              }}
+            />
+            {showRightRail ? (
+              <MobileSideDrawer
+                open={mobileSideOpen}
+                onOpenChange={(open) => {
+                  if (open) {
+                    openMobileSideRail();
+                    return;
+                  }
+                  if (mobileSideOpenRef.current) {
+                    window.history.back();
+                  }
+                }}
+              />
+            ) : null}
+          </>
+        ) : (
+          <AppSidebar
+            selectedTool={selectedTool}
+            collapsed={isNavCollapsed}
+            animating={navPanelTransition.animating}
+            onExpand={navPanelTransition.expand}
+            onCollapse={navPanelTransition.collapse}
+            onNavigate={(tool) => {
+              if (tool !== "home" && tool !== "settings" && tool !== "about" && isUpcomingTool(tool)) {
+                return;
+              }
+              setSelectedTool(tool);
+            }}
+            onCopyrightClick={() => setIsCopyrightOpen(true)}
+          />
+        )}
 
         <div className="tm-main-column">
+          {mobileShell ? (
+            <AndroidGeodeAccessBanner
+              geometryDashFound={appSettings.geometryDashFound}
+              onSettingsUpdated={applySettingsView}
+              className="tm-android-geode-access--global"
+            />
+          ) : null}
           {availableUpdate && !updateBannerDismissed ? (
             <AppUpdateBanner
               update={availableUpdate}
@@ -1582,99 +1792,155 @@ function App() {
           <section
             className={`tm-panel tm-glass-card${
               isIconEditor ? " tm-panel-icon-editor" : ""
-            }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings ? " tm-panel-tool" : ""}${
+            }${isParticleEditor ? " tm-panel-particle-editor" : ""}${isHome ? " tm-panel-home" : ""}${isToolPanel || isSettings || isAbout ? " tm-panel-tool" : ""}${
               isGeodeButtons ? " tm-panel-geode" : ""
-            }${isPackInstaller ? " tm-panel-pack-installer" : ""}`}
+            }${isPackInstaller ? " tm-panel-pack-installer" : ""}${
+              mobileShell ? " tm-panel--mobile-flat" : ""
+            }`}
           >
-            <GlassFrost />
+            {mobileShell ? null : <GlassFrost />}
             <div className="tm-panel-body">{toolPanel}</div>
 
             {showRunAction ? (
-              <div className="tm-tool-actions">
-                <button
-                  type="button"
+              <ToolActionBar>
+                <ToolGlassActionButton
+                  variant="run"
                   className="tm-tool-run-btn"
                   onClick={executeSelectedOperation}
                   disabled={isRunning}
                 >
                   <Sparkles size={16} />
                   {isRunning ? t("tools:common.running") : t("tools:common.runOperation")}
-                </button>
-              </div>
+                </ToolGlassActionButton>
+                {mobileShell && showOperationAndReport ? (
+                  <ToolGlassActionButton
+                    variant="output"
+                    className="tm-tool-rail-btn tm-tool-rail-btn--output"
+                    onClick={openMobileSideRail}
+                  >
+                    <Activity size={16} strokeWidth={1.85} />
+                    {t("reports:panelTitle")}
+                  </ToolGlassActionButton>
+                ) : null}
+              </ToolActionBar>
             ) : null}
           </section>
         </div>
 
         {showRightRail ? (
           <section
+            id="tm-mobile-report-rail"
             className={`tm-report tm-glass-card ${
               showPackMetadataRail
                 ? "tm-report-state-ready tm-report-pack-meta"
                 : `tm-report-state-${reportState}`
-            }${isReportCollapsed ? " tm-report--collapsed" : ""}${
+            }${isReportCollapsed && !mobileShell ? " tm-report--collapsed" : ""}${
               reportPanelTransition.animating ? " tm-report--animating" : ""
+            }${mobileShell && mobileSideOpen ? " tm-report--mobile-open" : ""}${
+              mobileReportSwipe.dragging ? " tm-report--swipe-dragging" : ""
             }`}
+            style={mobileShell ? mobileReportSwipe.style : undefined}
           >
             <GlassFrost />
-            <button
-              type="button"
-              className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${
-                isReportCollapsed && !reportPanelTransition.animating
-                  ? " tm-report-rail-btn"
-                  : ""
-              }`}
-              onClick={
-                reportPanelTransition.animating
-                  ? undefined
-                  : isReportCollapsed
-                    ? reportPanelTransition.expand
-                    : reportPanelTransition.collapse
-              }
-              aria-expanded={!isReportCollapsed}
-              aria-label={
-                isReportCollapsed
-                  ? showPackMetadataRail
-                    ? t("tools:packInstaller.expandPanelAria")
-                    : t("reports:expandPanelAria")
-                  : showPackMetadataRail
-                    ? t("tools:packInstaller.collapsePanelAria")
-                    : t("reports:collapsePanelAria")
-              }
-              title={
-                isReportCollapsed
-                  ? showPackMetadataRail
-                    ? t("tools:packInstaller.showPanel")
-                    : t("reports:showPanel")
-                  : showPackMetadataRail
-                    ? t("tools:packInstaller.hidePanel")
-                    : t("reports:hidePanel")
-              }
-              disabled={reportPanelTransition.animating}
-            >
-              <span className="tm-nav-btn-icon" aria-hidden>
-                {showPackMetadataRail ? (
-                  <Package size={16} strokeWidth={1.85} />
-                ) : (
-                  <Activity size={16} strokeWidth={1.85} />
-                )}
-              </span>
-              <span className="tm-nav-btn-copy">
-                <span className="tm-nav-btn-label">
-                  {showPackMetadataRail
-                    ? t("tools:packInstaller.metadataPanelTitle")
-                    : t("reports:panelTitle")}
+            {mobileShell ? (
+              <div
+                className="tm-shell-panel-title tm-nav-btn tm-nav-btn-sky tm-shell-panel-title--static"
+                {...(mobileSideOpen ? mobileReportSwipe.captureHandlers : {})}
+              >
+                <span className="tm-nav-btn-icon" aria-hidden>
+                  {showPackMetadataRail ? (
+                    <Package size={16} strokeWidth={1.85} />
+                  ) : (
+                    <Activity size={16} strokeWidth={1.85} />
+                  )}
                 </span>
-              </span>
-              <span className="tm-shell-panel-title-chevron" aria-hidden>
-                <ChevronRight size={15} />
-              </span>
-            </button>
-            <div className="tm-report-body" aria-hidden={isReportCollapsed}>
+                <span className="tm-nav-btn-copy">
+                  <span className="tm-nav-btn-label">
+                    {showPackMetadataRail
+                      ? packInstallerBridge.mode === "library" &&
+                        packInstallerBridge.libraryRailTab === "applied"
+                        ? t("tools:packInstaller.appliedPanelTitle")
+                        : t("tools:packInstaller.libraryPanelButtonLabel")
+                      : t("reports:panelTitle")}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  className="tm-mobile-rail-close"
+                  aria-label={t("navigation:mobile.closeDrawerAria")}
+                  onClick={() => {
+                    closeMobileSideRail();
+                  }}
+                >
+                  <X size={18} strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                className={`tm-shell-panel-title tm-nav-btn tm-nav-btn-sky${
+                  isReportCollapsed && !reportPanelTransition.animating
+                    ? " tm-report-rail-btn"
+                    : ""
+                }`}
+                onClick={
+                  reportPanelTransition.animating
+                    ? undefined
+                    : isReportCollapsed
+                      ? reportPanelTransition.expand
+                      : reportPanelTransition.collapse
+                }
+                aria-expanded={!isReportCollapsed}
+                aria-label={
+                  isReportCollapsed
+                    ? showPackMetadataRail
+                      ? t("tools:packInstaller.expandPanelAria")
+                      : t("reports:expandPanelAria")
+                    : showPackMetadataRail
+                      ? t("tools:packInstaller.collapsePanelAria")
+                      : t("reports:collapsePanelAria")
+                }
+                title={
+                  isReportCollapsed
+                    ? showPackMetadataRail
+                      ? t("tools:packInstaller.showPanel")
+                      : t("reports:showPanel")
+                    : showPackMetadataRail
+                      ? t("tools:packInstaller.hidePanel")
+                      : t("reports:hidePanel")
+                }
+                disabled={reportPanelTransition.animating}
+              >
+                <span className="tm-nav-btn-icon" aria-hidden>
+                  {showPackMetadataRail ? (
+                    <Package size={16} strokeWidth={1.85} />
+                  ) : (
+                    <Activity size={16} strokeWidth={1.85} />
+                  )}
+                </span>
+                <span className="tm-nav-btn-copy">
+                  <span className="tm-nav-btn-label">
+                    {showPackMetadataRail
+                      ? packInstallerBridge.mode === "library" &&
+                        packInstallerBridge.libraryRailTab === "applied"
+                        ? t("tools:packInstaller.appliedPanelTitle")
+                        : t("tools:packInstaller.libraryPanelButtonLabel")
+                      : t("reports:panelTitle")}
+                  </span>
+                </span>
+                <span className="tm-shell-panel-title-chevron" aria-hidden>
+                  <ChevronRight size={15} />
+                </span>
+              </button>
+            )}
+            <div className="tm-report-body" aria-hidden={isReportCollapsed && !mobileShell}>
             <div className="tm-report-body-inner">
             {showPackMetadataRail ? (
               <PackInstallerMetadataSidebar
                 bridge={packInstallerBridge}
                 onBridgeChange={setPackInstallerBridge}
+                libraryPacks={packInstallerSidebarActions?.libraryPacks ?? []}
+                libraryPreviews={packInstallerSidebarActions?.libraryPreviews ?? {}}
                 onBrowsePackPng={packInstallerSidebarActions?.browsePackPng}
                 onClearPackPng={packInstallerSidebarActions?.clearPackPng}
                 onUpdateSelectedPackMetadata={
@@ -1684,6 +1950,8 @@ function App() {
                   packInstallerSidebarActions?.updateLibraryPackMetadata
                 }
                 onSaveLibraryMetadata={packInstallerSidebarActions?.saveLibraryMetadata}
+                onAddPackToApplied={packInstallerSidebarActions?.addPackToApplied}
+                onCommitAppliedEntries={packInstallerSidebarActions?.commitAppliedEntries}
               />
             ) : null}
             {!showPackMetadataRail && loadError ? (
@@ -1828,8 +2096,24 @@ function App() {
                       </h4>
                       <span className="tm-report-issues-count">{report.issues.length}</span>
                     </div>
-                    {report.issues.length > 0 ? (
+                    {report.issues.length > 0 || mobileShell ? (
                       <div className="tm-report-issues-actions">
+                        {mobileShell ? (
+                          <button
+                            type="button"
+                            className="tm-report-issues-action-btn"
+                            onClick={() => {
+                              void handleExportOutputZip();
+                            }}
+                            title={t("reports:exportZip")}
+                            aria-label={t("reports:exportZipAria")}
+                          >
+                            <Download size={13} strokeWidth={2} />
+                            {t("reports:exportZip")}
+                          </button>
+                        ) : null}
+                        {report.issues.length > 0 ? (
+                          <>
                         <button
                           type="button"
                           className="tm-report-issues-action-btn"
@@ -1858,6 +2142,8 @@ function App() {
                           <Download size={13} strokeWidth={2} />
                           <span>{t("reports:issues.download")}</span>
                         </button>
+                          </>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>

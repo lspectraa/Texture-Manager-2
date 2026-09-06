@@ -49,6 +49,8 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
     hideGlowTooltip: "Скрыть слои свечения в предпросмотре иконки",
     hideBorder: "Скрыть границы",
     hideBorderTooltip: "Скрыть границы выделения слоёв иконки",
+    moreTooltip: "Другие действия",
+    moreAria: "Другие действия редактора иконок",
   },
   saveStatus: {
     save: "Сохранить",
@@ -63,6 +65,17 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   viewport: {
     panAndZoomHelp:
       "Прокручивайте для перемещения. Ctrl+колесо — масштабирование. Перетаскивайте средней кнопкой мыши для перемещения.",
+    mobilePanAndZoomHelp: "Перетаскивайте для перемещения. Сжимайте для масштаба.",
+    zoomHudAria: "Масштаб холста",
+    offsetDpadAria: "Сдвинуть смещение спрайта",
+    surfacesAria: "Представления редактора иконок",
+    previewTab: "Просмотр",
+    framesTab: "Кадры",
+    inspectorTab: "Инспектор",
+    colorsTab: "Цвета",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Сопоставление ролей кадров",

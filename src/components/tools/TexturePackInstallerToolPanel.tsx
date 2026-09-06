@@ -6,7 +6,6 @@ import {
   useState,
   type DragEvent as ReactDragEvent,
 } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import {
   Check,
@@ -15,8 +14,11 @@ import {
   FileArchive,
   FolderOpen,
   FolderPlus,
+  Layers,
   Library,
   LoaderCircle,
+  MoreHorizontal,
+  Package,
   PackageOpen,
   RefreshCw,
   Scissors,
@@ -27,6 +29,7 @@ import {
 import { useTranslation } from "react-i18next";
 import convertVersionMap from "../../config/convertVersionMap.json";
 import type {
+  AppliedPackEntry,
   InstallPlan,
   InstallTreeNode,
   InstallUnit,
@@ -36,32 +39,53 @@ import type {
   PackMetadata,
   PackOperationKind,
 } from "../../domain/packInstaller";
+import type { AppSettingsView } from "../../domain/settings";
 import {
-  DEFAULT_PACK_METADATA,
   folderNameFromPackName,
 } from "../../domain/packInstaller";
+import {
+  installPlanHasInvalidPackMetadata,
+  isPackMetadataValid,
+} from "../../domain/packMetadataValidation";
 import {
   cleanupPackInstallTemp,
   createTexturePack,
   deleteInstalledPack,
   discoverPackInstall,
   getPackPngDataUrl,
+  getPackPngDataUrlFromDir,
   installPackPlan,
   listInstalledPacks,
   readPackMetadata,
+  readTextureLoaderApplied,
   runPackOperation,
   updateInstalledPackMetadata,
+  writeTextureLoaderApplied,
 } from "../../services/tauriPackInstaller";
 import { getGameFilesLayout } from "../../services/tauriGeodeButtons";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { isMobileShell } from "../../utils/platform";
+import { pickUserFile, pickUserFolder } from "../../services/tauriPicker";
 import { openPathInOs } from "../../services/tauriSettings";
-import { redactAbsolutePathsInText, shortenPathForDisplay } from "../../utils/pathDisplay";
+import {
+  basenameForDisplay,
+  isAppSandboxPath,
+  redactAbsolutePathsInText,
+  shortenPathForDisplay,
+} from "../../utils/pathDisplay";
+import { invokeErrorMessage } from "../../utils/invokeErrorMessage";
+import {
+  PackLibraryDragSurface,
+  usePackLibraryDropListener,
+} from "../../hooks/usePackLibraryPointerDrag";
 import {
   PackLibraryContextMenu,
   type PackLibraryContextAction,
 } from "./PackLibraryContextMenu";
 import {
   FolderPathField,
+  ToolActionBar,
+  ToolGlassActionButton,
   ToolCheckboxField,
   ToolNumberField,
   ToolPage,
@@ -80,6 +104,10 @@ export type PackInstallerSidebarActions = {
   updateSelectedPackMetadata: (metadata: PackMetadata) => void;
   updateLibraryPackMetadata: (metadata: PackMetadata) => void;
   saveLibraryMetadata: () => void;
+  addPackToApplied: (pack: InstalledPack) => void;
+  commitAppliedEntries: (entries: AppliedPackEntry[]) => void;
+  libraryPacks: InstalledPack[];
+  libraryPreviews: Record<string, string | null>;
 };
 
 type TexturePackInstallerToolPanelProps = {
@@ -87,6 +115,8 @@ type TexturePackInstallerToolPanelProps = {
   bridge: PackInstallerBridge;
   onBridgeChange: (next: PackInstallerBridge) => void;
   onSidebarActionsChange?: (actions: PackInstallerSidebarActions) => void;
+  onAppSettingsUpdated?: (settings: AppSettingsView) => void;
+  onOpenMobileSideRail?: () => void;
 };
 
 type BusyKind = "discover" | "install" | "create" | "library" | "librarySave" | null;
@@ -293,8 +323,12 @@ export function TexturePackInstallerToolPanel({
   bridge,
   onBridgeChange,
   onSidebarActionsChange,
+  onAppSettingsUpdated: _onAppSettingsUpdated,
+  onOpenMobileSideRail,
 }: TexturePackInstallerToolPanelProps) {
   const { t } = useTranslation(["tools", "errors", "common"]);
+  const mobileShell = isMobileShell();
+  const packIoReady = geometryDashFound;
   const [plan, setPlan] = useState<InstallPlan | null>(null);
   const [expandedUnitIds, setExpandedUnitIds] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<BusyKind>(null);
@@ -334,6 +368,7 @@ export function TexturePackInstallerToolPanel({
     useState<LibraryContextMenuState | null>(null);
   const [libraryDeleteConfirm, setLibraryDeleteConfirm] =
     useState<InstalledPack | null>(null);
+  const [libraryDeleteError, setLibraryDeleteError] = useState<string | null>(null);
   const extrasPanelId = useId();
   const libraryActionPanelId = useId();
   const tempDirRef = useRef<string | null>(null);
@@ -341,6 +376,9 @@ export function TexturePackInstallerToolPanel({
   bridgeRef.current = bridge;
   const overlayTimerRef = useRef<number | null>(null);
   const libraryRailFocusRef = useRef<HTMLDivElement | null>(null);
+  const libraryLongPressTimerRef = useRef<number | null>(null);
+  const suppressAppliedAutoSaveRef = useRef(false);
+  const appliedAutoSaveTimerRef = useRef<number | null>(null);
 
   const setBridge = useCallback(
     (patch: Partial<PackInstallerBridge>) => {
@@ -384,13 +422,23 @@ export function TexturePackInstallerToolPanel({
     };
   }, [clearOverlayTimer]);
 
+  useEffect(() => {
+    if (!mobileShell) {
+      return;
+    }
+    setConvertToLatestVersion(false);
+    setLibraryActionPanel((panel) => (panel === "convert" ? null : panel));
+  }, [mobileShell]);
+
   const extrasActiveCount =
-    (convertToLatestVersion ? 1 : 0) + (portPacks ? 1 : 0);
+    (mobileShell ? 0 : convertToLatestVersion ? 1 : 0) + (portPacks ? 1 : 0);
   const extrasSummary =
     extrasActiveCount === 0
       ? t("packInstaller.extrasNone")
       : [
-          convertToLatestVersion ? t("packInstaller.convertToLatestVersion") : null,
+          !mobileShell && convertToLatestVersion
+            ? t("packInstaller.convertToLatestVersion")
+            : null,
           portPacks ? t("packInstaller.portPacks") : null,
         ]
           .filter((part): part is string => Boolean(part))
@@ -474,7 +522,7 @@ export function TexturePackInstallerToolPanel({
 
   const runDiscovery = useCallback(
     async (path: string) => {
-      if (!geometryDashFound) {
+      if (!packIoReady) {
         setStatusTone("error");
         setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
         return;
@@ -531,16 +579,19 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFolder({
         title: t("packInstaller.selectFolderDialog"),
-        directory: true,
-        multiple: false,
       });
-      if (typeof selected === "string" && selected.trim()) {
+      if (selected) {
         await runDiscovery(selected);
       }
-    } catch {
-      // Cancelled.
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        err instanceof Error
+          ? err.message
+          : t("errors:packInstaller.runtimeUnavailable"),
+      );
     }
   };
 
@@ -551,17 +602,21 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("packInstaller.selectZipDialog"),
-        directory: false,
-        multiple: false,
-        filters: [{ name: t("packInstaller.zipFilter"), extensions: ["zip"] }],
+        extensions: ["zip"],
+        filterName: t("packInstaller.zipFilter"),
       });
-      if (typeof selected === "string" && selected.trim()) {
+      if (selected) {
         await runDiscovery(selected);
       }
-    } catch {
-      // Cancelled.
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        err instanceof Error
+          ? err.message
+          : t("errors:packInstaller.runtimeUnavailable"),
+      );
     }
   };
 
@@ -582,12 +637,9 @@ export function TexturePackInstallerToolPanel({
         libraryPackPngPath: undefined,
         libraryPackPngDirty: false,
       });
-      const previewPath = pack.packPngPath;
-      if (previewPath) {
-        const dataUrl = await getPackPngDataUrl(previewPath);
-        if (bridgeRef.current.libraryPack?.id === pack.id) {
-          setBridge({ libraryPack: pack, packPngDataUrl: dataUrl });
-        }
+      const dataUrl = await getPackPngDataUrlFromDir(pack.path);
+      if (bridgeRef.current.libraryPack?.id === pack.id) {
+        setBridge({ libraryPack: pack, packPngDataUrl: dataUrl });
       }
       if (options?.focusRail) {
         window.requestAnimationFrame(() => {
@@ -602,9 +654,15 @@ export function TexturePackInstallerToolPanel({
   );
 
   const refreshLibrary = useCallback(async (): Promise<void> => {
-    if (!geometryDashFound) {
-      setStatusTone("error");
-      setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+    if (!packIoReady) {
+      // Mobile already surfaces Geode/path access via AndroidGeodeAccessBanner —
+      // avoid a duplicate error sitting on the sticky action bar.
+      if (!mobileShell) {
+        setStatusTone("error");
+        setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+      } else {
+        setStatusMessage(null);
+      }
       return;
     }
     if (!isTauriRuntime()) {
@@ -632,10 +690,7 @@ export function TexturePackInstallerToolPanel({
 
       const previewEntries = await Promise.all(
         packs.map(async (pack) => {
-          if (!pack.packPngPath) {
-            return [pack.id, null] as const;
-          }
-          const dataUrl = await getPackPngDataUrl(pack.packPngPath);
+          const dataUrl = await getPackPngDataUrlFromDir(pack.path);
           return [pack.id, dataUrl] as const;
         }),
       );
@@ -650,7 +705,124 @@ export function TexturePackInstallerToolPanel({
     } finally {
       setBusy(null);
     }
-  }, [geometryDashFound, selectLibraryPack, t]);
+  }, [geometryDashFound, mobileShell, selectLibraryPack, t]);
+
+  const refreshAppliedConfig = useCallback(async (): Promise<void> => {
+    if (!isTauriRuntime()) {
+      return;
+    }
+    try {
+      const result = await readTextureLoaderApplied();
+      suppressAppliedAutoSaveRef.current = true;
+      setBridge({
+        appliedEntries: result.entries,
+        appliedConfigPath: result.savedJsonPath || null,
+        appliedSupported: result.supported,
+        appliedDirty: false,
+      });
+      window.requestAnimationFrame(() => {
+        suppressAppliedAutoSaveRef.current = false;
+      });
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        redactAbsolutePathsInText(
+          err instanceof Error
+            ? err.message
+            : t("errors:packInstaller.appliedLoadFailed"),
+        ),
+      );
+    }
+  }, [setBridge, t]);
+
+  const persistAppliedEntries = useCallback(
+    async (entries: AppliedPackEntry[]): Promise<void> => {
+      if (!packIoReady) {
+        return;
+      }
+      if (!isTauriRuntime()) {
+        return;
+      }
+      if (entries.some((entry) => entry.missing)) {
+        return;
+      }
+
+      setBridge({ appliedSaving: true });
+      try {
+        await writeTextureLoaderApplied(entries.map((entry) => entry.path));
+        setBridge({ appliedSaving: false, appliedDirty: false });
+      } catch (err: unknown) {
+        setBridge({ appliedSaving: false });
+        setStatusTone("error");
+        setStatusMessage(
+          redactAbsolutePathsInText(
+            err instanceof Error
+              ? err.message
+              : t("errors:packInstaller.appliedSaveFailed"),
+          ),
+        );
+      }
+    },
+    [packIoReady, setBridge, t],
+  );
+
+  const scheduleAppliedAutoSave = useCallback(
+    (entries: AppliedPackEntry[]) => {
+      if (suppressAppliedAutoSaveRef.current) {
+        return;
+      }
+      if (appliedAutoSaveTimerRef.current !== null) {
+        window.clearTimeout(appliedAutoSaveTimerRef.current);
+      }
+      appliedAutoSaveTimerRef.current = window.setTimeout(() => {
+        appliedAutoSaveTimerRef.current = null;
+        void persistAppliedEntries(entries);
+      }, 300);
+    },
+    [persistAppliedEntries],
+  );
+
+  const commitAppliedEntries = useCallback(
+    (entries: AppliedPackEntry[]): void => {
+      setBridge({ appliedEntries: entries, appliedDirty: true });
+      scheduleAppliedAutoSave(entries);
+    },
+    [scheduleAppliedAutoSave, setBridge],
+  );
+
+  const addPackToApplied = useCallback(
+    (pack: InstalledPack): void => {
+      const entries = bridgeRef.current.appliedEntries;
+      if (entries.some((entry) => entry.folderName === pack.folderName)) {
+        return;
+      }
+      const nextEntry: AppliedPackEntry = {
+        folderName: pack.folderName,
+        path: pack.path,
+        displayName: libraryPackTitle(pack),
+        packPngPath: pack.packPngPath,
+        missing: false,
+      };
+      const nextEntries = [...entries, nextEntry];
+      setBridge({
+        appliedEntries: nextEntries,
+        appliedDirty: true,
+        libraryRailTab: "applied",
+      });
+      scheduleAppliedAutoSave(nextEntries);
+    },
+    [scheduleAppliedAutoSave, setBridge],
+  );
+
+  usePackLibraryDropListener(addPackToApplied);
+
+  useEffect(() => {
+    return () => {
+      if (appliedAutoSaveTimerRef.current !== null) {
+        window.clearTimeout(appliedAutoSaveTimerRef.current);
+      }
+    };
+  }, []);
 
   // Reload whenever Library is shown — including remount after leaving the tool
   // with Library still selected (local grid state is empty on mount).
@@ -659,20 +831,20 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     void refreshLibrary();
-  }, [bridge.mode, refreshLibrary]);
+    void refreshAppliedConfig();
+  }, [bridge.mode, refreshAppliedConfig, refreshLibrary]);
 
   const browsePackPng = useCallback(async (): Promise<void> => {
     if (!isTauriRuntime()) {
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("packInstaller.selectPackPngDialog"),
-        directory: false,
-        multiple: false,
-        filters: [{ name: t("packInstaller.pngFilter"), extensions: ["png"] }],
+        extensions: ["png"],
+        filterName: t("packInstaller.pngFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) {
+      if (!selected) {
         return;
       }
       const dataUrl = await getPackPngDataUrl(selected);
@@ -761,16 +933,19 @@ export function TexturePackInstallerToolPanel({
       return;
     }
     try {
-      const selected = await open({
+      const selected = await pickUserFolder({
         title: t("packInstaller.selectCreateSourceDialog"),
-        directory: true,
-        multiple: false,
       });
-      if (typeof selected === "string" && selected.trim()) {
+      if (selected) {
         await applyCreateSourceDir(selected);
       }
-    } catch {
-      // Cancelled.
+    } catch (err: unknown) {
+      setStatusTone("error");
+      setStatusMessage(
+        err instanceof Error
+          ? err.message
+          : t("errors:packInstaller.runtimeUnavailable"),
+      );
     }
   }, [applyCreateSourceDir, t]);
 
@@ -862,7 +1037,12 @@ export function TexturePackInstallerToolPanel({
     const pack = bridgeRef.current.libraryPack;
     if (!pack?.metadata) {
       setStatusTone("error");
-      setStatusMessage(t("errors:packInstaller.noLibraryPackSelected"));
+      setStatusMessage(t("errors:packInstaller.metadataNoPackJson"));
+      return;
+    }
+    if (!isPackMetadataValid(pack.metadata)) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.metadataInvalid"));
       return;
     }
     if (!isTauriRuntime()) {
@@ -936,7 +1116,7 @@ export function TexturePackInstallerToolPanel({
         setStatusMessage(t("errors:packInstaller.noLibraryPackSelected"));
         return;
       }
-      if (!geometryDashFound) {
+      if (!packIoReady) {
         setStatusTone("error");
         setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
         return;
@@ -1030,6 +1210,41 @@ export function TexturePackInstallerToolPanel({
     ],
   );
 
+  const clearLibraryLongPressTimer = useCallback((): void => {
+    if (libraryLongPressTimerRef.current !== null) {
+      window.clearTimeout(libraryLongPressTimerRef.current);
+      libraryLongPressTimerRef.current = null;
+    }
+  }, []);
+
+  const openLibraryContextMenuAt = useCallback(
+    (pack: InstalledPack, x: number, y: number): void => {
+      void selectLibraryPack(pack);
+      setLibraryContextMenu({ pack, x, y });
+    },
+    [selectLibraryPack],
+  );
+
+  const startLibraryLongPress = useCallback(
+    (pack: InstalledPack, clientX: number, clientY: number): void => {
+      if (!mobileShell || busy !== null) {
+        return;
+      }
+      clearLibraryLongPressTimer();
+      libraryLongPressTimerRef.current = window.setTimeout(() => {
+        libraryLongPressTimerRef.current = null;
+        openLibraryContextMenuAt(pack, clientX, clientY);
+      }, 500);
+    },
+    [busy, clearLibraryLongPressTimer, mobileShell, openLibraryContextMenuAt],
+  );
+
+  useEffect(() => {
+    return () => {
+      clearLibraryLongPressTimer();
+    };
+  }, [clearLibraryLongPressTimer]);
+
   const openLibrarySplitPanel = useCallback(
     (pack: InstalledPack): void => {
       void selectLibraryPack(pack);
@@ -1044,13 +1259,16 @@ export function TexturePackInstallerToolPanel({
       if (!isTauriRuntime()) {
         return;
       }
-      const selected = await open({
-        directory: true,
-        multiple: false,
-        title: t("packInstaller.librarySplitOutputBrowse"),
-      });
-      if (typeof selected === "string" && selected.trim()) {
-        onPicked(selected);
+      try {
+        const selected = await pickUserFolder({
+          title: t("packInstaller.librarySplitOutputBrowse"),
+          importToSandbox: false,
+        });
+        if (selected) {
+          onPicked(selected);
+        }
+      } catch {
+        // Cancelled or unavailable.
       }
     },
     [t],
@@ -1130,7 +1348,11 @@ export function TexturePackInstallerToolPanel({
           break;
         case "delete":
           void selectLibraryPack(pack);
+          setLibraryDeleteError(null);
           setLibraryDeleteConfirm(pack);
+          break;
+        case "applyToGame":
+          addPackToApplied(pack);
           break;
         default: {
           const _exhaustive: never = action;
@@ -1140,6 +1362,7 @@ export function TexturePackInstallerToolPanel({
       }
     },
     [
+      addPackToApplied,
       libraryContextMenu?.pack,
       openLibraryPackFolder,
       openLibrarySplitPanel,
@@ -1159,6 +1382,7 @@ export function TexturePackInstallerToolPanel({
     }
     setBusy("library");
     setStatusMessage(null);
+    setLibraryDeleteError(null);
     try {
       await deleteInstalledPack(pack.path);
       setLibraryDeleteConfirm(null);
@@ -1176,14 +1400,12 @@ export function TexturePackInstallerToolPanel({
       );
       await refreshLibrary();
     } catch (err: unknown) {
-      setStatusTone("error");
-      setStatusMessage(
-        redactAbsolutePathsInText(
-          err instanceof Error
-            ? err.message
-            : t("errors:packInstaller.deleteFailed"),
-        ),
+      const message = redactAbsolutePathsInText(
+        invokeErrorMessage(err, t("errors:packInstaller.deleteFailed")),
       );
+      setLibraryDeleteError(message);
+      setStatusTone("error");
+      setStatusMessage(message);
     } finally {
       setBusy(null);
     }
@@ -1200,10 +1422,18 @@ export function TexturePackInstallerToolPanel({
       saveLibraryMetadata: () => {
         void saveLibraryMetadata();
       },
+      addPackToApplied,
+      commitAppliedEntries,
+      libraryPacks,
+      libraryPreviews,
     });
   }, [
+    addPackToApplied,
     browsePackPng,
     clearPackPng,
+    commitAppliedEntries,
+    libraryPacks,
+    libraryPreviews,
     onSidebarActionsChange,
     saveLibraryMetadata,
     updateLibraryPackMetadata,
@@ -1291,7 +1521,7 @@ export function TexturePackInstallerToolPanel({
 
   // Tauri webview drag-drop (folders/zips with real OS paths).
   useEffect(() => {
-    if (!isTauriRuntime()) {
+    if (!isTauriRuntime() || isMobileShell()) {
       return;
     }
     let disposed = false;
@@ -1512,9 +1742,13 @@ export function TexturePackInstallerToolPanel({
     if (!plan) {
       return;
     }
-    if (!geometryDashFound) {
+    if (!packIoReady) {
       setStatusTone("error");
-      setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
+      setStatusMessage(
+        mobileShell
+          ? t("errors:packInstaller.geodeRequiredMobile")
+          : t("errors:packInstaller.geometryDashRequired"),
+      );
       return;
     }
     const unitIds = plan.units.filter((unit) => unit.enabled).map((unit) => unit.id);
@@ -1523,9 +1757,15 @@ export function TexturePackInstallerToolPanel({
       setStatusMessage(t("errors:packInstaller.noUnitsSelected"));
       return;
     }
-    if (convertToLatestVersion && !convertGameVersion.trim()) {
+    const shouldConvert = !mobileShell && convertToLatestVersion;
+    if (shouldConvert && !convertGameVersion.trim()) {
       setStatusTone("error");
       setStatusMessage(t("errors:packInstaller.convertVersionRequired"));
+      return;
+    }
+    if (installPlanHasInvalidPackMetadata(plan)) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.metadataInvalid"));
       return;
     }
 
@@ -1545,7 +1785,7 @@ export function TexturePackInstallerToolPanel({
         plan,
         unitIds,
         {
-          convertToLatestVersion,
+          convertToLatestVersion: shouldConvert,
           gameVersion: convertGameVersion,
           portPacks,
           lowPort: portLowGraphics,
@@ -1604,7 +1844,7 @@ export function TexturePackInstallerToolPanel({
   };
 
   const runCreate = async (): Promise<void> => {
-    if (!geometryDashFound) {
+    if (!packIoReady) {
       setStatusTone("error");
       setStatusMessage(t("errors:packInstaller.geometryDashRequired"));
       return;
@@ -1621,12 +1861,19 @@ export function TexturePackInstallerToolPanel({
       setStatusMessage(t("errors:packInstaller.folderNameRequired"));
       return;
     }
+    if (!isPackMetadataValid(bridge.createMetadata)) {
+      setStatusTone("error");
+      setStatusMessage(t("errors:packInstaller.metadataInvalid"));
+      return;
+    }
 
     const metadata: PackMetadata = {
       ...bridge.createMetadata,
-      name: bridge.createMetadata.name.trim() || resolvedFolder,
-      textureldr: bridge.createMetadata.textureldr.trim() || DEFAULT_PACK_METADATA.textureldr,
-      version: bridge.createMetadata.version.trim() || DEFAULT_PACK_METADATA.version,
+      textureldr: bridge.createMetadata.textureldr.trim(),
+      name: bridge.createMetadata.name.trim(),
+      id: bridge.createMetadata.id.trim(),
+      version: bridge.createMetadata.version.trim(),
+      author: bridge.createMetadata.author.trim(),
     };
 
     setBusy("create");
@@ -1693,6 +1940,30 @@ export function TexturePackInstallerToolPanel({
       ? Math.min(1, Math.max(0, overlayProgressCompleted / overlayProgressTotal))
       : 0;
 
+  const mobileRailPanelLabel =
+    bridge.mode === "library"
+      ? bridge.libraryRailTab === "applied"
+        ? t("packInstaller.appliedPanelTitle")
+        : t("packInstaller.libraryPanelButtonLabel")
+      : t("packInstaller.metadataPanelTitle");
+  const MobileRailPanelIcon =
+    bridge.mode === "library" && bridge.libraryRailTab === "applied" ? Layers : Package;
+
+  const mobileMetadataRailButton =
+    mobileShell && onOpenMobileSideRail ? (
+      <ToolGlassActionButton
+        variant="output"
+        className="tm-tool-rail-btn tm-tool-rail-btn--output"
+        onClick={onOpenMobileSideRail}
+        aria-label={t("navigation:mobile.showDrawerAria", {
+          panel: mobileRailPanelLabel,
+        })}
+      >
+        <MobileRailPanelIcon size={16} strokeWidth={1.85} />
+        {mobileRailPanelLabel}
+      </ToolGlassActionButton>
+    ) : null;
+
   return (
     <ToolPage accent="amber" wide>
       {overlay ? (
@@ -1746,7 +2017,7 @@ export function TexturePackInstallerToolPanel({
 
       <ToolPageHeader toolId="texturePackInstaller" />
 
-      {!geometryDashFound ? (
+      {mobileShell ? null : !geometryDashFound ? (
         <p className="tm-tool-inline-error" role="alert">
           {t("errors:packInstaller.geometryDashRequired")}
         </p>
@@ -1804,14 +2075,20 @@ export function TexturePackInstallerToolPanel({
               onDrop={onHtmlDrop}
             >
               <FileArchive size={28} strokeWidth={1.5} />
-              <p className="tm-pack-dropzone-title">{t("packInstaller.dropHint")}</p>
-              <p className="tm-pack-dropzone-sub">{t("packInstaller.dropHintSub")}</p>
+              <p className="tm-pack-dropzone-title">
+                {mobileShell
+                  ? t("packInstaller.mobileDropHint")
+                  : t("packInstaller.dropHint")}
+              </p>
+              {mobileShell ? null : (
+                <p className="tm-pack-dropzone-sub">{t("packInstaller.dropHintSub")}</p>
+              )}
               <div className="tm-pack-dropzone-actions">
                 <button
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browseFolder()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FolderOpen size={15} />
                   {t("packInstaller.browseFolder")}
@@ -1820,7 +2097,7 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browseZip()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FileArchive size={15} />
                   {t("packInstaller.browseZip")}
@@ -1889,26 +2166,28 @@ export function TexturePackInstallerToolPanel({
                       <p className="tm-tool-section-note tm-pack-extras-hint">
                         {t("packInstaller.extrasHint")}
                       </p>
-                      <div className="tm-pack-extras-option">
-                        <ToolCheckboxField
-                          label={t("packInstaller.convertToLatestVersion")}
-                          checked={convertToLatestVersion}
-                          onChange={setConvertToLatestVersion}
-                        />
-                        {convertToLatestVersion ? (
-                          <div className="tm-pack-extras-option-settings">
-                            <ToolSelectField
-                              label={t("packInstaller.convertPreviousVersion")}
-                              value={convertGameVersion}
-                              options={CONVERT_VERSION_OPTIONS}
-                              onChange={setConvertGameVersion}
-                            />
-                            <p className="tm-tool-section-note">
-                              {t("packInstaller.convertToLatestVersionHint")}
-                            </p>
-                          </div>
-                        ) : null}
-                      </div>
+                      {mobileShell ? null : (
+                        <div className="tm-pack-extras-option">
+                          <ToolCheckboxField
+                            label={t("packInstaller.convertToLatestVersion")}
+                            checked={convertToLatestVersion}
+                            onChange={setConvertToLatestVersion}
+                          />
+                          {convertToLatestVersion ? (
+                            <div className="tm-pack-extras-option-settings">
+                              <ToolSelectField
+                                label={t("packInstaller.convertPreviousVersion")}
+                                value={convertGameVersion}
+                                options={CONVERT_VERSION_OPTIONS}
+                                onChange={setConvertGameVersion}
+                              />
+                              <p className="tm-tool-section-note">
+                                {t("packInstaller.convertToLatestVersionHint")}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      )}
                       <div className="tm-pack-extras-option">
                         <ToolCheckboxField
                           label={t("packInstaller.portPacks")}
@@ -1972,12 +2251,17 @@ export function TexturePackInstallerToolPanel({
             )}
           </ToolSection>
 
-          <div className="tm-pack-actions">
-            <button
-              type="button"
+          <ToolActionBar>
+            <ToolGlassActionButton
+              variant="run"
               className="tm-tool-run-btn"
               onClick={() => void runInstall()}
-              disabled={busy !== null || !plan || !geometryDashFound}
+              disabled={
+                busy !== null ||
+                !plan ||
+                !packIoReady ||
+                installPlanHasInvalidPackMetadata(plan)
+              }
             >
               {busy === "install" || busy === "discover" ? (
                 <LoaderCircle size={16} className="tm-pack-spin" />
@@ -1985,8 +2269,9 @@ export function TexturePackInstallerToolPanel({
                 <Check size={16} />
               )}
               {busy === "install" ? t("packInstaller.installing") : t("packInstaller.install")}
-            </button>
-          </div>
+            </ToolGlassActionButton>
+            {mobileMetadataRailButton}
+          </ToolActionBar>
         </>
       ) : bridge.mode === "create" ? (
         <>
@@ -2014,14 +2299,20 @@ export function TexturePackInstallerToolPanel({
               onDragLeave={onHtmlDragLeave}
               onDrop={onHtmlDrop}
             >
-              <p className="tm-pack-dropzone-title">{t("packInstaller.dropCreateHint")}</p>
-              <p className="tm-pack-dropzone-sub">{t("packInstaller.dropCreateHintSub")}</p>
+              <p className="tm-pack-dropzone-title">
+                {mobileShell
+                  ? t("packInstaller.mobileDropCreateHint")
+                  : t("packInstaller.dropCreateHint")}
+              </p>
+              {mobileShell ? null : (
+                <p className="tm-pack-dropzone-sub">{t("packInstaller.dropCreateHintSub")}</p>
+              )}
               <div className="tm-pack-dropzone-actions">
                 <button
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browseCreateSourceFolder()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FolderOpen size={15} />
                   {t("packInstaller.browseCreateSource")}
@@ -2030,7 +2321,7 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void browsePackPng()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   {t("packInstaller.browsePackPng")}
                 </button>
@@ -2056,12 +2347,16 @@ export function TexturePackInstallerToolPanel({
             ) : null}
           </ToolSection>
 
-          <div className="tm-pack-actions">
-            <button
-              type="button"
+          <ToolActionBar>
+            <ToolGlassActionButton
+              variant="run"
               className="tm-tool-run-btn"
               onClick={() => void runCreate()}
-              disabled={busy !== null || !geometryDashFound}
+              disabled={
+                busy !== null ||
+                !packIoReady ||
+                !isPackMetadataValid(bridge.createMetadata)
+              }
             >
               {busy === "create" ? (
                 <LoaderCircle size={16} className="tm-pack-spin" />
@@ -2069,8 +2364,9 @@ export function TexturePackInstallerToolPanel({
                 <FolderPlus size={16} />
               )}
               {busy === "create" ? t("packInstaller.creating") : t("packInstaller.createPack")}
-            </button>
-            {createdPackDir ? (
+            </ToolGlassActionButton>
+            {mobileMetadataRailButton}
+            {createdPackDir && !mobileShell ? (
               <button
                 type="button"
                 className="tm-pack-secondary-btn"
@@ -2081,7 +2377,7 @@ export function TexturePackInstallerToolPanel({
                 {t("packInstaller.openFolder")}
               </button>
             ) : null}
-          </div>
+          </ToolActionBar>
         </>
       ) : (
         <>
@@ -2097,7 +2393,9 @@ export function TexturePackInstallerToolPanel({
                 </span>
                 <span>
                   {libraryPacksPath
-                    ? shortenPathForDisplay(libraryPacksPath)
+                    ? mobileShell
+                      ? basenameForDisplay(libraryPacksPath)
+                      : shortenPathForDisplay(libraryPacksPath)
                     : "—"}
                 </span>
               </p>
@@ -2106,20 +2404,22 @@ export function TexturePackInstallerToolPanel({
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void refreshLibrary()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <RefreshCw size={15} />
                   {t("packInstaller.libraryRefresh")}
                 </button>
+                {mobileShell ? null : (
                 <button
                   type="button"
                   className="tm-tool-path-browse"
                   onClick={() => void openPacksFolder()}
-                  disabled={busy !== null || !geometryDashFound}
+                  disabled={busy !== null || !packIoReady}
                 >
                   <FolderOpen size={15} />
                   {t("packInstaller.libraryOpenPacksFolder")}
                 </button>
+                )}
               </div>
             </div>
 
@@ -2136,50 +2436,109 @@ export function TexturePackInstallerToolPanel({
                   const author = pack.metadata?.author?.trim() || t("packInstaller.libraryNoAuthor");
                   const version = pack.metadata?.version?.trim() || "1.0.0";
                   return (
-                    <button
+                    <div
                       key={pack.id}
-                      type="button"
-                      className={`tm-pack-library-card${selected ? " selected" : ""}`}
-                      onClick={() => void selectLibraryPack(pack)}
-                      onContextMenu={(event) => {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        void selectLibraryPack(pack);
-                        setLibraryContextMenu({
-                          pack,
-                          x: event.clientX,
-                          y: event.clientY,
-                        });
-                      }}
-                      disabled={busy !== null}
+                      className={`tm-pack-library-card${selected ? " selected" : ""}${
+                        busy !== null ? " is-disabled" : ""
+                      }`}
                     >
-                      <div className="tm-pack-library-preview">
-                        {preview ? (
-                          <img
-                            className="tm-pack-library-thumb"
-                            src={preview}
-                            alt=""
-                          />
-                        ) : (
-                          <div className="tm-pack-library-thumb-missing" aria-hidden>
-                            <PackageOpen size={28} strokeWidth={1.5} />
-                          </div>
-                        )}
-                      </div>
-                      <div className="tm-pack-library-title">{libraryPackTitle(pack)}</div>
-                      <div className="tm-pack-library-meta">
-                        {t("packInstaller.libraryVersionAuthor", {
-                          author,
-                          version,
-                        })}
-                      </div>
-                    </button>
+                      <PackLibraryDragSurface
+                        as="div"
+                        role="button"
+                        tabIndex={busy !== null ? -1 : 0}
+                        className="tm-pack-library-card-main"
+                        pack={pack}
+                        disabled={busy !== null}
+                        onTap={() => {
+                          void selectLibraryPack(pack);
+                        }}
+                        onKeyDown={(event) => {
+                          if (busy !== null) {
+                            return;
+                          }
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            void selectLibraryPack(pack);
+                          }
+                        }}
+                        onContextMenu={
+                          mobileShell
+                            ? undefined
+                            : (event) => {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                openLibraryContextMenuAt(
+                                  pack,
+                                  event.clientX,
+                                  event.clientY,
+                                );
+                              }
+                        }
+                        onTouchStart={
+                          mobileShell
+                            ? (event) => {
+                                const touch = event.touches[0];
+                                if (!touch) {
+                                  return;
+                                }
+                                startLibraryLongPress(pack, touch.clientX, touch.clientY);
+                              }
+                            : undefined
+                        }
+                        onTouchEnd={mobileShell ? clearLibraryLongPressTimer : undefined}
+                        onTouchMove={mobileShell ? clearLibraryLongPressTimer : undefined}
+                        onTouchCancel={mobileShell ? clearLibraryLongPressTimer : undefined}
+                      >
+                        <div className="tm-pack-library-preview">
+                          {preview ? (
+                            <img
+                              className="tm-pack-library-thumb"
+                              src={preview}
+                              alt=""
+                              draggable={false}
+                            />
+                          ) : (
+                            <div className="tm-pack-library-thumb-missing" aria-hidden>
+                              <PackageOpen size={28} strokeWidth={1.5} />
+                            </div>
+                          )}
+                        </div>
+                        <div className="tm-pack-library-title">{libraryPackTitle(pack)}</div>
+                        <div className="tm-pack-library-meta">
+                          {t("packInstaller.libraryVersionAuthor", {
+                            author,
+                            version,
+                          })}
+                        </div>
+                      </PackLibraryDragSurface>
+                      {mobileShell ? (
+                        <>
+                          <button
+                            type="button"
+                            className="tm-pack-library-card-more"
+                            aria-label={t("packInstaller.libraryMoreActionsAria")}
+                            disabled={busy !== null}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              const rect = event.currentTarget.getBoundingClientRect();
+                              openLibraryContextMenuAt(
+                                pack,
+                                Math.min(rect.right, window.innerWidth - 8),
+                                rect.bottom + 4,
+                              );
+                            }}
+                          >
+                            <MoreHorizontal size={18} aria-hidden />
+                          </button>
+                        </>
+                      ) : null}
+                    </div>
                   );
                 })}
               </div>
             )}
 
-            {bridge.libraryPack ? (
+            {bridge.libraryPack && !mobileShell ? (
               <div className="tm-pack-library-selection-actions">
                 <button
                   type="button"
@@ -2233,7 +2592,7 @@ export function TexturePackInstallerToolPanel({
                       : t("packInstaller.librarySplitOptions")
                 }
               >
-                {libraryActionPanel === "convert" ? (
+                {libraryActionPanel === "convert" && !mobileShell ? (
                   <>
                     <p className="tm-pack-library-action-title">
                       {t("packInstaller.libraryConvertOptions")}
@@ -2307,6 +2666,7 @@ export function TexturePackInstallerToolPanel({
                       onChange={setLibrarySplitOutputDir}
                       pickFolder={pickLibrarySplitOutputFolder}
                       placeholder={t("packInstaller.librarySplitOutputPlaceholder")}
+                      sandboxImported={isAppSandboxPath(librarySplitOutputDir)}
                     />
                     <p className="tm-tool-section-note">
                       {t("packInstaller.librarySplitOutputHint")}
@@ -2346,12 +2706,18 @@ export function TexturePackInstallerToolPanel({
         </>
       )}
 
+      {bridge.mode === "library" && mobileMetadataRailButton ? (
+        <ToolActionBar>{mobileMetadataRailButton}</ToolActionBar>
+      ) : null}
+
       {libraryContextMenu ? (
         <PackLibraryContextMenu
           pack={libraryContextMenu.pack}
           x={libraryContextMenu.x}
           y={libraryContextMenu.y}
           disabled={busy !== null}
+          hideOpenFolder={mobileShell}
+          hideConvert={mobileShell}
           onAction={handleLibraryContextAction}
           onClose={() => setLibraryContextMenu(null)}
         />
@@ -2363,6 +2729,7 @@ export function TexturePackInstallerToolPanel({
           onClick={() => {
             if (busy === null) {
               setLibraryDeleteConfirm(null);
+              setLibraryDeleteError(null);
             }
           }}
           role="presentation"
@@ -2380,10 +2747,18 @@ export function TexturePackInstallerToolPanel({
                 name: libraryPackTitle(libraryDeleteConfirm),
               })}
             </p>
+            {libraryDeleteError ? (
+              <p className="tm-tool-inline-error" role="alert">
+                {libraryDeleteError}
+              </p>
+            ) : null}
             <div className="tm-icon-editor-confirm-dialog-actions">
               <button
                 type="button"
-                onClick={() => setLibraryDeleteConfirm(null)}
+                onClick={() => {
+                  setLibraryDeleteConfirm(null);
+                  setLibraryDeleteError(null);
+                }}
                 disabled={busy !== null}
               >
                 {t("common:cancel")}
@@ -2409,8 +2784,9 @@ export function TexturePackInstallerToolPanel({
       {statusMessage &&
       busy !== "install" &&
       busy !== "create" &&
-      busy !== "library" &&
-      busy !== "librarySave" ? (
+      (busy !== "library" || statusTone === "error") &&
+      busy !== "librarySave" &&
+      !(mobileShell && !geometryDashFound && statusTone === "error") ? (
         <div className={`tm-pack-status tm-pack-status-${statusTone}`} role="status">
           {busy ? <LoaderCircle size={15} className="tm-pack-spin" /> : null}
           <div>

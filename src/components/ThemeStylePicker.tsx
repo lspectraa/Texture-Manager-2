@@ -59,6 +59,15 @@ function ThemeMiniPreview({ theme }: { theme: AppTheme }) {
             <span className="tm-theme-mini-preview-card amber" />
           </span>
         </div>
+        <div className="tm-theme-mini-preview-dock">
+          <span className="tm-theme-mini-preview-dock-handle" />
+          <div className="tm-theme-mini-preview-dock-row">
+            <span className="tm-theme-mini-preview-dock-btn is-active" />
+            <span className="tm-theme-mini-preview-dock-btn cyan" />
+            <span className="tm-theme-mini-preview-dock-btn amber" />
+            <span className="tm-theme-mini-preview-dock-btn" />
+          </div>
+        </div>
       </div>
     </div>
   );

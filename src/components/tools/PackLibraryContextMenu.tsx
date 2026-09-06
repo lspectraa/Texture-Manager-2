@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import {
   FolderOpen,
+  Layers,
   Scissors,
   Shuffle,
   Trash2,
@@ -14,6 +15,7 @@ export type PackLibraryContextAction =
   | "convert"
   | "port"
   | "split"
+  | "applyToGame"
   | "delete";
 
 type PackLibraryContextMenuProps = {
@@ -21,6 +23,8 @@ type PackLibraryContextMenuProps = {
   x: number;
   y: number;
   disabled?: boolean;
+  hideOpenFolder?: boolean;
+  hideConvert?: boolean;
   onAction: (action: PackLibraryContextAction) => void;
   onClose: () => void;
 };
@@ -52,6 +56,11 @@ const MENU_ITEMS: {
     labelKey: "packInstaller.libraryActionSplit",
   },
   {
+    action: "applyToGame",
+    icon: Layers,
+    labelKey: "packInstaller.libraryActionApplyToGame",
+  },
+  {
     action: "delete",
     icon: Trash2,
     labelKey: "packInstaller.libraryActionDelete",
@@ -64,6 +73,8 @@ export function PackLibraryContextMenu({
   x,
   y,
   disabled = false,
+  hideOpenFolder = false,
+  hideConvert = false,
   onAction,
   onClose,
 }: PackLibraryContextMenuProps) {
@@ -117,7 +128,11 @@ export function PackLibraryContextMenu({
       style={{ left: x, top: y }}
       data-pack-id={pack.id}
     >
-      {MENU_ITEMS.map((item) => {
+      {MENU_ITEMS.filter(
+        (item) =>
+          !(hideOpenFolder && item.action === "openFolder") &&
+          !(hideConvert && item.action === "convert"),
+      ).map((item) => {
         const Icon = item.icon;
         return (
           <button

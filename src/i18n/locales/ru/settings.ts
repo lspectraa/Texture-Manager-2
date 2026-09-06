@@ -60,6 +60,7 @@ const settings: AppLocaleResources["settings"] = {
     title: "Geometry Dash",
     subtitle:
       "Установка Steam, используемая для стандартных Resources и путей Geode",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "Не найдено",
     manualOverride: "Указано вручную",
     autoDetected: "Обнаружено автоматически",
@@ -69,6 +70,9 @@ const settings: AppLocaleResources["settings"] = {
     installLocation: "Расположение установки",
     browseHint:
       "Выберите папку Geometry Dash либо установите игру через Steam и повторите поиск.",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "Применить путь",
     clearOverride: "Сбросить указанный путь",
     redetect: "Найти снова",
@@ -86,12 +90,21 @@ const settings: AppLocaleResources["settings"] = {
     checkFailed: "Не удалось проверить обновления. {{error}}",
     installBlocked:
       "Дождитесь завершения текущей операции перед установкой обновления.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "Загрузка и установка…",
     downloading: "Загрузка обновления… {{percent}}%",
     installAndRestart: "Установить и перезапустить",
+    installApk: "Download and install",
     availableTitle: "Доступно обновление",
     availableMeta:
       "Установите и перезапустите, чтобы перейти с v{{current}} на v{{version}}.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation:
       "Дождитесь завершения текущей операции перед установкой.",
     later: "Позже",

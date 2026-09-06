@@ -38,6 +38,16 @@ const navigation: AppLocaleResources["navigation"] = {
     toolsAvailableAria: "{{count}} herramientas disponibles",
     comingSoonCount: "+{{count}} próximamente",
     cardComingSoon: "Próximamente",
+    aboutTitle: "Acerca de",
+    aboutSubtitle: "Copyright, licencia y enlaces",
+    aboutCardLabel: "Copyright y acerca de",
+    openPacksFolder: "Abrir carpeta de packs",
+    openGameFiles: "Abrir archivos del juego",
+    openSaveFolder: "Abrir carpeta de guardado",
+    utilitiesAria: "Accesos rápidos a carpetas",
+    openPacksFolderFailed: "No se pudo abrir la carpeta de packs. ¿Está instalado Geometry Dash?",
+    openGameFilesFailed: "No se pudo abrir la carpeta del juego. ¿Está instalado Geometry Dash?",
+    openSaveFolderFailed: "No se pudo abrir la carpeta de guardado.",
   },
   sections: {
     design: {
@@ -102,6 +112,18 @@ const navigation: AppLocaleResources["navigation"] = {
       description: "Añade paquetes de texturas a Geometry Dash.",
     },
   },
-};
+  mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
+  },
+} as const;
 
 export default navigation;

@@ -5,12 +5,108 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/app-icon-32.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/app-icon.png" />
     <link rel="apple-touch-icon" href="/app-icon.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Texture Manager 2</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #070a17;
+      }
+      #boot-fallback {
+        color: #e8eef7;
+        font-family: system-ui, sans-serif;
+        padding: 16px;
+      }
+    </style>
   </head>
 
   <body>
-    <div id="root"></div>
+    <script>
+      // Tauri Android/iOS dev proxy serves from tauri.localhost / tauri://localhost.
+      // Rewrite Vite HMR WebSocket URLs so the emulator can reach the host Vite server.
+      (function () {
+        var host = window.location.hostname;
+        var isDevProxy =
+          host === "localhost" || host === "127.0.0.1" || /tauri\.localhost/i.test(host);
+        if (!isDevProxy) {
+          return;
+        }
+
+        // Emulator → host loopback. Works with Vite on 127.0.0.1 or 0.0.0.0
+        // without requiring `adb reverse` (unlike device localhost).
+        // Physical devices: prefer `npm run android:dev` (adb reverse) and set
+        // window.__TM2_HMR_HOST__ = "127.0.0.1" before this script if needed.
+        var isAndroid = /Android/i.test(navigator.userAgent || "");
+        var hmrHost =
+          typeof window.__TM2_HMR_HOST__ === "string" && window.__TM2_HMR_HOST__
+            ? window.__TM2_HMR_HOST__
+            : isAndroid
+              ? "10.0.2.2"
+              : "127.0.0.1";
+
+        function rewriteWsUrl(url) {
+          if (typeof url !== "string") {
+            return url;
+          }
+          return url
+            .replace(/tauri\.localhost/gi, hmrHost)
+            .replace(/\/\/localhost/gi, "//" + hmrHost)
+            .replace(/\/\/127\.0\.0\.1/gi, "//" + hmrHost)
+            .replace(/\/\/10\.0\.2\.2/gi, "//" + hmrHost)
+            .replace(/\/\/10\.2\.0\.2/gi, "//" + hmrHost);
+        }
+
+        var NativeWebSocket = window.WebSocket;
+        function PatchedWebSocket(url, protocols) {
+          var rewritten = rewriteWsUrl(url);
+          var socket =
+            protocols !== undefined
+              ? new NativeWebSocket(rewritten, protocols)
+              : new NativeWebSocket(rewritten);
+          // Vite's client rejects if HMR never opens; keep app boot usable.
+          socket.addEventListener("error", function () {
+            /* HMR optional on mobile — HTTP still loads via Tauri proxy */
+          });
+          return socket;
+        }
+        PatchedWebSocket.prototype = NativeWebSocket.prototype;
+        PatchedWebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+        PatchedWebSocket.OPEN = NativeWebSocket.OPEN;
+        PatchedWebSocket.CLOSING = NativeWebSocket.CLOSING;
+        PatchedWebSocket.CLOSED = NativeWebSocket.CLOSED;
+        window.WebSocket = PatchedWebSocket;
+
+        console.log(
+          "[TM2] dev proxy shim active",
+          window.location.href,
+          "hmr→",
+          hmrHost,
+        );
+      })();
+    </script>
+    <div id="root">
+      <p id="boot-fallback">Loading Texture Manager 2…</p>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
+    <script>
+      // Surfaces module-load failures that never reach main.tsx.
+      window.addEventListener("error", function (event) {
+        var el = document.getElementById("boot-fallback");
+        if (!el || !event.message) {
+          return;
+        }
+        if (el.textContent && el.textContent.indexOf("Failed to start") === 0) {
+          return;
+        }
+        el.style.color = "#ffb4b4";
+        el.style.whiteSpace = "pre-wrap";
+        el.textContent =
+          "Failed to load app scripts:\n" +
+          event.message +
+          (event.filename ? "\n" + event.filename : "");
+      });
+    </script>
   </body>
 </html>

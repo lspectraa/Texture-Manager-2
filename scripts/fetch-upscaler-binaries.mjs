@@ -9,7 +9,16 @@
  *
  * Add a kind to SHIPPED (and tauri.conf.json externalBin) when bundling another sidecar.
  */
-import { createWriteStream, existsSync, mkdirSync, rmSync, cpSync, readdirSync, statSync } from "node:fs";
+import {
+  chmodSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  rmSync,
+  cpSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { dirname, join, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pipeline } from "node:stream/promises";
@@ -70,7 +79,7 @@ const SHIPPED = ["waifu2x", "realesrgan"];
 function hostPlatform() {
   if (process.platform === "win32") return "windows";
   if (process.platform === "darwin") return "macos";
-  throw new Error(`Unsupported host platform for upscaler binaries: ${process.platform}`);
+  return null;
 }
 
 async function download(url, dest) {
@@ -126,12 +135,44 @@ function findDirRecursive(dir, name) {
   return null;
 }
 
+function isSidecarBinaryName(name) {
+  return name.includes("ncnn-vulkan") && !name.endsWith(".dll");
+}
+
+/** Real-ESRGAN macOS zips omit the execute bit; Tauri needs +x for externalBin sidecars. */
+function ensureSidecarExecutable(filePath) {
+  if (process.platform === "win32") {
+    return;
+  }
+  if (!isSidecarBinaryName(basename(filePath))) {
+    return;
+  }
+  const mode = statSync(filePath).mode & 0o777;
+  if ((mode & 0o111) === 0) {
+    chmodSync(filePath, mode | 0o755);
+    console.log(`Marked executable ${filePath}`);
+  }
+}
+
+function ensureAllSidecarExecutables() {
+  if (process.platform === "win32" || !existsSync(binariesDir)) {
+    return;
+  }
+  for (const entry of readdirSync(binariesDir)) {
+    if (!isSidecarBinaryName(entry)) {
+      continue;
+    }
+    ensureSidecarExecutable(join(binariesDir, entry));
+  }
+}
+
 function copyBinary(srcExe, baseName, triples) {
   mkdirSync(binariesDir, { recursive: true });
   for (const triple of triples) {
     const ext = triple.includes("windows") ? ".exe" : "";
     const dest = join(binariesDir, `${baseName}-${triple}${ext}`);
     cpSync(srcExe, dest);
+    ensureSidecarExecutable(dest);
     console.log(`Wrote ${dest}`);
   }
 }
@@ -265,7 +306,18 @@ async function main() {
   mkdirSync(resourcesDir, { recursive: true });
   cleanupUnshipped();
 
-  const platforms = all ? ["windows", "macos"] : [hostPlatform()];
+  const host = hostPlatform();
+  if (!host && !all) {
+    if (ifMissing) {
+      console.log(
+        `Skipping upscaler binaries on ${process.platform}: desktop sidecars are Windows/macOS only.`,
+      );
+      return;
+    }
+    throw new Error(`Unsupported host platform for upscaler binaries: ${process.platform}`);
+  }
+
+  const platforms = all ? ["windows", "macos"] : [host];
   for (const platform of platforms) {
     for (const kind of SHIPPED) {
       if (ifMissing && packageReady(kind, platform)) {
@@ -277,6 +329,7 @@ async function main() {
   }
 
   writeNotice();
+  ensureAllSidecarExecutables();
   console.log(`Upscaler binaries and models are ready (${SHIPPED.join(", ")}).`);
 }
 

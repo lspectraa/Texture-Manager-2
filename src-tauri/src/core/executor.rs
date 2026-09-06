@@ -204,6 +204,19 @@ where
 
     check_cancel(cancel.as_ref())?;
 
+    #[cfg(target_os = "android")]
+    if matches!(plan.kind, OperationKind::Upscaler) {
+        return Err(AppError::InvalidOperation(
+            "Upscaler is not available on Android",
+        ));
+    }
+    #[cfg(target_os = "android")]
+    if matches!(plan.kind, OperationKind::ConvertToNewVersion) {
+        return Err(AppError::InvalidOperation(
+            "Convert to New Version is not available on Android (Geometry Dash Resources are inaccessible)",
+        ));
+    }
+
     if !input_dir.exists() {
         return Err(AppError::InvalidPath("input directory does not exist"));
     }

@@ -36,6 +36,16 @@ const navigation = {
     toolsAvailableAria: "有 {{count}} 个工具可用",
     comingSoonCount: "还有 {{count}} 个即将推出",
     cardComingSoon: "即将推出",
+    aboutTitle: "关于",
+    aboutSubtitle: "版权、许可与链接",
+    aboutCardLabel: "版权与关于",
+    openPacksFolder: "打开材质包文件夹",
+    openGameFiles: "打开游戏文件",
+    openSaveFolder: "打开存档文件夹",
+    utilitiesAria: "文件夹快捷方式",
+    openPacksFolderFailed: "无法打开材质包文件夹。是否已安装 Geometry Dash？",
+    openGameFilesFailed: "无法打开游戏文件文件夹。是否已安装 Geometry Dash？",
+    openSaveFolderFailed: "无法打开存档文件夹。",
   },
   sections: {
     design: {
@@ -99,6 +109,18 @@ const navigation = {
       shortLabel: "包安装器",
       description: "把贴图包加到 Geometry Dash。",
     },
+  },
+  mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
   },
 } as const;
 

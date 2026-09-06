@@ -170,6 +170,15 @@ export function AppSelect<T extends string = string>({
     );
   }, [enabledIndexes, isOpen, options, value]);
 
+  useLayoutEffect(() => {
+    if (!isOpen || highlightIndex < 0) {
+      return;
+    }
+    menuRef.current
+      ?.querySelector<HTMLElement>(".tm-app-select-option.is-highlighted")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlightIndex, isOpen]);
+
   const moveHighlight = (direction: 1 | -1) => {
     if (enabledIndexes.length === 0) {
       return;

@@ -12,15 +12,18 @@ import { APP_LANGUAGES } from "../i18n/languages";
 import type { AppTheme } from "../utils/theme";
 import { applyTheme, setStoredTheme } from "../utils/theme";
 import { shortenPathForDisplay } from "../utils/pathDisplay";
+import { geometryDashPathPlaceholder } from "../utils/platform";
 import type { PickFolderFn } from "./tools/types";
 import { FolderPathField } from "./tools/layout";
 import { GlassFrost } from "./GlassFrost";
 import { LanguageFlag } from "./LanguageFlag";
 import { ThemeStylePicker } from "./ThemeStylePicker";
+import { AndroidStorageAccessPanel } from "./tools/AndroidStorageAccessPanel";
 
-type OnboardingStepId = "language" | "theme" | "geometryDash";
+type OnboardingStepId = "language" | "theme" | "geometryDash" | "androidStorage";
 
-const STEPS: OnboardingStepId[] = ["language", "theme", "geometryDash"];
+const DESKTOP_STEPS: OnboardingStepId[] = ["language", "theme", "geometryDash"];
+const MOBILE_STEPS: OnboardingStepId[] = ["language", "theme", "androidStorage"];
 
 type StatusChipTone = "success" | "warning" | "danger" | "info" | "neutral";
 
@@ -57,10 +60,13 @@ export type OnboardingFlowProps = {
   busy?: boolean;
   error?: string | null;
   pickFolder: PickFolderFn;
+  /** Mobile onboarding uses Android storage access instead of Geometry Dash path. */
+  mobileStorageAccess?: boolean;
   onThemeChange: (theme: AppTheme) => void;
   onLanguagePreview?: (language: AppLanguage) => void;
   onGeometryDashPathSelected: (path: string) => void;
   onRedetectGeometryDash: () => void;
+  onSettingsUpdated?: (settings: AppSettingsView) => void;
   onComplete: (choices: { language: AppLanguage; theme: AppTheme }) => void;
 };
 
@@ -69,17 +75,21 @@ export function OnboardingFlow({
   busy = false,
   error = null,
   pickFolder,
+  mobileStorageAccess = false,
   onThemeChange,
   onLanguagePreview,
   onGeometryDashPathSelected,
   onRedetectGeometryDash,
+  onSettingsUpdated,
   onComplete,
 }: OnboardingFlowProps) {
   const { t } = useTranslation("onboarding");
   const titleId = useId();
+  const steps = mobileStorageAccess ? MOBILE_STEPS : DESKTOP_STEPS;
   const [stepIndex, setStepIndex] = useState(0);
   const [language, setLanguage] = useState<AppLanguage>(() => settings.language);
   const [theme, setTheme] = useState<AppTheme>(() => settings.theme);
+  const [storageAccessGranted, setStorageAccessGranted] = useState(false);
   const [draftPath, setDraftPath] = useState(
     () => settings.geometryDashResolved || settings.geometryDashDetected || "",
   );
@@ -90,9 +100,9 @@ export function OnboardingFlow({
     );
   }, [settings.geometryDashResolved, settings.geometryDashDetected]);
 
-  const stepId = STEPS[stepIndex] ?? "language";
+  const stepId = steps[stepIndex] ?? "language";
   const isFirst = stepIndex === 0;
-  const isLast = stepIndex === STEPS.length - 1;
+  const isLast = stepIndex === steps.length - 1;
   const gdStatus = geometryDashStatus(settings, t);
   const displayPath = useMemo(() => {
     const path =
@@ -115,6 +125,8 @@ export function OnboardingFlow({
         return t("steps.theme");
       case "geometryDash":
         return t("steps.geometryDash");
+      case "androidStorage":
+        return t("steps.androidStorage");
       default: {
         const _exhaustive: never = stepId;
         return _exhaustive;
@@ -134,7 +146,7 @@ export function OnboardingFlow({
       onComplete({ language, theme });
       return;
     }
-    setStepIndex((index) => Math.min(STEPS.length - 1, index + 1));
+    setStepIndex((index) => Math.min(steps.length - 1, index + 1));
   };
 
   const goBack = () => {
@@ -231,7 +243,7 @@ export function OnboardingFlow({
                 value={draftPath}
                 onChange={setDraftPath}
                 pickFolder={pickFolder}
-                placeholder="C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
+                placeholder={geometryDashPathPlaceholder()}
                 onBrowse={(path) => {
                   setDraftPath(path);
                   onGeometryDashPathSelected(path);
@@ -272,6 +284,19 @@ export function OnboardingFlow({
             </div>
           ) : null}
 
+          {stepId === "androidStorage" ? (
+            <div className="tm-onboarding-android-storage">
+              <p className="tm-onboarding-hint">{t("androidStorage.hint")}</p>
+              <AndroidStorageAccessPanel
+                geometryDashFound={settings.geometryDashFound}
+                onSettingsUpdated={onSettingsUpdated}
+                onAccessStatusChanged={setStorageAccessGranted}
+                showReadyHint
+                className="tm-android-geode-access--onboarding"
+              />
+            </div>
+          ) : null}
+
           {error ? (
             <p className="tm-tool-inline-error" role="alert">
               {error}
@@ -296,7 +321,11 @@ export function OnboardingFlow({
               disabled={busy || (stepId === "language" && !language)}
               onClick={goNext}
             >
-              {isLast ? t("common:finish") : t("common:next")}
+              {isLast
+                ? stepId === "androidStorage" && !storageAccessGranted
+                  ? t("androidStorage.skipFinish")
+                  : t("common:finish")
+                : t("common:next")}
               {isLast ? (
                 <CheckCircle2 size={16} strokeWidth={2.1} aria-hidden />
               ) : (
@@ -310,7 +339,7 @@ export function OnboardingFlow({
             role="tablist"
             aria-label={t("progressAria")}
           >
-            {STEPS.map((id, index) => {
+            {steps.map((id, index) => {
               const active = index === stepIndex;
               const complete = index < stepIndex;
               return (

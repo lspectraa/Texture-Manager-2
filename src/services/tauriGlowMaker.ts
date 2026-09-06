@@ -30,8 +30,9 @@ function invokeErrorMessage(err: unknown): string {
 /**
  * Live preview PNG from the Tauri backend.
  * Loads a random `-uhd` icon from Geometry Dash `Resources/icons` (excluding UFO,
- * robot, and spider), then runs `render_icon_glow_from_primary`. Pass
- * `iconPlistPath` to preview a specific icon sheet instead (PNG resolved from
+ * robot, and spider), then runs `render_icon_glow_from_primary`. When game icons
+ * are unavailable, picks randomly from the bundled preview-icon placeholders.
+ * Pass `iconPlistPath` to preview a specific icon sheet instead (PNG resolved from
  * the same folder as the plist).
  *
  * Returns `{ dataUrl }` on success, or `{ error }` when the backend rejects the

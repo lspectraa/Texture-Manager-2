@@ -1,3 +1,4 @@
+pub mod geode_user_data;
 pub mod sync;
 
 use std::collections::{HashMap, HashSet};
@@ -12,7 +13,7 @@ use crate::core::discovery::{discover_sheet_pairs, discover_unpaired_png_keys, S
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{
     ensure_no_parent_dir_components, ensure_user_absolute_path, is_safe_path_segment,
-    join_under_parent, path_from_slashes, png_file_to_data_url, remove_dir_all_under_root,
+    path_from_slashes, png_file_to_data_url, remove_dir_all_under_root,
     shorten_path_for_display,
 };
 use crate::core::splitter::split_sheet_candidate;
@@ -25,8 +26,13 @@ const UNRESOLVED_GD_DIR_NAME: &str = "_unresolved_geometry_dash";
 /// Clear user-facing error when a tool needs Geometry Dash but it is missing.
 pub fn geometry_dash_required_error() -> AppError {
     AppError::IoError(
-        "Geometry Dash is not configured. Open Settings and set or detect the install path."
-            .to_string(),
+        if cfg!(target_os = "android") {
+            "Geode folder not found. Open Settings, grant all-files access if needed, then Re-detect Android/media/com.geode.launcher/game/geode."
+                .to_string()
+        } else {
+            "Geometry Dash is not configured. Open Settings and set or detect the install path."
+                .to_string()
+        },
     )
 }
 
@@ -35,8 +41,11 @@ pub struct GameFilesLayout {
     /// User-owned cache/legacy root (`~/TextureManager2/game-files`).
     pub root: PathBuf,
     /// Geometry Dash install root (Steam `.../common/Geometry Dash`).
+    /// On Android this is the Geode media `game` folder
+    /// (`…/Android/media/com.geode.launcher/game`).
     pub geometry_dash_dir: PathBuf,
-    /// Vanilla textures: `{GD}/Resources` (also exposed as `current` for UI defaults).
+    /// Vanilla textures: `{GD}/Resources`, or `{GD}/Geometry Dash.app/Contents/Resources` on macOS
+    /// (also exposed as `current` for UI defaults).
     pub resources: PathBuf,
     /// Geode built-in resources root: `{GD}/geode/resources`.
     pub geode_resources: PathBuf,
@@ -54,20 +63,39 @@ impl GameFilesLayout {
     }
 
     pub fn geometry_dash_found(&self) -> bool {
-        looks_like_geometry_dash_dir(&self.geometry_dash_dir)
+        if looks_like_geometry_dash_dir(&self.geometry_dash_dir) {
+            return true;
+        }
+        // Android: vanilla Resources are inaccessible; Geode media alone is enough
+        // once we can actually read files (not just see the folder exists).
+        #[cfg(target_os = "android")]
+        {
+            if !looks_like_geode_dir(&self.geometry_dash_dir.join("geode")) {
+                return false;
+            }
+            return android_geode_storage_readable(&self.geometry_dash_dir);
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            false
+        }
     }
 
-    /// `{GD}/geode/config`
+    /// `{GD}/geode/config` (or `{GD}/Geometry Dash.app/Contents/geode/config` on macOS).
     pub fn geode_config(&self) -> PathBuf {
-        self.geometry_dash_dir.join("geode").join("config")
+        resolve_geode_dir(&self.geometry_dash_dir).join("config")
     }
 
-    /// `{GD}/geode/mods`
+    /// `{GD}/geode/mods` (or `{GD}/Geometry Dash.app/Contents/geode/mods` on macOS).
     pub fn geode_mods(&self) -> PathBuf {
-        self.geometry_dash_dir.join("geode").join("mods")
+        resolve_geode_dir(&self.geometry_dash_dir).join("mods")
     }
 
     /// `{GD}/geode/config/geode.texture-loader/packs`
+    ///
+    /// On Android, `geometry_dash_dir` is the Geode media `game` folder
+    /// (`…/Android/media/com.geode.launcher/game`), so this resolves under the
+    /// live Geode tree the same way as desktop.
     pub fn texture_loader_packs(&self) -> PathBuf {
         self.geode_config()
             .join("geode.texture-loader")
@@ -120,6 +148,9 @@ impl GameFilesLayout {
             } else {
                 String::new()
             },
+            geometry_dash_save_dir: geode_user_data::resolve_geometry_dash_save_dir()
+                .map(|dir| dir.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             geometry_dash_found: found,
         }
     }
@@ -175,6 +206,8 @@ pub struct GameFilesLayoutDto {
     pub geode_config_dir: String,
     pub geode_mods_dir: String,
     pub texture_loader_packs_dir: String,
+    /// User save root (`…/GeometryDash`), parent of `geode/` — not the game install.
+    pub geometry_dash_save_dir: String,
     pub geometry_dash_found: bool,
 }
 
@@ -183,7 +216,19 @@ pub struct GameFilesLayoutDto {
 /// Override with `TM_GAME_FILES_DIR` (absolute path, no `..` components). Intended for tests and
 /// advanced installs — relocates settings, split-cache, and legacy trees. Invalid overrides are
 /// ignored and the default home-relative path is used.
+///
+/// On Android, [`set_game_files_root_override`] is called from setup with the app files dir.
+static GAME_FILES_ROOT_OVERRIDE: OnceLock<PathBuf> = OnceLock::new();
+
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub fn set_game_files_root_override(path: PathBuf) {
+    let _ = GAME_FILES_ROOT_OVERRIDE.set(path);
+}
+
 pub fn resolve_game_files_root() -> PathBuf {
+    if let Some(overridden) = GAME_FILES_ROOT_OVERRIDE.get() {
+        return overridden.clone();
+    }
     if let Ok(env_override) = std::env::var("TM_GAME_FILES_DIR") {
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
@@ -222,6 +267,68 @@ pub fn normalize_legacy_version(version: &str) -> String {
         .to_string()
 }
 
+/// macOS Steam/standalone: `Geometry Dash.app/Contents` when present under `path`,
+/// or `Contents` when `path` itself is the `.app` bundle.
+fn macos_app_contents_dir(path: &Path) -> Option<PathBuf> {
+    let nested = path.join("Geometry Dash.app").join("Contents");
+    if nested.is_dir() {
+        return Some(nested);
+    }
+    let is_app = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("app"));
+    if is_app {
+        let contents = path.join("Contents");
+        if contents.is_dir() {
+            return Some(contents);
+        }
+    }
+    None
+}
+
+/// Vanilla texture root: `{GD}/Resources` (Windows/Linux) or
+/// `{GD}/Geometry Dash.app/Contents/Resources` (macOS).
+pub fn resolve_vanilla_resources_dir(geometry_dash_dir: &Path) -> PathBuf {
+    let windows_style = geometry_dash_dir.join("Resources");
+    if windows_style.is_dir() {
+        return windows_style;
+    }
+    if let Some(contents) = macos_app_contents_dir(geometry_dash_dir) {
+        let mac = contents.join("Resources");
+        if mac.is_dir() {
+            return mac;
+        }
+    }
+    windows_style
+}
+
+/// Geode data root: `{GD}/geode` (Windows/Linux) or
+/// `{GD}/Geometry Dash.app/Contents/geode` (macOS).
+pub fn resolve_geode_dir(geometry_dash_dir: &Path) -> PathBuf {
+    let windows_style = geometry_dash_dir.join("geode");
+    if windows_style.is_dir() {
+        return windows_style;
+    }
+    if let Some(contents) = macos_app_contents_dir(geometry_dash_dir) {
+        let mac = contents.join("geode");
+        // Prefer the macOS bundle location whenever the .app exists, even before
+        // Geode has created its folders (so Settings/tools point at the live tree).
+        return mac;
+    }
+    windows_style
+}
+
+fn resources_has_texture_markers(resources: &Path) -> bool {
+    resources.join("icons").is_dir()
+        || resources.join("game_bg_01_001-uhd.png").is_file()
+        || resources.join("game_bg_01_001-hd.png").is_file()
+        || resources.join("game_bg_01_001.png").is_file()
+        || resources.join("GJ_GameSheet-uhd.plist").is_file()
+        || resources.join("GJ_GameSheet-hd.plist").is_file()
+        || resources.join("GJ_GameSheet.plist").is_file()
+}
+
 pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
     if path.as_os_str().is_empty() {
         return false;
@@ -238,7 +345,7 @@ pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
         return false;
     }
 
-    let resources = path.join("Resources");
+    let resources = resolve_vanilla_resources_dir(path);
     if !resources.is_dir() {
         return false;
     }
@@ -254,19 +361,270 @@ pub fn looks_like_geometry_dash_dir(path: &Path) -> bool {
             .join("Contents")
             .join("MacOS")
             .join("Geometry Dash")
+            .is_file()
+        || path
+            .join("Contents")
+            .join("MacOS")
+            .join("Geometry Dash")
             .is_file();
 
     // Texture markers — distinguish a real GD Resources tree from any random
     // folder that happens to contain a subdirectory named Resources.
-    let has_textures = resources.join("icons").is_dir()
-        || resources.join("game_bg_01_001-uhd.png").is_file()
-        || resources.join("game_bg_01_001-hd.png").is_file()
-        || resources.join("game_bg_01_001.png").is_file()
-        || resources.join("GJ_GameSheet-uhd.plist").is_file()
-        || resources.join("GJ_GameSheet-hd.plist").is_file()
-        || resources.join("GJ_GameSheet.plist").is_file();
+    let has_textures = resources_has_texture_markers(&resources);
 
     has_binary || has_textures
+}
+
+/// True when `path` looks like a Geode data root (`config` / `resources` / `mods` / `unzipped`).
+///
+/// On Android this is `…/Android/media/com.geode.launcher/game/geode` on internal storage
+/// (`/storage/emulated/0/...`). An existing `geode` directory counts even before first launch
+/// creates the usual subfolders.
+pub fn looks_like_geode_dir(path: &Path) -> bool {
+    if path.as_os_str().is_empty() {
+        return false;
+    }
+    if ensure_no_parent_dir_components(path).is_err() {
+        return false;
+    }
+    if !path.is_dir() {
+        return false;
+    }
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or("")
+        .eq_ignore_ascii_case("geode");
+    if name {
+        return true;
+    }
+    path.join("config").is_dir()
+        || path.join("resources").is_dir()
+        || path.join("mods").is_dir()
+        || path.join("unzipped").is_dir()
+}
+
+/// Geode launcher shared media tree on Android (`…/game`), parent of `geode/`.
+#[cfg(target_os = "android")]
+const ANDROID_GEODE_PACKAGE_IDS: &[&str] = &["com.geode.launcher", "com.geode.launcher.play"];
+
+#[cfg(target_os = "android")]
+pub(crate) fn android_geode_internal_storage_roots() -> Vec<PathBuf> {
+    let mut roots: Vec<PathBuf> = Vec::new();
+    if let Ok(ext) = std::env::var("EXTERNAL_STORAGE") {
+        let trimmed = ext.trim();
+        if !trimmed.is_empty() {
+            push_unique(&mut roots, PathBuf::from(trimmed));
+        }
+    }
+    push_unique(&mut roots, PathBuf::from("/storage/emulated/0"));
+    push_unique(&mut roots, PathBuf::from("/sdcard"));
+    roots
+}
+
+/// Android mod save tree, e.g. `…/Android/media/com.geode.launcher/save`.
+#[cfg(target_os = "android")]
+pub(crate) fn android_geode_save_dir_candidates() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for root in android_geode_internal_storage_roots() {
+        for package in ANDROID_GEODE_PACKAGE_IDS {
+            push_unique(
+                &mut out,
+                root.join("Android")
+                    .join("media")
+                    .join(package)
+                    .join("save"),
+            );
+        }
+    }
+    out
+}
+
+/// Resolve the Geode launcher save folder used for mod data (`saved.json`, etc.).
+#[cfg(target_os = "android")]
+pub(crate) fn detect_android_geode_save_dir() -> Option<PathBuf> {
+    for save in android_geode_save_dir_candidates() {
+        if android_geode_save_storage_readable(&save) {
+            return Some(save);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "android")]
+fn android_geode_save_storage_readable(save_dir: &Path) -> bool {
+    if save_dir.is_dir() {
+        let texture_loader_mod = save_dir
+            .join("geode")
+            .join("mods")
+            .join("geode.texture-loader");
+        if texture_loader_mod.is_dir() {
+            return fs::read_dir(&texture_loader_mod).is_ok();
+        }
+        let mods = save_dir.join("geode").join("mods");
+        if mods.is_dir() {
+            return fs::read_dir(&mods).is_ok();
+        }
+        return fs::read_dir(save_dir).is_ok();
+    }
+
+    save_dir
+        .parent()
+        .is_some_and(|media_package| media_package.is_dir() && fs::read_dir(media_package).is_ok())
+}
+
+#[cfg(target_os = "android")]
+fn android_geode_media_candidates() -> Vec<PathBuf> {
+    let mut out: Vec<PathBuf> = Vec::new();
+    for root in android_geode_internal_storage_roots() {
+        for package in ANDROID_GEODE_PACKAGE_IDS {
+            push_unique(
+                &mut out,
+                root.join("Android")
+                    .join("media")
+                    .join(package)
+                    .join("game")
+                    .join("geode"),
+            );
+        }
+    }
+    out
+}
+
+/// Detect the Android Geometry Dash / Geode `game` folder (parent of `geode/`).
+///
+/// Looks under phone internal storage, e.g.
+/// `/storage/emulated/0/Android/media/com.geode.launcher/game/geode`.
+#[cfg(target_os = "android")]
+pub fn detect_android_geometry_dash_dir() -> Option<PathBuf> {
+    for geode in android_geode_media_candidates() {
+        if looks_like_geode_dir(&geode) {
+            if let Some(game) = geode.parent() {
+                if android_geode_storage_readable(game) {
+                    return Some(game.to_path_buf());
+                }
+            }
+        }
+        // Parent `game` folder with a readable `geode` child.
+        if let Some(game) = geode.parent() {
+            if geode.is_dir() && android_geode_storage_readable(&game) {
+                return Some(game.to_path_buf());
+            }
+        }
+    }
+    None
+}
+
+/// True when the Geode media tree under `game_dir` can be listed and at least one file read.
+#[cfg(target_os = "android")]
+pub fn android_geode_storage_readable(game_dir: &Path) -> bool {
+    let geode = game_dir.join("geode");
+    if !geode.is_dir() {
+        return false;
+    }
+    let candidates = [
+        geode.join("resources"),
+        geode.join("config"),
+        geode.clone(),
+    ];
+    for dir in candidates {
+        if !dir.is_dir() {
+            continue;
+        }
+        let entries = match fs::read_dir(&dir) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_file() && fs::File::open(&path).is_ok() {
+                return true;
+            }
+            if path.is_dir() {
+                if fs::read_dir(&path)
+                    .ok()
+                    .and_then(|mut nested| nested.next())
+                    .is_some()
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Diagnostic listing of Geode candidate paths on Android internal storage.
+#[cfg(target_os = "android")]
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidGeodePathProbe {
+    pub path: String,
+    pub exists: bool,
+    pub is_dir: bool,
+    pub looks_like_geode: bool,
+}
+
+#[cfg(target_os = "android")]
+pub fn probe_android_geode_paths() -> Vec<AndroidGeodePathProbe> {
+    android_geode_media_candidates()
+        .into_iter()
+        .map(|path| AndroidGeodePathProbe {
+            exists: path.exists(),
+            is_dir: path.is_dir(),
+            looks_like_geode: looks_like_geode_dir(&path),
+            path: path.to_string_lossy().to_string(),
+        })
+        .collect()
+}
+
+/// Accept a user path that is either a GD install root, the macOS `.app` bundle,
+/// or (on Android) the `geode` folder.
+pub fn normalize_geometry_dash_user_path(path: PathBuf) -> PathBuf {
+    #[cfg(target_os = "android")]
+    {
+        if looks_like_geode_dir(&path) {
+            if let Some(parent) = path.parent() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+
+    // macOS: if the user picked `Geometry Dash.app`, store the Steam/common parent
+    // so install-root semantics stay consistent with Windows/Linux.
+    let is_app = path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("app"));
+    if is_app {
+        let looks_like_gd_app = path
+            .join("Contents")
+            .join("MacOS")
+            .join("Geometry Dash")
+            .is_file()
+            || resources_has_texture_markers(&path.join("Contents").join("Resources"));
+        if looks_like_gd_app {
+            if let Some(parent) = path.parent() {
+                return parent.to_path_buf();
+            }
+        }
+    }
+
+    path
+}
+
+fn accepts_geometry_dash_dir(path: &Path) -> bool {
+    if looks_like_geometry_dash_dir(path) {
+        return true;
+    }
+    #[cfg(target_os = "android")]
+    {
+        return looks_like_geode_dir(&path.join("geode"));
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        false
+    }
 }
 
 fn home_dir() -> Option<PathBuf> {
@@ -427,44 +785,50 @@ fn steam_install_from_registry() -> Vec<PathBuf> {
 fn candidate_steam_roots() -> Vec<PathBuf> {
     let mut roots: Vec<PathBuf> = Vec::new();
 
-    for env_key in [
-        "ProgramFiles(x86)",
-        "ProgramFiles",
-        "PROGRAMFILES(X86)",
-        "PROGRAMFILES",
-    ] {
-        if let Ok(pf) = std::env::var(env_key) {
-            if !pf.trim().is_empty() {
-                push_unique(&mut roots, PathBuf::from(pf).join("Steam"));
+    #[cfg(windows)]
+    {
+        for env_key in [
+            "ProgramFiles(x86)",
+            "ProgramFiles",
+            "PROGRAMFILES(X86)",
+            "PROGRAMFILES",
+        ] {
+            if let Ok(pf) = std::env::var(env_key) {
+                if !pf.trim().is_empty() {
+                    push_unique(&mut roots, PathBuf::from(pf).join("Steam"));
+                }
             }
         }
-    }
 
-    push_unique(&mut roots, PathBuf::from(r"C:\Program Files (x86)\Steam"));
-    push_unique(&mut roots, PathBuf::from(r"C:\Program Files\Steam"));
+        push_unique(&mut roots, PathBuf::from(r"C:\Program Files (x86)\Steam"));
+        push_unique(&mut roots, PathBuf::from(r"C:\Program Files\Steam"));
 
-    for drive in [b'D', b'E', b'F', b'G'] {
-        let letter = drive as char;
-        if !is_fixed_drive_letter(letter) {
-            continue;
+        for drive in [b'D', b'E', b'F', b'G'] {
+            let letter = drive as char;
+            if !is_fixed_drive_letter(letter) {
+                continue;
+            }
+            push_unique(&mut roots, PathBuf::from(format!(r"{letter}:\Steam")));
+            push_unique(
+                &mut roots,
+                PathBuf::from(format!(r"{letter}:\SteamLibrary")),
+            );
+            push_unique(
+                &mut roots,
+                PathBuf::from(format!(r"{letter}:\Program Files (x86)\Steam")),
+            );
+            push_unique(
+                &mut roots,
+                PathBuf::from(format!(r"{letter}:\Program Files\Steam")),
+            );
         }
-        push_unique(&mut roots, PathBuf::from(format!(r"{letter}:\Steam")));
-        push_unique(
-            &mut roots,
-            PathBuf::from(format!(r"{letter}:\SteamLibrary")),
-        );
-        push_unique(
-            &mut roots,
-            PathBuf::from(format!(r"{letter}:\Program Files (x86)\Steam")),
-        );
-        push_unique(
-            &mut roots,
-            PathBuf::from(format!(r"{letter}:\Program Files\Steam")),
-        );
     }
 
     if let Some(home) = home_dir() {
-        push_unique(&mut roots, home.join("AppData").join("Local").join("Steam"));
+        #[cfg(windows)]
+        {
+            push_unique(&mut roots, home.join("AppData").join("Local").join("Steam"));
+        }
         // macOS
         push_unique(
             &mut roots,
@@ -493,6 +857,7 @@ fn candidate_steam_roots() -> Vec<PathBuf> {
     roots
 }
 
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn steam_library_roots() -> Vec<PathBuf> {
     let mut roots = candidate_steam_roots();
 
@@ -594,9 +959,9 @@ pub fn resolve_geometry_dash_dir_with_override(
     if let Ok(env_override) = std::env::var("TM_GEOMETRY_DASH_DIR") {
         let trimmed = env_override.trim();
         if !trimmed.is_empty() {
-            let path = PathBuf::from(trimmed);
+            let path = normalize_geometry_dash_user_path(PathBuf::from(trimmed));
             ensure_user_absolute_path(&path)?;
-            if looks_like_geometry_dash_dir(&path) {
+            if accepts_geometry_dash_dir(&path) {
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
@@ -609,9 +974,9 @@ pub fn resolve_geometry_dash_dir_with_override(
     if let Some(override_path) = settings_override {
         let trimmed = override_path.trim();
         if !trimmed.is_empty() {
-            let path = PathBuf::from(trimmed);
+            let path = normalize_geometry_dash_user_path(PathBuf::from(trimmed));
             ensure_user_absolute_path(&path)?;
-            if looks_like_geometry_dash_dir(&path) {
+            if accepts_geometry_dash_dir(&path) {
                 return Ok(path);
             }
             return Err(AppError::IoError(format!(
@@ -621,19 +986,34 @@ pub fn resolve_geometry_dash_dir_with_override(
         }
     }
 
-    for steam_root in steam_library_roots() {
-        let candidate = steam_root
-            .join("steamapps")
-            .join("common")
-            .join(GEOMETRY_DASH_FOLDER);
-        if looks_like_geometry_dash_dir(&candidate) {
-            return Ok(candidate);
+    #[cfg(target_os = "android")]
+    {
+        if let Some(dir) = detect_android_geometry_dash_dir() {
+            return Ok(dir);
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
+    {
+        for steam_root in steam_library_roots() {
+            let candidate = steam_root
+                .join("steamapps")
+                .join("common")
+                .join(GEOMETRY_DASH_FOLDER);
+            if looks_like_geometry_dash_dir(&candidate) {
+                return Ok(candidate);
+            }
         }
     }
 
     Err(AppError::IoError(
-        "Geometry Dash installation not found. Set the path in Settings or TM_GEOMETRY_DASH_DIR."
-            .to_string(),
+        if cfg!(target_os = "android") {
+            "Geode folder not found. Install Geometry Dash via Geode Launcher, or set Android/media/com.geode.launcher/game/geode in Settings."
+                .to_string()
+        } else {
+            "Geometry Dash installation not found. Set the path in Settings or TM_GEOMETRY_DASH_DIR."
+                .to_string()
+        },
     ))
 }
 
@@ -656,9 +1036,10 @@ fn read_settings_geometry_dash_override(root: &Path) -> Option<String> {
 }
 
 fn layout_from_parts(root: PathBuf, geometry_dash_dir: PathBuf) -> GameFilesLayout {
-    let resources = geometry_dash_dir.join("Resources");
-    let geode_resources = geometry_dash_dir.join("geode").join("resources");
-    let geode_unzipped = geometry_dash_dir.join("geode").join("unzipped");
+    let resources = resolve_vanilla_resources_dir(&geometry_dash_dir);
+    let geode_dir = resolve_geode_dir(&geometry_dash_dir);
+    let geode_resources = geode_dir.join("resources");
+    let geode_unzipped = geode_dir.join("unzipped");
     let current_split = root.join("split-cache");
     let legacy = root.join("legacy");
 
@@ -701,8 +1082,16 @@ pub fn bootstrap_game_files() -> Result<GameFilesLayout, AppError> {
         resolve_geometry_dash_dir_with_override(override_path.as_deref())
             .unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
     } else {
-        // Populate the detection cache so the first Settings IPC does not walk Steam again.
-        detect_geometry_dash_dir().unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+        #[cfg(target_os = "android")]
+        {
+            detect_android_geometry_dash_dir()
+                .unwrap_or_else(|| root.join(UNRESOLVED_GD_DIR_NAME))
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            // Populate the detection cache so the first Settings IPC does not walk Steam again.
+            detect_geometry_dash_dir().unwrap_or_else(|_| root.join(UNRESOLVED_GD_DIR_NAME))
+        }
     };
 
     let layout = layout_from_parts(root, geometry_dash_dir);
@@ -741,6 +1130,13 @@ pub fn resolve_current_source_dir(layout: &GameFilesLayout, relative_dir: &Path)
         .collect();
 
     if parts.is_empty() {
+        #[cfg(target_os = "android")]
+        {
+            let geode_loader = layout.geode_resources.join("geode.loader");
+            if geode_loader.is_dir() {
+                return geode_loader;
+            }
+        }
         return layout.resources.clone();
     }
 
@@ -773,36 +1169,7 @@ pub fn resolve_current_source_dir(layout: &GameFilesLayout, relative_dir: &Path)
 }
 
 fn resolve_png_beside_plist(plist_path: &Path) -> PathBuf {
-    let direct = plist_path.with_extension("png");
-    if direct.exists() {
-        return direct;
-    }
-    if let Some(texture_name) = texture_file_name_from_plist(plist_path) {
-        if let Some(parent) = plist_path.parent() {
-            if let Ok(candidate) = join_under_parent(parent, &texture_name) {
-                if candidate.exists() {
-                    return candidate;
-                }
-            }
-        }
-    }
-    direct
-}
-
-fn texture_file_name_from_plist(plist_path: &Path) -> Option<String> {
-    let root = plist::Value::from_file(plist_path).ok()?;
-    let metadata = root
-        .as_dictionary()
-        .and_then(|d| d.get("metadata"))
-        .and_then(|v| v.as_dictionary())?;
-    for key in ["realTextureFileName", "textureFileName"] {
-        if let Some(name) = metadata.get(key).and_then(|v| v.as_string()) {
-            if !name.is_empty() {
-                return Some(name.to_string());
-            }
-        }
-    }
-    None
+    crate::core::plist_assets::resolve_png_beside_plist(plist_path, None)
 }
 
 /// Locate a latest placeholder sheet without touching the sprite-index JSON.
@@ -1047,7 +1414,7 @@ fn sha256_file(path: &Path) -> Result<String, AppError> {
         ))
     })?;
     let digest = Sha256::digest(&bytes);
-    Ok(format!("{digest:x}"))
+    Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
 }
 
 fn hash_sheet_pair(pair: &SheetCandidate) -> Result<SplitCacheHashEntry, AppError> {
@@ -1359,6 +1726,31 @@ mod tests {
     }
 
     #[test]
+    fn looks_like_geode_dir_requires_known_subdir() {
+        let root = temp_game_files_root("geode_shape");
+        let empty = root.join("empty_geode");
+        fs::create_dir_all(&empty).expect("empty");
+        assert!(!looks_like_geode_dir(&empty));
+
+        let named_geode = root.join("geode");
+        fs::create_dir_all(&named_geode).expect("named");
+        assert!(
+            looks_like_geode_dir(&named_geode),
+            "a directory literally named geode counts on Android media trees"
+        );
+
+        let with_config = root.join("with_config");
+        fs::create_dir_all(with_config.join("config")).expect("config");
+        assert!(looks_like_geode_dir(&with_config));
+
+        let with_resources = root.join("with_resources");
+        fs::create_dir_all(with_resources.join("resources")).expect("resources");
+        assert!(looks_like_geode_dir(&with_resources));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn looks_like_geometry_dash_requires_more_than_resources_dirname() {
         let root = temp_game_files_root("gd_shape");
         let plain = root.join("NotGD");
@@ -1383,6 +1775,52 @@ mod tests {
         let unresolved = root.join(UNRESOLVED_GD_DIR_NAME);
         fs::create_dir_all(unresolved.join("Resources").join("icons")).expect("unresolved");
         assert!(!looks_like_geometry_dash_dir(&unresolved));
+
+        // macOS Steam layout: Resources live under Geometry Dash.app/Contents.
+        let mac = root.join("MacSteamGD");
+        let mac_resources = mac
+            .join("Geometry Dash.app")
+            .join("Contents")
+            .join("Resources");
+        fs::create_dir_all(mac_resources.join("icons")).expect("mac icons");
+        fs::create_dir_all(
+            mac.join("Geometry Dash.app")
+                .join("Contents")
+                .join("MacOS"),
+        )
+        .expect("macos");
+        fs::write(
+            mac.join("Geometry Dash.app")
+                .join("Contents")
+                .join("MacOS")
+                .join("Geometry Dash"),
+            b"mach-o",
+        )
+        .expect("mac binary");
+        assert!(
+            looks_like_geometry_dash_dir(&mac),
+            "macOS .app bundle under Steam common/Geometry Dash must validate"
+        );
+        assert_eq!(
+            resolve_vanilla_resources_dir(&mac),
+            mac_resources,
+            "macOS resources resolve inside the .app bundle"
+        );
+        assert_eq!(
+            resolve_geode_dir(&mac),
+            mac.join("Geometry Dash.app")
+                .join("Contents")
+                .join("geode"),
+            "macOS geode resolves under Contents when .app exists"
+        );
+
+        let app_only = mac.join("Geometry Dash.app");
+        assert!(looks_like_geometry_dash_dir(&app_only));
+        assert_eq!(
+            normalize_geometry_dash_user_path(app_only.clone()),
+            mac,
+            "selecting the .app normalizes to the Steam install parent"
+        );
 
         let _ = fs::remove_dir_all(&root);
     }
@@ -1438,6 +1876,36 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "macos")]
+    fn accepts_real_macos_steam_geometry_dash_when_present() {
+        let Some(home) = home_dir() else {
+            return;
+        };
+        let candidate = home
+            .join("Library")
+            .join("Application Support")
+            .join("Steam")
+            .join("steamapps")
+            .join("common")
+            .join(GEOMETRY_DASH_FOLDER);
+        if !candidate.is_dir() {
+            return;
+        }
+        assert!(
+            looks_like_geometry_dash_dir(&candidate),
+            "installed macOS Steam Geometry Dash must validate: {}",
+            candidate.display()
+        );
+        let resources = resolve_vanilla_resources_dir(&candidate);
+        assert!(
+            resources.ends_with("Contents/Resources") || resources.ends_with("Resources"),
+            "unexpected resources path {}",
+            resources.display()
+        );
+        assert!(resources.join("icons").is_dir() || resources_has_texture_markers(&resources));
+    }
+
+    #[test]
     fn parse_steam_library_paths_reads_path_entries() {
         let vdf = r#"
 "libraryfolders"
@@ -1457,11 +1925,21 @@ mod tests {
 }
 "#;
         let paths = parse_steam_library_paths(vdf);
-        assert!(paths.iter().any(|p| p.ends_with("Steam")));
-        assert!(paths.iter().any(|p| p.ends_with("SteamLibrary")));
-        assert!(paths.iter().any(|p| {
-            p.to_string_lossy().contains("E:") && p.to_string_lossy().contains("SteamLibrary")
-        }));
+        let as_text: Vec<String> = paths
+            .iter()
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert!(
+            as_text.iter().any(|p| p.ends_with("/Steam") || p.ends_with("Steam")),
+            "expected a Steam root, got {as_text:?}"
+        );
+        assert!(
+            as_text
+                .iter()
+                .any(|p| p.ends_with("/SteamLibrary") || p.ends_with("SteamLibrary")),
+            "expected a SteamLibrary root, got {as_text:?}"
+        );
+        assert!(as_text.iter().any(|p| p.contains("E:") && p.contains("SteamLibrary")));
     }
 
     #[test]

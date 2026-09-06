@@ -55,6 +55,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "기본 Resources와 Geode 경로에 사용되는 Steam 설치",
+    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
     notFound: "찾을 수 없음",
     manualOverride: "수동 지정",
     autoDetected: "자동 감지됨",
@@ -63,6 +64,9 @@ const settings = {
     noAutoDetect: "자동 감지 결과 없음",
     installLocation: "설치 위치",
     browseHint: "Geometry Dash 폴더를 찾아보거나, Steam으로 설치한 뒤 다시 감지하세요.",
+    androidHint:
+      "Looks for Geode at Android/media/com.geode.launcher/game/geode. Grant all-files access if detection fails, then tap Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
     applyPath: "경로 적용",
     clearOverride: "수동 지정 해제",
     redetect: "다시 감지",
@@ -77,11 +81,20 @@ const settings = {
     unsupported: "업데이트 확인은 설치된 데스크톱 앱에서만 가능합니다.",
     checkFailed: "업데이트를 확인하지 못했습니다. {{error}}",
     installBlocked: "업데이트를 설치하기 전에 현재 작업을 끝내세요.",
+    androidUnavailable: "Updates are installed from the store or a new APK on Android.",
+    androidInstallHint:
+      "Android will ask permission to install updates from this app if not already allowed.",
+    installPermissionRequired:
+      "Allow installs from Texture Manager 2 in system settings, then try again.",
+    integrityFailed: "The downloaded update failed integrity verification.",
     installing: "다운로드 후 설치 중…",
     downloading: "업데이트 다운로드 중… {{percent}}%",
     installAndRestart: "설치 후 다시 시작",
+    installApk: "Download and install",
     availableTitle: "업데이트 사용 가능",
     availableMeta: "설치 후 다시 시작하면 v{{current}}에서 v{{version}}(으)로 업데이트됩니다.",
+    availableMetaAndroid:
+      "Download the APK, then confirm the system install prompt.",
     waitForOperation: "설치하기 전에 현재 작업을 끝내세요.",
     later: "나중에",
     dismiss: "업데이트 알림 닫기",

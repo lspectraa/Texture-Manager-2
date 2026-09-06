@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Eye, FileImage, Palette, RefreshCw, SlidersHorizontal, X } from "lucide-react";
-import { open } from "@tauri-apps/plugin-dialog";
 import { useTranslation } from "react-i18next";
 import { getGlowMakerPreviewDataUrl } from "../../services/tauriGlowMaker";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { pickUserFile } from "../../services/tauriPicker";
 import { PickFolderFn } from "./types";
 import {
   ToolCheckboxField,
@@ -123,15 +123,12 @@ export function GlowMakerToolPanel({
   const pickCustomIcon = async (): Promise<void> => {
     if (!isTauriRuntime()) return;
     try {
-      const selected = await open({
+      const selected = await pickUserFile({
         title: t("glowMaker.customIconDialogTitle"),
-        filters: [
-          { name: t("glowMaker.customIconPlistFilter"), extensions: ["plist"] },
-        ],
-        multiple: false,
-        directory: false,
+        extensions: ["plist"],
+        filterName: t("glowMaker.customIconPlistFilter"),
       });
-      if (typeof selected !== "string" || !selected.trim()) return;
+      if (!selected) return;
       setCustomIconPlistPath(selected);
     } catch {
       // Dialog cancelled / unavailable — keep current icon.

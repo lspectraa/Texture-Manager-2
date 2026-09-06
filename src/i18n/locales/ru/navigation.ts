@@ -38,6 +38,16 @@ const navigation: AppLocaleResources["navigation"] = {
     toolsAvailableAria: "Доступно инструментов: {{count}}",
     comingSoonCount: "+{{count}} скоро",
     cardComingSoon: "Скоро",
+    aboutTitle: "О программе",
+    aboutSubtitle: "Авторские права, лицензия и ссылки",
+    aboutCardLabel: "Авторские права и сведения",
+    openPacksFolder: "Открыть папку паков",
+    openGameFiles: "Открыть файлы игры",
+    openSaveFolder: "Открыть папку сохранений",
+    utilitiesAria: "Быстрые ярлыки папок",
+    openPacksFolderFailed: "Не удалось открыть папку паков. Geometry Dash установлен?",
+    openGameFilesFailed: "Не удалось открыть папку игры. Geometry Dash установлен?",
+    openSaveFolderFailed: "Не удалось открыть папку сохранений.",
   },
   sections: {
     design: {
@@ -102,6 +112,18 @@ const navigation: AppLocaleResources["navigation"] = {
       description: "Добавьте текстур-паки в Geometry Dash.",
     },
   },
-};
+  mobile: {
+    sectionShortcutAria: "{{section}}, open first tool",
+    expandAllToolsAria: "Show all tools",
+    closeGridAria: "Close tools",
+    allToolsTitle: "All tools",
+    backAria: "Back",
+    closeDrawerAria: "Close side panel",
+    showDrawerAria: "Show {{panel}}",
+    hideDrawerAria: "Hide {{panel}}",
+    editorSurfacesAria: "Editor views",
+    geodeBackToFamilies: "Back to families",
+  },
+} as const;
 
 export default navigation;

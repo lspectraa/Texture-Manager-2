@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { open } from "@tauri-apps/plugin-dialog";
 import {
   CheckCircle2,
   FolderOpen,
@@ -30,7 +29,15 @@ import type {
 } from "../../domain/settings";
 import { APP_LANGUAGES } from "../../i18n/languages";
 import { getAppBackgroundImageDataUrl } from "../../services/appBackgroundImages";
+import { androidRequestAllFilesAccess } from "../../services/tauriAndroidStorage";
 import { isTauriRuntime } from "../../services/tauriOperations";
+import { pickUserFile } from "../../services/tauriPicker";
+import {
+  geometryDashPathPlaceholder,
+  isAndroidPlatform,
+  isMobileShell,
+  isSimulateUpdateEnabled,
+} from "../../utils/platform";
 import type { AppTheme } from "../../utils/theme";
 import { applyTheme, setStoredTheme } from "../../utils/theme";
 import { AppSelect, type AppSelectOption } from "../AppSelect";
@@ -161,6 +168,7 @@ export function SettingsToolPanel({
   pickFolder,
 }: SettingsToolPanelProps) {
   const { t } = useTranslation("settings");
+  const mobileShell = isMobileShell();
   const [draftPath, setDraftPath] = useState(
     settings.geometryDashResolved || settings.geometryDashDetected || "",
   );
@@ -203,17 +211,12 @@ export function SettingsToolPanel({
     if (busy || !isTauriRuntime()) {
       return;
     }
-    const selected = await open({
-      multiple: false,
+    const selected = await pickUserFile({
       title: t("background.custom.addTitle"),
-      filters: [
-        {
-          name: t("background.custom.imageFilter"),
-          extensions: ["png", "jpg", "jpeg", "webp", "gif"],
-        },
-      ],
+      extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+      filterName: t("background.custom.imageFilter"),
     });
-    if (typeof selected !== "string" || !selected) {
+    if (!selected) {
       return;
     }
     onAddCustomAppBackground(selected);
@@ -273,6 +276,7 @@ export function SettingsToolPanel({
             showTitle={false}
           />
 
+          {mobileShell ? null : (
           <div className="tm-tool-field tm-settings-background-field">
             <span className="tm-tool-field-label">
               <Image size={14} strokeWidth={1.9} aria-hidden />
@@ -427,6 +431,7 @@ export function SettingsToolPanel({
               />
             </label>
           </div>
+          )}
 
         </ToolSection>
 
@@ -443,6 +448,7 @@ export function SettingsToolPanel({
               </span>
               <AppSelect
                 className="tm-settings-language-select"
+                menuClassName="tm-settings-language-menu"
                 size="md"
                 value={settings.language}
                 options={languageOptions}
@@ -497,6 +503,7 @@ export function SettingsToolPanel({
               </div>
             </div>
             <div className="tm-settings-actions">
+              {mobileShell ? null : (
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -506,6 +513,7 @@ export function SettingsToolPanel({
                 <FolderOpen size={14} strokeWidth={1.9} />
                 {t("cache.openCacheFolder")}
               </button>
+              )}
               <button
                 type="button"
                 className="tm-settings-action-btn"
@@ -528,6 +536,7 @@ export function SettingsToolPanel({
             <p className="tm-tool-section-note">{t("cache.regenerateSpriteIndexHint")}</p>
           </ToolSection>
 
+          {isTauriRuntime() || isSimulateUpdateEnabled() ? (
           <ToolSection
             title={t("updates.title")}
             subtitle={t("updates.subtitle")}
@@ -549,6 +558,14 @@ export function SettingsToolPanel({
             {operationRunning ? (
               <p className="tm-tool-section-note">{t("updates.installBlocked")}</p>
             ) : null}
+            {isAndroidPlatform() ? (
+              <p className="tm-tool-section-note">{t("updates.androidInstallHint")}</p>
+            ) : null}
+            {isSimulateUpdateEnabled() ? (
+              <p className="tm-tool-section-note">
+                Simulated update mode (?simulateUpdate=1 or localStorage.tmSimulateUpdate=1) — install is a fake download only.
+              </p>
+            ) : null}
             {updateStatusMessage ? (
               updateStatusTone === "danger" ? (
                 <div className="tm-settings-update-status" role="alert">
@@ -559,10 +576,15 @@ export function SettingsToolPanel({
               )
             ) : null}
           </ToolSection>
+          ) : null}
 
           <ToolSection
             title={t("geometryDash.title")}
-            subtitle={t("geometryDash.subtitle")}
+            subtitle={
+              mobileShell
+                ? t("geometryDash.subtitleMobile")
+                : t("geometryDash.subtitle")
+            }
             icon={HardDrive}
             className="tm-settings-section-gd"
           >
@@ -589,20 +611,37 @@ export function SettingsToolPanel({
               value={draftPath}
               onChange={setDraftPath}
               pickFolder={pickFolder}
-              placeholder="C:/Program Files (x86)/Steam/steamapps/common/Geometry Dash"
+              placeholder={geometryDashPathPlaceholder()}
               onBrowse={(path) => {
                 setDraftPath(path);
                 onGeometryDashPathSelected(path);
               }}
             />
 
-            {!settings.geometryDashDetected ? (
+            {!settings.geometryDashDetected || mobileShell ? (
               <p className="tm-settings-meta-path">
-                {t("geometryDash.browseHint")}
+                {mobileShell
+                  ? t("geometryDash.androidHint")
+                  : t("geometryDash.browseHint")}
               </p>
             ) : null}
 
             <div className="tm-settings-actions">
+              {mobileShell ? (
+                <button
+                  type="button"
+                  className="tm-settings-action-btn"
+                  disabled={busy}
+                  onClick={() => {
+                    void androidRequestAllFilesAccess().catch(() => {
+                      // Settings error path still allows manual redetect.
+                    });
+                  }}
+                >
+                  <FolderOpen size={14} strokeWidth={1.9} />
+                  {t("errors:packInstaller.grantAllFilesAccess")}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="tm-settings-action-btn"

@@ -2,6 +2,36 @@ use image::{Rgba, RgbaImage};
 
 use crate::core::contracts::GlowMakerOptions;
 use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
+use crate::core::porter::{port_source_tier_from_stem, PortSourceGraphicsTier};
+
+/// Preview / UHD-relative scale for a sheet tier (HD = 2×, low = 4× vs UHD footprint).
+pub fn tier_content_scale(tier: PortSourceGraphicsTier) -> u32 {
+    match tier {
+        PortSourceGraphicsTier::Uhd => 1,
+        PortSourceGraphicsTier::Hd => 2,
+        PortSourceGraphicsTier::Low => 4,
+    }
+}
+
+/// User-facing UHD-equivalent thickness → native glow radius for this sheet tier.
+pub fn glow_thickness_for_tier(user_thickness: u32, tier: PortSourceGraphicsTier) -> u32 {
+    let scale = tier_content_scale(tier);
+    let adjusted = ((user_thickness as f64) / (scale as f64)).round() as u32;
+    adjusted.clamp(1, 128)
+}
+
+pub fn glow_maker_options_for_tier(
+    options: &GlowMakerOptions,
+    tier: PortSourceGraphicsTier,
+) -> GlowMakerOptions {
+    let mut out = options.clone();
+    out.thickness = glow_thickness_for_tier(options.thickness, tier);
+    out
+}
+
+pub fn glow_maker_options_for_stem(options: &GlowMakerOptions, stem: &str) -> GlowMakerOptions {
+    glow_maker_options_for_tier(options, port_source_tier_from_stem(stem))
+}
 
 fn idx(x: u32, y: u32, width: u32) -> usize {
     (y as usize)
@@ -336,9 +366,30 @@ fn apply_rainbow_gradient(image: &mut RgbaImage) {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_hex_rgb, render_icon_glow_from_primary, tint_glow_rgb};
+    use super::{
+        glow_thickness_for_tier, parse_hex_rgb, render_icon_glow_from_primary, tier_content_scale,
+        tint_glow_rgb,
+    };
     use crate::core::contracts::GlowMakerOptions;
+    use crate::core::porter::PortSourceGraphicsTier;
     use image::{Rgba, RgbaImage};
+
+    #[test]
+    fn tier_content_scale_matches_icon_editor() {
+        assert_eq!(tier_content_scale(PortSourceGraphicsTier::Uhd), 1);
+        assert_eq!(tier_content_scale(PortSourceGraphicsTier::Hd), 2);
+        assert_eq!(tier_content_scale(PortSourceGraphicsTier::Low), 4);
+    }
+
+    #[test]
+    fn glow_thickness_for_tier_divides_uhd_equivalent_width() {
+        assert_eq!(glow_thickness_for_tier(4, PortSourceGraphicsTier::Uhd), 4);
+        assert_eq!(glow_thickness_for_tier(4, PortSourceGraphicsTier::Hd), 2);
+        assert_eq!(glow_thickness_for_tier(4, PortSourceGraphicsTier::Low), 1);
+        assert_eq!(glow_thickness_for_tier(5, PortSourceGraphicsTier::Hd), 3);
+        assert_eq!(glow_thickness_for_tier(1, PortSourceGraphicsTier::Low), 1);
+        assert_eq!(glow_thickness_for_tier(999, PortSourceGraphicsTier::Uhd), 128);
+    }
 
     fn glow_opts() -> GlowMakerOptions {
         GlowMakerOptions {

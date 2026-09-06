@@ -3,12 +3,23 @@ const onboarding = {
     language: "Choisissez votre langue",
     theme: "Choisissez votre style",
     geometryDash: "Confirmez Geometry Dash",
+    androidStorage: "Allow storage access",
   },
   languageAria: "Langue",
   languageHint: "D’autres langues apparaîtront ici au fur et à mesure des traductions.",
   progressAria: "Progression de la configuration",
   stepAria: "Étape {{number}} : {{id}}",
   pickYourStyle: "Choisissez votre style",
+  androidStorage: {
+    hint:
+      "Texture Manager needs All files access to read Geode’s game folder on internal storage.",
+    looksGood: "Storage access looks good — Geode files can be read.",
+    skipWarning:
+      "You can finish setup now and grant access later from Settings or when a tool needs Geode files.",
+    permissionGranted: "Accès à tous les fichiers accordé.",
+    skipFinish: "Terminer sans accès au stockage",
+    recheck: "Vérifier à nouveau",
+  },
   gd: {
     notFound: "Introuvable",
     manualOverride: "Remplacement manuel",

@@ -55,6 +55,8 @@ function flagTitle(code: AppLanguage): string {
       return "South Korea";
     case "ja":
       return "Japan";
+    case "vi":
+      return "Vietnam";
     default: {
       const _exhaustive: never = code;
       return _exhaustive;
@@ -190,6 +192,13 @@ function flagSvg(code: AppLanguage) {
         <svg viewBox="0 0 60 45" xmlns="http://www.w3.org/2000/svg" aria-hidden>
           <rect width="60" height="45" fill="#fff" />
           <circle cx="30" cy="22.5" r="13.5" fill="#BC002D" />
+        </svg>
+      );
+    case "vi":
+      return (
+        <svg viewBox="0 0 60 45" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+          <rect width="60" height="45" fill="#DA251D" />
+          <path fill="#FFFF00" d={STAR_PATH} transform="translate(30 22.5) scale(12)" />
         </svg>
       );
     default: {

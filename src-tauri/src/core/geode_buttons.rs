@@ -229,7 +229,9 @@ pub fn geode_buttons_target_index(
     use_game_files_cache: bool,
 ) -> Result<Vec<GeodeButtonsTargetGroup>, AppError> {
     crate::core::safe_fs::ensure_existing_user_file(plist_path)?;
-    if use_game_files_cache && !layout.geometry_dash_found() {
+    // Android Geode media paths are read directly; split-cache under app data is unreliable.
+    let use_cache = use_game_files_cache && !cfg!(target_os = "android");
+    if use_cache && !layout.geometry_dash_found() {
         return Err(crate::core::game_files::geometry_dash_required_error());
     }
     let root = Value::from_file(plist_path)
@@ -290,8 +292,9 @@ pub fn geode_buttons_target_index(
         group.frames.sort_by(|a, b| a.name.cmp(&b.name));
     }
 
-    if use_game_files_cache {
-        fill_previews_from_game_files_cache(layout, plist_path, &mut groups)?;
+    if use_cache {
+        // Cache split/previews are best-effort (especially on Android scoped storage).
+        let _ = fill_previews_from_game_files_cache(layout, plist_path, &mut groups);
     }
 
     let needs_direct_previews = groups.values().any(|g| g.preview_png_data_url.is_none());
@@ -395,29 +398,59 @@ pub fn resolve_geode_buttons_default_input_dir(layout: &GameFilesLayout) -> Stri
         .to_string()
 }
 
+fn path_component_eq(a: &std::path::Component<'_>, b: &std::path::Component<'_>) -> bool {
+    use std::path::Component;
+    match (a, b) {
+        (Component::Prefix(ap), Component::Prefix(bp)) => {
+            ap.as_os_str().eq_ignore_ascii_case(bp.as_os_str())
+        }
+        (Component::RootDir, Component::RootDir) => true,
+        (Component::Normal(a), Component::Normal(b)) => a == b,
+        (Component::CurDir, Component::CurDir) => true,
+        _ => false,
+    }
+}
+
+fn path_is_under_lexical(parent: &Path, child: &Path) -> bool {
+    let parent_components: Vec<_> = parent.components().collect();
+    let child_components: Vec<_> = child.components().collect();
+    if parent_components.is_empty() || child_components.len() < parent_components.len() {
+        return false;
+    }
+    child_components
+        .iter()
+        .zip(parent_components.iter())
+        .all(|(a, b)| path_component_eq(a, b))
+}
+
 fn path_is_under(parent: &Path, child: &Path) -> bool {
-    let parent_norm = parent
-        .canonicalize()
-        .unwrap_or_else(|_| parent.to_path_buf());
-    let child_norm = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
-    child_norm.strip_prefix(&parent_norm).is_ok()
+    #[cfg(target_os = "android")]
+    {
+        return path_is_under_lexical(parent, child);
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let parent_norm = parent
+            .canonicalize()
+            .unwrap_or_else(|_| parent.to_path_buf());
+        let child_norm = child.canonicalize().unwrap_or_else(|_| child.to_path_buf());
+        child_norm.strip_prefix(&parent_norm).is_ok()
+    }
 }
 
 /// True when `plist_path` lives under Steam/Geode game-files roots (safe for split-cache).
 fn geode_buttons_plist_is_under_game_files(layout: &GameFilesLayout, plist_path: &Path) -> bool {
-    let normalized = plist_path
-        .canonicalize()
-        .unwrap_or_else(|_| plist_path.to_path_buf());
-    let Some(parent) = normalized.parent() else {
-        return false;
+    let parent = match plist_path.parent() {
+        Some(p) => p.to_path_buf(),
+        None => return false,
     };
-    if path_is_under(&layout.resources, parent) {
+    if path_is_under(&layout.resources, &parent) {
         return true;
     }
-    if path_is_under(&layout.geode_resources, parent) {
+    if path_is_under(&layout.geode_resources, &parent) {
         return true;
     }
-    if path_is_under(&layout.geode_unzipped, parent) {
+    if path_is_under(&layout.geode_unzipped, &parent) {
         return true;
     }
     false

@@ -92,21 +92,50 @@ pub fn discover_sheet_pairs(input_dir: &Path) -> Result<Vec<SheetCandidate>, App
     }
 
     let mut pairs: Vec<SheetCandidate> = Vec::new();
-    for (key, plist_path) in plists {
-        if let Some(png_path) = pngs.get(&key) {
+    let mut paired_plist_paths: HashSet<PathBuf> = HashSet::new();
+    for (key, plist_path) in &plists {
+        if let Some(png_path) = pngs.get(key) {
             let stem = key
                 .file_name()
                 .and_then(|value| value.to_str())
                 .ok_or(AppError::InvalidOperation("invalid sheet key stem"))?
                 .to_string();
             let relative_dir = key.parent().map(Path::to_path_buf).unwrap_or_default();
+            paired_plist_paths.insert(plist_path.clone());
             pairs.push(SheetCandidate {
                 stem,
                 relative_dir,
-                plist_path,
+                plist_path: plist_path.clone(),
                 png_path: png_path.clone(),
             });
         }
+    }
+
+    for plist_path in plists.into_values() {
+        if paired_plist_paths.contains(&plist_path) {
+            continue;
+        }
+        let Some(png_path) = crate::core::plist_assets::resolve_image_beside_plist(&plist_path, None)
+        else {
+            continue;
+        };
+        let stem = plist_path
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .ok_or(AppError::InvalidOperation("invalid sheet key stem"))?
+            .to_string();
+        let relative_dir = plist_path
+            .strip_prefix(input_dir)
+            .ok()
+            .and_then(|rel| rel.parent())
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        pairs.push(SheetCandidate {
+            stem,
+            relative_dir,
+            plist_path,
+            png_path,
+        });
     }
 
     pairs.sort_by(|left, right| left.stem.cmp(&right.stem));

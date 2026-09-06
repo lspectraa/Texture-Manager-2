@@ -51,6 +51,8 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
     hideBorder: "Ocultar borde",
     hideBorderTooltip:
       "Ocultar los bordes de selección de las capas del icono",
+    moreTooltip: "Más acciones",
+    moreAria: "Más acciones del editor de iconos",
   },
   saveStatus: {
     save: "Guardar",
@@ -65,6 +67,17 @@ const iconEditor: AppLocaleResources["iconEditor"] = {
   viewport: {
     panAndZoomHelp:
       "Desplázate para mover la vista. Usa Ctrl+rueda para acercar o alejar. Arrastra con el botón central para mover la vista.",
+    mobilePanAndZoomHelp: "Arrastra para mover. Pellizca para zoom.",
+    zoomHudAria: "Zoom del lienzo",
+    offsetDpadAria: "Ajustar desplazamiento del sprite",
+    surfacesAria: "Vistas del editor de iconos",
+    previewTab: "Vista previa",
+    framesTab: "Fotogramas",
+    inspectorTab: "Inspector",
+    colorsTab: "Colores",
+    colorsPanelAria: "Icon color tint options",
+    colorsTargetsAria: "Tint layer",
+    colorsPaletteAria: "Color palette",
   },
   frames: {
     panelAria: "Asignación de roles de fotogramas",

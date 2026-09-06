@@ -6,6 +6,8 @@ const tools = {
     outputDirectory: "출력 디렉터리",
     outputMirroringNote:
       "출력 경로가 비어 있는 상태에서 입력을 선택하지 않는 한 출력은 별도로 유지됩니다.",
+    mobileOutputNote:
+      "Output is saved in the app sandbox. Export a zip from Run Output when the job finishes.",
     runOperation: "작업 실행",
     running: "실행 중…",
     range1To64: "1–64",
@@ -41,6 +43,8 @@ const tools = {
     previousGameVersion: "Previous game version",
     convertHint:
       "게임에서 복사한 새 스프라이트는 선명해지지 않습니다. 끝나면 컬러 키 아이콘을 확인하세요.",
+    desktopOnly:
+      "AI upscaling needs desktop Vulkan sidecars and is not available on Android.",
     glowLineThickness: "글로우 선 두께",
     glowLineThicknessHint: "1–128",
     glowAlphaThreshold: "글로우 알파 기준값",
@@ -64,6 +68,8 @@ const tools = {
     versionTargetDescription: "대상 게임 버전과 처리 동시성을 선택하세요",
     previousGameVersion: "이전 게임 버전",
     concurrentGamesheets: "동시 게임시트 수",
+    desktopOnly:
+      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "글로우 매개변수",
@@ -140,6 +146,9 @@ const tools = {
       bgChecker: "체커",
       bgGd: "GD",
       dragHint: "캔버스를 드래그해 이미터를 이동하세요",
+      surfacesAria: "Particle editor views",
+      previewTab: "Preview",
+      inspectorTab: "Inspector",
       modeHint: "{{mode}} 상황 · 다시 시작하면 재발사됩니다",
       chipGravity: "중력",
       chipRadius: "반지름",
@@ -320,9 +329,9 @@ const tools = {
       resetHint: "두 번 클릭하면 초기화",
     },
     errors: {
-      desktopOnlyOpen: "파일 열기는 데스크톱 앱에서만 사용할 수 있습니다.",
-      desktopOnlySave: "파일 저장은 데스크톱 앱에서만 사용할 수 있습니다.",
-      desktopOnlyTexture: "텍스처 교체는 데스크톱 앱에서만 사용할 수 있습니다.",
+      desktopOnlyOpen: "파일을 열려면 설치된 Texture Manager 앱이 필요합니다.",
+      desktopOnlySave: "파일을 저장하려면 설치된 Texture Manager 앱이 필요합니다.",
+      desktopOnlyTexture: "텍스처를 교체하려면 설치된 Texture Manager 앱이 필요합니다.",
       resourcesMissing:
         "Geometry Dash의 Resources 폴더를 찾지 못했습니다. 설정에서 설치 경로를 지정하세요.",
       stockEffectFailed:
@@ -341,6 +350,8 @@ const tools = {
   geodeButtons: {
     sourceDescription:
       "BlankSheet는 기본적으로 Steam geode/resources/geode.loader에서 불러옵니다. 사용자 지정 게임시트를 쓰려면 직접 선택하세요",
+    outputFolderRequiredNote:
+      "생성된 버튼 시트를 저장할 출력 폴더를 지정하세요.",
     inputGamesheet: "입력 게임시트",
     customPlist: "사용자 지정 plist",
     cachedBlankSheet: "캐시된 BlankSheet",
@@ -432,6 +443,7 @@ const tools = {
     libraryRunSplit: "Split pack",
     libraryCancelOptions: "Cancel",
     libraryContextMenu: "Pack actions",
+    libraryMoreActionsAria: "추가 팩 작업",
     libraryVersionAuthor: "{{author}} · v{{version}}",
     libraryVersionOnly: "v{{version}}",
     libraryNoAuthor: "Unknown author",
@@ -440,6 +452,8 @@ const tools = {
       "Drop a folder or .zip, or browse — Texture Manager discovers packs, config trees, and mods",
     dropHint: "폴더 또는 .zip을 여기에 놓으세요",
     dropHintSub: "Texture packs, Geode config mirrors, and .geode mods are supported",
+    mobileDropHint: "폴더 또는 zip을 찾아 패키를 검색하세요.",
+    mobileDropCreateHint: "소스로 팩 폴더 또는 pack.png를 찾아보세요.",
     browseFolder: "폴더 찾아보기",
     browseZip: "zip 찾아보기",
     sourceFolder: "Folder",
@@ -506,6 +520,28 @@ const tools = {
     createFailedTitle: "Create pack failed",
     openFolder: "폴더 열기",
     metadataPanelTitle: "팩 메타데이터",
+    libraryPanelButtonLabel: "팩 세부정보",
+    appliedPanelTitle: "Applied Packs",
+    libraryRailTabsLabel: "Library side panel",
+    libraryRailTabMetadata: "Metadata",
+    libraryRailTabApplied: "Applied",
+    appliedPriorityHint: "Lower position = higher priority (loaded first).",
+    appliedConfigPath: "Config",
+    appliedEmpty: "No packs are applied in-game yet. Add packs below or drag them here.",
+    appliedAvailableTitle: "Available packs",
+    appliedAddPack: "Add",
+    appliedSave: "Save applied order",
+    appliedSaving: "Saving…",
+    appliedSaveSuccess: "Applied pack order saved",
+    appliedMissingPack: "Pack folder missing from the game install",
+    appliedDragHandleAria: "Drag to reorder",
+    appliedDragToAddAria: "Drag to add to applied packs",
+    appliedMoveUpAria: "Move pack up",
+    appliedMoveDownAria: "Move pack down",
+    appliedRemoveAria: "Remove {{name}} from applied packs",
+    appliedUnsupportedTitle: "Applied packs unavailable",
+    appliedUnsupportedHint: "Editing in-game pack order is not supported on this platform yet.",
+    libraryActionApplyToGame: "Apply to game",
     expandPanelAria: "Expand pack metadata panel",
     collapsePanelAria: "Collapse pack metadata panel",
     showPanel: "Show pack metadata",
@@ -513,6 +549,12 @@ const tools = {
     metadataTitle: "pack.json",
     metadataCreateHint: "These fields are written when you create the pack",
     metadataInstallHint: "Edits apply to this pack when you install",
+    metadataInvalidHint:
+      "All pack.json fields (textureldr, name, id, version, author) must be filled in.",
+    metadataNoPackJsonInstallHint:
+      "This pack has no pack.json. Metadata will not be written during install.",
+    metadataNoPackJsonLibraryHint:
+      "This pack has no pack.json. Add a valid pack.json to the pack folder before editing metadata here.",
     metadataEmptyTitle: "No unit selected",
     metadataEmptyHint: "Select a pack, config tree, or mod from the install plan",
     metadataConfigSummary: "Config tree: {{label}}",

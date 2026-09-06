@@ -6,6 +6,8 @@ const errors = {
   runtime: {
     folderPickerUnavailable: "文件夹选择器在 Tauri 运行时中可用。",
     filePickerUnavailable: "文件选择器仅在 Tauri 运行时中可用。",
+    importFailed: "Could not import the selected files into the app.",
+    upscalerAndroidUnavailable: "Upscaler is not available on Android.",
   },
   validation: {
     splitterPathsRequired: "拆分器需要同时指定输入和输出目录。",
@@ -28,6 +30,8 @@ const errors = {
   geodeButtons: {
     gameFilesNotFound:
       "无法定位 geode.loader 的游戏文件。请设置 TM_GEOMETRY_DASH_DIR，或通过 Steam 安装 Geometry Dash 与 Geode。",
+    gameFilesNotFoundMobile:
+      "Could not resolve geode.loader under Android/media/com.geode.launcher/game/geode. Grant all-files access, then Re-detect.",
     resolveDefaultInputFailed: "无法解析默认输入。",
     blankSheetNotFound:
       "无法在 geode.loader（或所选输入目录）中自动找到 BlankSheet。",
@@ -38,6 +42,15 @@ const errors = {
   packInstaller: {
     geometryDashRequired:
       "未找到 Geometry Dash 路径。请先在设置中指定（或通过 Steam 安装 GD + Geode）再安装材质包。",
+    geodeRequiredMobile:
+      "Geode folder not found. Install Geometry Dash with Geode Launcher, grant all-files access if needed, then Re-detect in Settings.",
+    geodeCheckingAccess: "Checking storage access…",
+    geodeInternalStorageHint:
+      "Looking on internal storage at {{path}}. All-files access is under Android Settings → Special app access (not the normal App permissions list).",
+    allFilesAccessRequired:
+      "Android blocked access to Geode files. Tap Grant all-files access, allow Texture Manager 2, then Re-detect.",
+    grantAllFilesAccess: "Grant all-files access",
+    allFilesAccessRequestFailed: "Could not open the Android all-files access settings page.",
     runtimeUnavailable: "Pack Installer is available only in the desktop app.",
     discoverFailed: "Failed to discover install units from the selected source.",
     installFailed: "Failed to install the selected pack units.",
@@ -51,11 +64,15 @@ const errors = {
       "Drop a pack folder or a .png for pack.png (use Install mode for zip archives).",
     listFailed: "Failed to list installed packs.",
     saveMetadataFailed: "Failed to save pack metadata.",
+    appliedLoadFailed: "Failed to load applied pack order.",
+    appliedSaveFailed: "Failed to save applied pack order.",
     operationFailed: "Failed to run the pack operation.",
     noLibraryPackSelected: "Select a pack from the library first.",
     openPacksFolderFailed: "Failed to open the packs folder.",
     deleteFailed: "Failed to delete the pack.",
     splitOutputRequired: "Choose an output folder before splitting the pack.",
+    metadataInvalid: "pack.json is missing required fields (textureldr, name, id, version, author).",
+    metadataNoPackJson: "This pack has no pack.json file.",
   },
   iconEditor: {
     decodeFrameFailed: "无法解码提取出的帧图像。",

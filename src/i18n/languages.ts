@@ -8,7 +8,8 @@ export type AppLanguage =
   | "fr"
   | "zh"
   | "ko"
-  | "ja";
+  | "ja"
+  | "vi";
 
 export type TextDirection = "ltr" | "rtl";
 
@@ -101,6 +102,14 @@ export const APP_LANGUAGES: readonly AppLanguageMeta[] = [
     direction: "ltr",
     showTranslationDisclaimer: true,
   },
+  {
+    code: "vi",
+    locale: "vi",
+    nativeName: "Tiếng Việt",
+    englishName: "Vietnamese",
+    direction: "ltr",
+    showTranslationDisclaimer: true,
+  },
 ] as const;
 
 export const DEFAULT_APP_LANGUAGE: AppLanguage = "en";
@@ -119,7 +128,8 @@ export function isAppLanguage(value: unknown): value is AppLanguage {
     value === "fr" ||
     value === "zh" ||
     value === "ko" ||
-    value === "ja"
+    value === "ja" ||
+    value === "vi"
   );
 }
 
@@ -133,7 +143,8 @@ export function getLanguageMeta(code: AppLanguage): AppLanguageMeta {
     case "fr":
     case "zh":
     case "ko":
-    case "ja": {
+    case "ja":
+    case "vi": {
       const meta = LANGUAGE_BY_CODE.get(code);
       if (!meta) {
         throw new Error(`Missing language metadata for '${code}'`);
