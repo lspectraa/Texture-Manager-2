@@ -61,7 +61,14 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Texture Manager 2 v__VERSION__"
-          releaseBody: "Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
+          releaseBody: |
+            Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+            ### 📥 Which file should I download?
+            - **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+            - **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+            - **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+            - **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
@@ -172,7 +179,17 @@ jobs:
           set -euo pipefail
           TAG="v${VERSION}"
           TITLE="Texture Manager 2 v${VERSION}"
-          NOTES="Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
+          read -r -d '' NOTES <<'EOF' || true
+Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+### 📥 Which file should I download?
+- **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+- **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+- **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+- **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+> ℹ️ **Note:** Files ending in `.sig`, `latest.json`, or `android-latest.json` are internal update manifests used by the automatic updater. You do not need to download them manually.
+EOF
           ASSET_NAME="Texture-Manager-2-${VERSION}-android-aarch64.apk"
 
           mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*release*.apk' ! -name '*-unsigned.apk' | sort)
@@ -217,7 +234,17 @@ jobs:
           SHA256="$(sha256sum "$APK_PATH" | awk '{print $1}')"
           PUB_DATE="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
           APK_URL="https://github.com/lspectraa/Texture-Manager-2/releases/download/v${VERSION}/Texture-Manager-2-${VERSION}-android-aarch64.apk"
-          NOTES="Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
+          read -r -d '' NOTES <<'EOF' || true
+Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+### 📥 Which file should I download?
+- **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+- **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+- **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+- **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+> ℹ️ **Note:** Files ending in `.sig`, `latest.json`, or `android-latest.json` are internal update manifests used by the automatic updater. You do not need to download them manually.
+EOF
 
           jq -n \
             --arg version "$VERSION" \
