@@ -30,6 +30,7 @@ export function syncAndroidIcons() {
     "ic_launcher.png",
     "ic_launcher_round.png",
     "ic_launcher_foreground.png",
+    "ic_launcher_background.png",
   ];
 
   for (const density of densities) {
@@ -56,7 +57,7 @@ export function syncAndroidIcons() {
 
   const adaptiveXml = `<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/ic_launcher_background"/>
+  <background android:drawable="@mipmap/ic_launcher_background"/>
   <foreground android:drawable="@mipmap/ic_launcher_foreground"/>
 </adaptive-icon>
 `;
@@ -64,7 +65,7 @@ export function syncAndroidIcons() {
   writeFileSync(join(anydpiDir, "ic_launcher.xml"), adaptiveXml, "utf8");
   writeFileSync(join(anydpiDir, "ic_launcher_round.xml"), adaptiveXml, "utf8");
 
-  // Ensure values/ic_launcher_background.xml has dark background matching theme
+  // Ensure values/ic_launcher_background.xml has dark background matching theme fallback
   const valuesDir = join(targetRes, "values");
   if (!existsSync(valuesDir)) {
     mkdirSync(valuesDir, { recursive: true });
@@ -72,7 +73,7 @@ export function syncAndroidIcons() {
 
   const backgroundXml = `<?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <color name="ic_launcher_background">#070a17</color>
+  <color name="ic_launcher_background">#1d1834</color>
 </resources>
 `;
   writeFileSync(join(valuesDir, "ic_launcher_background.xml"), backgroundXml, "utf8");

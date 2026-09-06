@@ -26,7 +26,7 @@ sequenceDiagram
 
 1. Boot (background only) until `settingsHydrated`
 2. Full-screen `OnboardingFlow` if onboarding version &lt; required (desktop 1 / mobile 2)
-3. Main shell: `AppGameBackground` + optional `AppUpdateBanner` + layout
+3. Main shell: background (`.tm-bg` with `AppGameBackground`) + optional `AppUpdateBanner` + layout
 
 ## Navigation
 

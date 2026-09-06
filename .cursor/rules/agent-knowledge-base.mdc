@@ -23,6 +23,7 @@ Load other vault skills from `docs/skills/*/SKILL.md` when the task matches (als
 - Do not open, merge, or approve pull requests.
 - Do not invent passing tests that skip the real path.
 - Do not put secrets in files or chat.
+- Stop all servers, background processes, and application runs started by the agent before being done.
 - Prefer editing an existing vault note over creating a duplicate.
 - ADRs under `docs/adrs/` are optional background — do not block on them unless the human asks.
 - Do not say done while Definition of Done still has unchecked items you can satisfy.

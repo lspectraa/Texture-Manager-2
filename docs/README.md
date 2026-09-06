@@ -4,13 +4,10 @@ Living Markdown vault for a coding agent. Humans and agents both edit these file
 
 In this repo the vault lives at `docs/` (not `docs/agent/`). Product screenshots sit in `docs/screenshots/`. The app map is under `docs/app/`.
 
-Cursor discovery (committed under `.cursor/`):
+Cursor discovery (committed under `.cursor/` and root):
 
+- Entry point: `AGENTS.md` (root guide linked to the `docs/` vault)
 - Rule: `.cursor/rules/agent-knowledge-base.mdc` (always apply)
-- Skills: `.cursor/skills/*` (thin wrappers; bodies in `docs/skills/*/SKILL.md` are source of truth)
-- Hooks: `.cursor/hooks.json` — `sessionStart` via `node .cursor/hooks/session-start.cjs` (sets `TM2_AGENT_*` env). No automatic `stop` vault nudge — run [[compounding-knowledge]] only when the human asks or at the end of meaningful feature work.
-
-The IDE already has plan mode. There is no plan-mode skill here. Align in the planner, then use [[playbook]].
 
 Notes use Obsidian-style `[[wikilinks]]` only when the next file actually needs to be opened. Do not add a Related section to new notes.
 

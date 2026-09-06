@@ -23,4 +23,4 @@ This project’s Cursor rules prefer **IronBee DevTools** (browser + node MCP) f
 
 ## Pass criteria
 
-Exercise the changed path (click/fill/run, not only open the screen). Check console/errors for unexpected failures. Match [[definition-of-done]].
+Exercise the changed path (click/fill/run, not only open the screen). Check console/errors for unexpected failures. Match [[definition-of-done]]. Always shut down any dev servers, background processes, or app runs started during verification before claiming done.

@@ -1547,12 +1547,12 @@ function App() {
           <span className="tm-bg-orb tm-bg-orb-b" />
           <span className="tm-bg-orb tm-bg-orb-c" />
           <span className="tm-bg-orb tm-bg-orb-d" />
+          <AppGameBackground
+            setting={appSettings.appBackground}
+            options={shellBackgroundOptions}
+            opacity={appSettings.appBackgroundOpacity}
+          />
         </div>
-        <AppGameBackground
-          setting={appSettings.appBackground}
-          options={shellBackgroundOptions}
-          opacity={appSettings.appBackgroundOpacity}
-        />
         <OnboardingFlow
           settings={appSettings}
           busy={onboardingBusy}
@@ -1598,12 +1598,12 @@ function App() {
         <span className="tm-bg-orb tm-bg-orb-b" />
         <span className="tm-bg-orb tm-bg-orb-c" />
         <span className="tm-bg-orb tm-bg-orb-d" />
+        <AppGameBackground
+          setting={appSettings.appBackground}
+          options={shellBackgroundOptions}
+          opacity={appSettings.appBackgroundOpacity}
+        />
       </div>
-      <AppGameBackground
-        setting={appSettings.appBackground}
-        options={shellBackgroundOptions}
-        opacity={appSettings.appBackgroundOpacity}
-      />
       {isRunning ? (
         <div
           className={`tm-progress-overlay tm-progress-state-${overlayState}`}

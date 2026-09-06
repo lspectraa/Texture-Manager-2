@@ -30,5 +30,6 @@ Source of truth: `docs/` in this repo. Cursor discovery copies of vault skills l
 
 - No opening/merging/approving PRs
 - No fake tests; no secrets in files or chat
+- Stop all servers, background processes, and app runs started by the agent before being done
 - Prefer editing existing notes; ADRs optional unless asked
 - Stop when DoD items you can satisfy are still unchecked

@@ -8,6 +8,7 @@ Do not claim the task is done until every applicable item is checked. The human 
 - [ ] Magic numbers and unexplained constants are named or documented
 - [ ] Existing tests still pass (`npm test`; `cargo test` in `src-tauri/` when Rust changed); new behavior has coverage if this area is already tested
 - [ ] Docs this change made wrong were updated
+- [ ] All servers, background processes, and application runs started by the agent have been stopped
 - [ ] Human has seen the diff and will open the PR themselves
 
 If the UI changed, verify the user-visible path against the running app ([[verify]]) — Vitest for logic that already has unit tests. If this vault was touched, notes stay human-readable and [[playbook]] still points at the right files.
