@@ -175,14 +175,21 @@ jobs:
           NOTES="Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64)."
           ASSET_NAME="Texture-Manager-2-${VERSION}-android-aarch64.apk"
 
-          mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | sort)
+          mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*release*.apk' ! -name '*-unsigned.apk' | sort)
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            mapfile -t APKS < <(find src-tauri/gen/android/app/build/outputs/apk -type f -name '*.apk' | sort)
+          fi
           if [ "${#APKS[@]}" -eq 0 ]; then
             echo "No APK found under src-tauri/gen/android/app/build/outputs/apk"
             find src-tauri/gen/android/app/build/outputs -type f | head -n 100 || true
             exit 1
           fi
           APK="${APKS[0]}"
-          echo "Uploading ${APK} as ${ASSET_NAME}"
+          echo "Found built APK: ${APK}"
+
+          TARGET_APK="${RUNNER_TEMP}/${ASSET_NAME}"
+          cp "${APK}" "${TARGET_APK}"
+          echo "Staged release APK as: ${TARGET_APK}"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release ${TAG} already exists; uploading APK."
@@ -191,10 +198,10 @@ jobs:
             gh release create "$TAG" --draft --title "$TITLE" --notes "$NOTES"
           fi
 
-          gh release upload "$TAG" "${APK}#${ASSET_NAME}" --clobber
+          gh release upload "$TAG" "${TARGET_APK}" --clobber
 
           {
-            echo "apk_path=${APK}"
+            echo "apk_path=${TARGET_APK}"
             echo "asset_name=${ASSET_NAME}"
             echo "tag=${TAG}"
             echo "version=${VERSION}"

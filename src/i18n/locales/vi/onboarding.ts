@@ -18,6 +18,9 @@ const onboarding: AppLocaleResources["onboarding"] = {
     looksGood: "Quyền bộ nhớ ổn — có thể đọc tệp Geode.",
     skipWarning:
       "Bạn có thể hoàn tất thiết lập ngay và cấp quyền sau trong Cài đặt hoặc khi một công cụ cần tệp Geode.",
+    permissionGranted: "Đã cấp quyền truy cập tất cả tệp.",
+    skipFinish: "Hoàn tất mà không cấp quyền bộ nhớ",
+    recheck: "Kiểm tra lại",
   },
   gd: {
     notFound: "Không tìm thấy",

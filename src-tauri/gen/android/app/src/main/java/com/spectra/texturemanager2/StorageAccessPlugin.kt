@@ -1,9 +1,11 @@
 package com.spectra.texturemanager2
 
+import android.Manifest
 import android.util.Log
 import android.app.Activity
 import android.app.AppOpsManager
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
@@ -13,6 +15,7 @@ import android.provider.OpenableColumns
 import android.provider.Settings
 import android.webkit.MimeTypeMap
 import androidx.activity.result.ActivityResult
+import androidx.core.content.ContextCompat
 import androidx.documentfile.provider.DocumentFile
 import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
@@ -67,45 +70,65 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
 
   @Command
   fun checkAllFilesAccess(invoke: Invoke) {
-    val allFilesGranted = hasAllFilesAccess()
-    val geodeProbe = probeGeodeMedia()
-    val result = JSObject()
-    // Prefer camelCase keys that match the Rust/TS contract.
-    result.put("allFilesGranted", allFilesGranted)
-    result.put("geodeReadable", geodeProbe.readable)
-    result.put("geodePath", geodeProbe.path)
-    // Legacy key kept so older Rust builds keep working.
-    result.put("granted", allFilesGranted)
-    invoke.resolve(result)
+    try {
+      val allFilesGranted = hasAllFilesAccess()
+      val geodeProbe = if (allFilesGranted) probeGeodeMedia() else GeodeProbe(path = null, readable = false)
+      val result = JSObject()
+      // Prefer camelCase keys that match the Rust/TS contract.
+      result.put("allFilesGranted", allFilesGranted)
+      result.put("geodeReadable", geodeProbe.readable)
+      result.put("geodePath", geodeProbe.path)
+      // Legacy key kept so older Rust builds keep working.
+      result.put("granted", allFilesGranted)
+      invoke.resolve(result)
+    } catch (ex: Exception) {
+      Log.e(TAG, "checkAllFilesAccess failed", ex)
+      val result = JSObject()
+      result.put("allFilesGranted", false)
+      result.put("geodeReadable", false)
+      result.put("geodePath", null)
+      result.put("granted", false)
+      invoke.resolve(result)
+    }
   }
 
   /**
-   * Pixel emulators (and some OEMs) can show All files access enabled in Settings
-   * while [Environment.isExternalStorageManager] still returns false until a cold
-   * start. Cross-check AppOps and a real `Android/media` list probe.
+   * Checks whether the app has All files access (MANAGE_EXTERNAL_STORAGE).
+   * On Android 11+ (API 30+), this strictly requires Environment.isExternalStorageManager()
+   * or AppOpsManager OPSTR_MANAGE_EXTERNAL_STORAGE.
+   * On Android 10 and below, this checks READ_EXTERNAL_STORAGE.
    */
   private fun hasAllFilesAccess(): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-      return true
+      return ContextCompat.checkSelfPermission(
+        activity,
+        Manifest.permission.READ_EXTERNAL_STORAGE,
+      ) == PackageManager.PERMISSION_GRANTED
     }
     if (Environment.isExternalStorageManager()) {
       return true
     }
-    if (manageExternalStorageAppOpAllowed()) {
-      return true
-    }
-    return canListPrimaryAndroidMedia()
+    return manageExternalStorageAppOpAllowed()
   }
 
   private fun manageExternalStorageAppOpAllowed(): Boolean {
     return try {
       val appOps = activity.getSystemService(AppOpsManager::class.java) ?: return false
       val mode =
-        appOps.unsafeCheckOpNoThrow(
-          "android:manage_external_storage",
-          Process.myUid(),
-          activity.packageName,
-        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+          appOps.unsafeCheckOpRawNoThrow(
+            "android:manage_external_storage",
+            Process.myUid(),
+            activity.packageName,
+          )
+        } else {
+          @Suppress("DEPRECATION")
+          appOps.checkOpNoThrow(
+            "android:manage_external_storage",
+            Process.myUid(),
+            activity.packageName,
+          )
+        }
       mode == AppOpsManager.MODE_ALLOWED
     } catch (_: Exception) {
       false
@@ -113,13 +136,7 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
   }
 
   private fun hasManageExternalStorage(): Boolean {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-      return true
-    }
-    if (Environment.isExternalStorageManager()) {
-      return true
-    }
-    return manageExternalStorageAppOpAllowed()
+    return hasAllFilesAccess()
   }
 
   /** True when the mapped SAF document path is readable on disk (Geode media or full storage access). */
@@ -166,40 +183,28 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
     }
   }
 
-  private fun canListPrimaryAndroidMedia(): Boolean {
-    val relativePaths = arrayOf("Android/media", "Android/data")
-    for (root in primaryStorageRoots()) {
-      for (relative in relativePaths) {
-        val dir = File(root, relative)
-        if (!dir.isDirectory || !dir.canRead()) {
-          continue
-        }
-        // null means the platform blocked listing (no all-files access).
-        if (dir.list() != null) {
-          return true
-        }
-      }
-    }
-    return false
-  }
-
   private data class GeodeProbe(val path: String?, val readable: Boolean)
 
   private fun probeGeodeMedia(): GeodeProbe {
-    val packages = arrayOf("com.geode.launcher", "com.geode.launcher.play")
-    for (root in primaryStorageRoots()) {
-      for (packageId in packages) {
-        val geode = File(root, "Android/media/$packageId/game/geode")
-        if (!geode.isDirectory || !geode.canRead()) {
-          continue
-        }
-        if (canReadAnyFileUnder(geode)) {
-          val game = geode.parentFile?.absolutePath
-          return GeodeProbe(path = game, readable = true)
+    return try {
+      val packages = arrayOf("com.geode.launcher", "com.geode.launcher.play")
+      for (root in primaryStorageRoots()) {
+        for (packageId in packages) {
+          val geode = File(root, "Android/media/$packageId/game/geode")
+          if (!geode.isDirectory || !geode.canRead()) {
+            continue
+          }
+          if (canReadAnyFileUnder(geode)) {
+            val game = geode.parentFile?.absolutePath
+            return GeodeProbe(path = game, readable = true)
+          }
         }
       }
+      GeodeProbe(path = null, readable = false)
+    } catch (ex: Exception) {
+      Log.w(TAG, "probeGeodeMedia failed", ex)
+      GeodeProbe(path = null, readable = false)
     }
-    return GeodeProbe(path = null, readable = false)
   }
 
   private fun canReadAnyFileUnder(dir: File): Boolean {
@@ -239,19 +244,28 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
     try {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
         try {
-          val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-          intent.data = Uri.parse("package:${activity.packageName}")
-          intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+            data = Uri.parse("package:${activity.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
           activity.startActivity(intent)
         } catch (_: Exception) {
-          val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION)
-          intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          val intent = Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          }
           activity.startActivity(intent)
         }
+      } else {
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+          data = Uri.parse("package:${activity.packageName}")
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        activity.startActivity(intent)
       }
       invoke.resolve()
     } catch (ex: Exception) {
-      invoke.reject(ex.message)
+      Log.e(TAG, "requestAllFilesAccess failed", ex)
+      invoke.reject(ex.message ?: "Failed to open settings")
     }
   }
 
@@ -502,7 +516,7 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
           val atlasStatus = describeAtlasCandidatesOnFilesystem(fsPath, candidates)
           val geodeStatus = describeGeodeFilesystemSearch(effectiveName, plistDest)
           val hint =
-            if (!hasManageExternalStorage() && !canListPrimaryAndroidMedia() && fsPath == null) {
+            if (!hasManageExternalStorage() && fsPath == null) {
               "Grant All files access for Texture Manager in Android Settings, then pick the plist again."
             } else {
               "Atlas not imported. On disk: $atlasStatus. Geode: $geodeStatus. Import folder: $folderListing"
@@ -595,7 +609,7 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
   }
 
   private fun hasFilesystemSearchAccess(): Boolean {
-    return hasManageExternalStorage() || canListPrimaryAndroidMedia() || probeGeodeMedia().readable
+    return hasManageExternalStorage() || probeGeodeMedia().readable
   }
 
   private fun geodeSearchRoots(): List<File> {
@@ -667,7 +681,6 @@ class StorageAccessPlugin(private val activity: Activity) : Plugin(activity) {
       return "no readable `$filename` under Android/media"
     }
     return matches.joinToString("; ") { match ->
-      val stem = match.name.substringBeforeLast('.', match.name)
       val samePlist =
         expectedBytes == null || plistBytesMatch(match, expectedBytes)
       val atlasOk = atlasReadableOnFilesystem(match)

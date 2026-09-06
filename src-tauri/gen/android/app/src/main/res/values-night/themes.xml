@@ -1,6 +1,11 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.texture_manager_2" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <item name="android:windowBackground">@color/splash_background</item>
+        <item name="android:statusBarColor">@color/splash_background</item>
+        <item name="android:navigationBarColor">@color/splash_background</item>
+        <item name="android:windowSplashScreenBackground" tools:targetApi="31">@color/splash_background</item>
+        <item name="android:windowSplashScreenAnimatedIcon" tools:targetApi="31">@mipmap/ic_launcher</item>
+        <item name="android:windowSplashScreenIconBackgroundColor" tools:targetApi="31">@color/splash_background</item>
     </style>
 </resources>

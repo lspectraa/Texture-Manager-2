@@ -19,6 +19,9 @@ const onboarding: AppLocaleResources["onboarding"] = {
     looksGood: "Storage access looks good — Geode files can be read.",
     skipWarning:
       "You can finish setup now and grant access later from Settings or when a tool needs Geode files.",
+    permissionGranted: "Acceso a todos los archivos concedido.",
+    skipFinish: "Finalizar sin acceso al almacenamiento",
+    recheck: "Comprobar de nuevo",
   },
   gd: {
     notFound: "No encontrado",

@@ -6,6 +6,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { syncAndroidIcons } from "./sync-android-icons.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const packageJsonPath = join(root, "package.json");
@@ -54,5 +55,7 @@ setFileVersion(join(root, "src-tauri", "Cargo.toml"), (text) =>
 setFileVersion(join(root, "src-tauri", "tauri.conf.json"), (text) =>
   text.replace(/^(\s*"version"\s*:\s*)"[^"]+"/m, `$1"${version}"`),
 );
+
+syncAndroidIcons();
 
 console.log(`Version sync complete: ${version} (source: package.json)`);

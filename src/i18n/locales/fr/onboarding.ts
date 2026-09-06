@@ -16,6 +16,9 @@ const onboarding = {
     looksGood: "Storage access looks good — Geode files can be read.",
     skipWarning:
       "You can finish setup now and grant access later from Settings or when a tool needs Geode files.",
+    permissionGranted: "Accès à tous les fichiers accordé.",
+    skipFinish: "Terminer sans accès au stockage",
+    recheck: "Vérifier à nouveau",
   },
   gd: {
     notFound: "Introuvable",

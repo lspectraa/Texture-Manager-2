@@ -1,4 +1,4 @@
-import { FolderKey } from "lucide-react";
+import { FolderKey, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useAndroidStorageAccess } from "../../hooks/useAndroidStorageAccess";
 import { isMobileShell } from "../../utils/platform";
@@ -26,6 +26,7 @@ export function AndroidGeodeAccessBanner({
     permissionBlocked,
     statusMessage,
     busy,
+    refreshDetection,
     requestAccess,
   } = useAndroidStorageAccess({
     enabled: mobileShell,
@@ -59,6 +60,17 @@ export function AndroidGeodeAccessBanner({
           >
             <FolderKey size={16} strokeWidth={2.2} />
             {t("errors:packInstaller.grantAllFilesAccess")}
+          </button>
+          <button
+            type="button"
+            className="tm-settings-action-btn"
+            disabled={busy}
+            onClick={() => {
+              void refreshDetection();
+            }}
+          >
+            <RefreshCw size={14} strokeWidth={1.9} />
+            {t("onboarding:androidStorage.recheck")}
           </button>
         </div>
       ) : null}

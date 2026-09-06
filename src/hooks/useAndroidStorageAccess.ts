@@ -99,21 +99,28 @@ export function useAndroidStorageAccess({
         void refreshDetection();
       }
     };
+    const onFocus = (): void => {
+      void refreshDetection();
+    };
     document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
     };
   }, [enabled, refreshDetection]);
 
+  const allFilesGranted = storageStatus?.allFilesGranted === true;
+  const permissionBlocked = storageStatus?.allFilesGranted === false;
+  const checking = storageStatus === null || busy;
   const storageReady =
-    storageStatus?.allFilesGranted === true &&
+    allFilesGranted &&
     storageStatus?.geodeReadable === true &&
     geometryDashFound;
 
-  const permissionBlocked = storageStatus?.allFilesGranted === false;
   const geodeMissing =
-    storageStatus?.allFilesGranted === true &&
-    !storageStatus.geodeReadable &&
+    allFilesGranted &&
+    !storageStatus?.geodeReadable &&
     !geometryDashFound;
 
   const resolvedStatus = localError
@@ -140,8 +147,10 @@ export function useAndroidStorageAccess({
   return {
     storageStatus,
     storageReady,
+    allFilesGranted,
     permissionBlocked,
     geodeMissing,
+    checking,
     statusMessage,
     busy,
     refreshDetection,

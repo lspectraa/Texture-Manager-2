@@ -1,3 +1,4 @@
+import java.io.File
 import java.io.FileInputStream
 import java.util.Properties
 
@@ -75,6 +76,25 @@ android {
     }
     buildFeatures {
         buildConfig = true
+    }
+    applicationVariants.all {
+        val variant = this
+        val ver = variant.versionName
+        val flavor = variant.flavorName.ifEmpty { "universal" }
+        val buildType = variant.buildType.name
+        val brandedName = "Texture-Manager-2-$ver-android-$flavor-$buildType.apk"
+
+        variant.assembleProvider.configure {
+            doLast {
+                variant.outputs.forEach { output ->
+                    val file = output.outputFile
+                    if (file != null && file.exists()) {
+                        val brandedFile = File(file.parentFile, brandedName)
+                        file.copyTo(brandedFile, overwrite = true)
+                    }
+                }
+            }
+        }
     }
 }
 

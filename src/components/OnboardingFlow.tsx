@@ -89,6 +89,7 @@ export function OnboardingFlow({
   const [stepIndex, setStepIndex] = useState(0);
   const [language, setLanguage] = useState<AppLanguage>(() => settings.language);
   const [theme, setTheme] = useState<AppTheme>(() => settings.theme);
+  const [storageAccessGranted, setStorageAccessGranted] = useState(false);
   const [draftPath, setDraftPath] = useState(
     () => settings.geometryDashResolved || settings.geometryDashDetected || "",
   );
@@ -289,6 +290,7 @@ export function OnboardingFlow({
               <AndroidStorageAccessPanel
                 geometryDashFound={settings.geometryDashFound}
                 onSettingsUpdated={onSettingsUpdated}
+                onAccessStatusChanged={setStorageAccessGranted}
                 showReadyHint
                 className="tm-android-geode-access--onboarding"
               />
@@ -319,7 +321,11 @@ export function OnboardingFlow({
               disabled={busy || (stepId === "language" && !language)}
               onClick={goNext}
             >
-              {isLast ? t("common:finish") : t("common:next")}
+              {isLast
+                ? stepId === "androidStorage" && !storageAccessGranted
+                  ? t("androidStorage.skipFinish")
+                  : t("common:finish")
+                : t("common:next")}
               {isLast ? (
                 <CheckCircle2 size={16} strokeWidth={2.1} aria-hidden />
               ) : (
