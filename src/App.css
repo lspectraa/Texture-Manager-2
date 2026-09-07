@@ -202,8 +202,8 @@ body {
   justify-content: center;
   padding: 24px;
   background: var(--tm-overlay);
-  backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
 }
 
 .tm-copyright-dialog {
@@ -589,6 +589,7 @@ body {
   color: var(--tm-text);
   font-size: 12px;
   font-weight: 500;
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
 }
 
@@ -691,8 +692,8 @@ body {
   pointer-events: none;
   z-index: 0;
   transform: translateZ(0);
-  backdrop-filter: blur(var(--tm-glass-blur)) saturate(var(--tm-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tm-glass-blur)) saturate(var(--tm-glass-saturate));
+  backdrop-filter: blur(var(--tm-glass-blur)) saturate(var(--tm-glass-saturate));
   background:
     var(--tm-glass-streak),
     var(--tm-glass-streak-2),
@@ -3088,6 +3089,7 @@ body {
     ),
     var(--tm-menu-bg);
   box-shadow: var(--tm-shadow-menu);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
@@ -3253,6 +3255,7 @@ body {
     ),
     var(--tm-menu-bg);
   box-shadow: var(--tm-shadow-menu);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   backdrop-filter: blur(14px) saturate(140%);
   animation: tm-app-select-in 140ms ease-out;
   overflow-x: hidden;
@@ -3388,8 +3391,8 @@ body {
   pointer-events: none;
   z-index: 0;
   transform: translateZ(0);
-  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(145%);
   -webkit-backdrop-filter: blur(var(--tm-background-card-blur)) saturate(145%);
+  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(145%);
   background:
     radial-gradient(120% 140% at 0% 0%, rgba(93, 224, 200, 0.16), transparent 58%),
     radial-gradient(90% 120% at 100% 0%, rgba(143, 124, 255, 0.18), transparent 55%),
@@ -3648,8 +3651,8 @@ body {
   pointer-events: none;
   z-index: 0;
   transform: translateZ(0);
-  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(145%);
   -webkit-backdrop-filter: blur(var(--tm-background-card-blur)) saturate(145%);
+  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(145%);
   background:
     linear-gradient(155deg, rgba(127, 191, 255, 0.1), rgba(127, 167, 255, 0.03)),
     var(--tm-panel-well);
@@ -3975,6 +3978,7 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(8px);
   backdrop-filter: blur(8px);
   transition:
     border-color var(--tm-fast) ease,
@@ -4489,6 +4493,7 @@ select:focus-visible {
     ),
     var(--tm-menu-bg);
   box-shadow: var(--tm-shadow-menu);
+  -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
 }
 
@@ -4751,8 +4756,8 @@ select:focus-visible {
     var(--tm-overlay-progress-0),
     var(--tm-overlay-progress-1)
   );
-  backdrop-filter: blur(11px) saturate(120%);
   -webkit-backdrop-filter: blur(11px) saturate(120%);
+  backdrop-filter: blur(11px) saturate(120%);
   pointer-events: all;
 }
 
@@ -4828,8 +4833,8 @@ select:focus-visible {
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
   transition:
     border-color 220ms ease,
     box-shadow 220ms ease;
@@ -4997,8 +5002,8 @@ select:focus-visible {
     ),
     var(--tm-glass-fill-strong);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
+  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
   overflow: visible;
   container-type: inline-size;
   container-name: tm-icon-editor-top-bar;
@@ -5418,8 +5423,8 @@ select:focus-visible {
   justify-content: center;
   padding: 24px;
   background: rgba(7, 10, 23, 0.65);
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
 .tm-icon-editor-error-dialog {
@@ -5475,8 +5480,8 @@ select:focus-visible {
   justify-content: center;
   padding: 24px;
   background: rgba(7, 10, 23, 0.65);
-  backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
 }
 
 .tm-icon-editor-confirm-dialog {
@@ -5926,8 +5931,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   border-radius: 12px;
   background: var(--tm-menu-bg);
   border: 1px solid rgba(170, 212, 255, 0.22);
-  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(130%);
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(130%);
+  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(130%);
   color: var(--tm-text);
   overflow: hidden;
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.32);
@@ -6218,8 +6223,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   border-radius: 10px;
   background: var(--tm-menu-bg);
   border: 1px solid rgba(170, 212, 255, 0.28);
-  backdrop-filter: blur(var(--tm-icon-editor-panel-blur));
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur));
+  backdrop-filter: blur(var(--tm-icon-editor-panel-blur));
 }
 
 .tm-icon-editor-viewport-hud .tm-primary-btn {
@@ -8012,8 +8017,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
       rgba(48, 70, 108, 0.72) 0%,
       rgba(28, 44, 72, 0.78) 100%
     );
-  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(150%);
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(150%);
+  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(150%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     0 8px 24px rgba(8, 16, 36, 0.28);
@@ -8034,8 +8039,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   background:
     linear-gradient(145deg, rgba(50, 72, 110, 0.72), rgba(32, 48, 78, 0.78));
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14);
-  backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
+  backdrop-filter: blur(10px) saturate(140%);
 }
 
 [data-theme="light"] .tm-icon-editor-toolbar-btn:hover:not(:disabled),
@@ -8303,8 +8308,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 [data-theme="light"] .tm-home-card {
   border-color: rgba(60, 130, 200, 0.26);
   background: transparent;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow:
     0 8px 20px rgba(40, 70, 120, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.7),
@@ -8315,14 +8320,14 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   background:
     linear-gradient(155deg, rgba(121, 183, 255, 0.12), rgba(93, 224, 200, 0.05)),
     var(--tm-panel-well);
-  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(150%);
   -webkit-backdrop-filter: blur(var(--tm-background-card-blur)) saturate(150%);
+  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(150%);
 }
 
 [data-theme="light"] .tm-home-card-featured {
   background: transparent;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 [data-theme="light"] .tm-home-card-featured .tm-home-card-frost {
@@ -8355,8 +8360,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 
 [data-theme="light"] .tm-home-hero {
   background: transparent;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow:
     0 14px 36px rgba(40, 70, 120, 0.12),
     inset 0 1px 0 rgba(255, 255, 255, 0.75);
@@ -8367,8 +8372,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     radial-gradient(120% 140% at 0% 0%, rgba(93, 224, 200, 0.14), transparent 58%),
     radial-gradient(90% 120% at 100% 0%, rgba(121, 183, 255, 0.16), transparent 55%),
     linear-gradient(155deg, rgba(121, 183, 255, 0.12), var(--tm-glass-fill));
-  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(170%);
   -webkit-backdrop-filter: blur(var(--tm-background-card-blur)) saturate(170%);
+  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(170%);
 }
 
 [data-theme="light"] .tm-home-card-icon {
@@ -8395,16 +8400,16 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 
 [data-theme="light"] .tm-glass-card {
   background: transparent;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   box-shadow:
     var(--tm-shadow-card),
     0 0 0 1px rgba(40, 110, 190, 0.38);
 }
 
 [data-theme="light"] .tm-glass-frost {
-  backdrop-filter: blur(var(--tm-glass-blur)) saturate(var(--tm-glass-saturate));
   -webkit-backdrop-filter: blur(var(--tm-glass-blur)) saturate(var(--tm-glass-saturate));
+  backdrop-filter: blur(var(--tm-glass-blur)) saturate(var(--tm-glass-saturate));
   background:
     var(--tm-glass-streak),
     var(--tm-glass-streak-2),
@@ -8451,8 +8456,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 [data-theme="light"] .tm-home-hero-stats {
   background: var(--tm-glass-fill-strong);
   border-color: rgba(21, 120, 230, 0.22);
-  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--tm-background-card-blur)) saturate(140%);
+  backdrop-filter: blur(var(--tm-background-card-blur)) saturate(140%);
 }
 
 [data-theme="light"] .tm-home-section-cyan .tm-home-section-icon {
@@ -8494,8 +8499,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
     ),
     rgba(28, 44, 72, 0.82);
   border-color: rgba(121, 183, 255, 0.28);
-  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
+  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(140%);
   box-shadow:
     0 12px 28px rgba(8, 16, 36, 0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.14);
@@ -10438,8 +10443,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   box-shadow:
     inset 0 1px 0 rgba(180, 210, 255, 0.08),
     0 6px 18px rgba(2, 8, 22, 0.16);
-  backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
   transition:
     background 180ms ease,
     border-color 180ms ease,
@@ -11516,8 +11521,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.1) 0%, transparent 32%),
     linear-gradient(155deg, rgba(48, 70, 108, 0.72) 0%, rgba(28, 44, 72, 0.78) 100%);
-  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(150%);
   -webkit-backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(150%);
+  backdrop-filter: blur(var(--tm-icon-editor-panel-blur)) saturate(150%);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     0 8px 24px rgba(8, 16, 36, 0.28);
@@ -11798,8 +11803,8 @@ label.checkbox.tm-icon-editor-hide-border.tm-icon-editor-viewport-hud-hide-borde
 
 [data-shell="mobile"] .tm-pack-mode-toggle {
   background: color-mix(in srgb, var(--tm-glass-fill) 60%, rgba(8, 18, 36, 0.45));
-  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
   -webkit-backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
   box-shadow: inset 0 1px 0 var(--tm-glass-rim);
 }
 
@@ -13234,8 +13239,8 @@ body.tm-pack-library-dragging .tm-pack-applied-available-item {
 /* Solid frosted fills — backdrop-filter is unreliable in Android WebView. */
 [data-shell="mobile"] .tm-glass-frost {
   transform: none;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   background:
     var(--tm-glass-streak),
     var(--tm-glass-streak-2),
@@ -14143,8 +14148,8 @@ body.tm-pack-library-dragging .tm-pack-applied-available-item {
   min-height: var(--tm-mobile-control-min-height);
   padding: 10px 8px;
   background: transparent;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
   color: var(--tm-muted, #a8b4c8);
   font: inherit;
   font-size: 0.9rem;
@@ -14476,8 +14481,8 @@ body.tm-pack-library-dragging .tm-pack-applied-available-item {
 [data-shell="mobile"] .tm-tool-action-bar .tm-glass-action-btn .tm-glass-frost {
   display: block;
   transform: translateZ(0);
-  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
   -webkit-backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
   background:
     var(--tm-glass-streak),
     var(--tm-glass-streak-2),
@@ -14582,8 +14587,8 @@ body.tm-pack-library-dragging .tm-pack-applied-available-item {
     linear-gradient(155deg, rgba(32, 90, 180, 0.55) 0%, rgba(60, 40, 140, 0.35) 55%, transparent 100%);
   border: 1px solid rgba(155, 204, 255, 0.18);
   box-shadow: none;
-  backdrop-filter: none;
   -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 [data-shell="mobile"] .tm-home--mobile .tm-home-hero-frost {
@@ -15819,8 +15824,8 @@ body.tm-pack-library-dragging .tm-pack-applied-available-item {
 .tm-icon-editor-zoom-hud .tm-glass-frost {
   display: block;
   transform: translateZ(0);
-  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
   -webkit-backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
+  backdrop-filter: blur(14px) saturate(var(--tm-glass-saturate));
   background: color-mix(in srgb, var(--tm-glass-fill-strong) 28%, rgba(8, 14, 32, 0.9));
   box-shadow: inset 0 1px 0 var(--tm-glass-rim);
 }

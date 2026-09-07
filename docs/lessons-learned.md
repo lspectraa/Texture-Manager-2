@@ -2,6 +2,13 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-09-06 — Declare vendor-prefixed CSS before standard properties to avoid minifier stripping
+
+- Context: frosted glass styling and backdrop-filter in Tauri / WebView2
+- Mistake or surprise: declaring `backdrop-filter` followed by `-webkit-backdrop-filter` worked in dev mode, but LightningCSS (used by Vite in production builds) treated `-webkit-backdrop-filter` as overriding the preceding `backdrop-filter` and dropped the standard property. Because Chromium / WebView2 does not support `-webkit-backdrop-filter` (only standard `backdrop-filter`), all frost blur effects disappeared in the compiled application.
+- What to do next time: always follow the CSS vendor prefix convention by declaring `-webkit-backdrop-filter` first and standard `backdrop-filter` second; ensure unit tests verify declaration ordering so minification preserves standard properties.
+- Files involved: `src/App.css`, `vite.config.ts`, `src/utils/cssBackdropFilter.test.ts`
+
 ### 2026-09-06 — Never place standalone helper binaries in `src-tauri/src/bin/`
 
 - Context: adding utility / developer tooling binaries to a Tauri v2 project

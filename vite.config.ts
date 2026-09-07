@@ -3,6 +3,10 @@ import react from "@vitejs/plugin-react";
 
 const platform = process.env.TAURI_ENV_PLATFORM;
 const isMobileDev = platform === "android" || platform === "ios";
+const isChromiumTarget =
+  platform === "windows" ||
+  platform === "android" ||
+  (!platform && (process.platform === "win32" || process.platform === "android"));
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -43,10 +47,7 @@ export default defineConfig(async () => ({
   },
   envPrefix: ["VITE_", "TAURI_ENV_"],
   build: {
-    target:
-      process.env.TAURI_ENV_PLATFORM === "windows"
-        ? "chrome105"
-        : "safari13",
+    target: isChromiumTarget ? "chrome105" : "safari13",
     minify: process.env.TAURI_ENV_DEBUG ? false : "oxc",
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },

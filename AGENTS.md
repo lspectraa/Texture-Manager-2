@@ -23,7 +23,6 @@ The primary source of truth for repository structure, architecture, workflows, a
 - **[Config & Environment](docs/app/config-env.md)** (`docs/app/config-env.md`) — Secrets and environment configuration.
 - **[Publish & Release](docs/app/publish.md)** (`docs/app/publish.md`) — Release workflows and artifacts.
 - **[Lessons Learned](docs/lessons-learned.md)** (`docs/lessons-learned.md`) — Past pitfalls, historical context, and tripwires.
-- **[Known Gaps](docs/app/gaps.md)** (`docs/app/gaps.md`) — Known architectural gaps and nuances.
 
 ---
 
