@@ -24,7 +24,7 @@ Source of truth: `docs/` in this repo. Cursor discovery copies of vault skills l
    - `concurrent-subagents` — independent parallel layers
    - `compounding-knowledge` — only when the human asks or after meaningful feature work
    - `living-adr` — only if the human asks for an ADR
-5. Before PR (human opens it): `docs/processes/pre-review-qa.md`.
+5. Major changes only (before human opens PR): `docs/processes/pre-review-qa.md` (skip for minor/routine tasks).
 
 ## Hard limits (from playbook)
 
@@ -32,4 +32,5 @@ Source of truth: `docs/` in this repo. Cursor discovery copies of vault skills l
 - No fake tests; no secrets in files or chat
 - Stop all servers, background processes, and app runs started by the agent before being done
 - Prefer editing existing notes; ADRs optional unless asked
+- Reviews only at the end of major changes; git checks only when reviewing earlier versions (not by default)
 - Stop when DoD items you can satisfy are still unchecked

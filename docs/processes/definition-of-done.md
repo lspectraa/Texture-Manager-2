@@ -13,4 +13,4 @@ Do not claim the task is done until every applicable item is checked. The human 
 
 If the UI changed, verify the user-visible path against the running app ([[verify]]) — Vitest for logic that already has unit tests. If this vault was touched, notes stay human-readable and [[playbook]] still points at the right files.
 
-Opening, merging, and deploying stay human. The last pass before a PR is [[pre-review-qa]].
+Opening, merging, and deploying stay human. Formal reviews (such as [[pre-review-qa]]) are conducted only at the end of major changes, not on minor tasks or routine updates. Git checks are only done if it needs to review earlier versions, not by default.

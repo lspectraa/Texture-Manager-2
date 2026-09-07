@@ -2,6 +2,13 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-09-06 — Reviews only on major changes; no git checks by default
+
+- Context: finishing agent tasks and pre-review workflows
+- Mistake or surprise: running review checklists (e.g. Pre-Review QA) and git commands (`git status`, `git diff`) by default on minor or routine tasks adds unnecessary overhead and friction
+- What to do next time: reserve review audits for the end of major changes only; execute git checks only if there is a specific need to inspect earlier versions or history, never by default
+- Files involved: `AGENTS.md`, `docs/playbook.md`, `docs/processes/pre-review-qa.md`, `docs/processes/definition-of-done.md`, `.cursor/rules/agent-knowledge-base.mdc`
+
 ### 2026-09-04 — Project hooks need `.cjs`; do not trust sessionStart context alone
 
 - Context: adding Cursor `sessionStart` hooks in a repo whose `package.json` has `"type": "module"`

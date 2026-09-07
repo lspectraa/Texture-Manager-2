@@ -37,6 +37,8 @@ These rules are non-negotiable across all sessions:
 4. **Stop All Processes Before Finishing**: Stop all servers, dev servers (`npm run dev`, `npm run tauri dev`), background processes, and application runs started during the session before claiming done.
 5. **Satisfy Definition of Done**: Never declare a task complete while items in [Definition of Done](docs/processes/definition-of-done.md) that you can satisfy remain unchecked.
 6. **Preserve Knowledge Base Quality**: Prefer editing existing notes over creating duplicate files. ADRs under `docs/adrs/` are optional background unless explicitly requested.
+7. **Reviews Only on Major Changes**: Formal reviews (such as Pre-Review QA audits) must only be performed at the end of major changes or when explicitly requested. Do not run review audits on minor tasks, routine edits, or small fixes.
+8. **Git Checks Not Default**: Git checks (e.g. `git status`, `git diff`, `git log`) must only be performed if there is a specific need to review earlier versions or history. Do not run git checks by default.
 
 ---
 
@@ -61,6 +63,8 @@ These rules are non-negotiable across all sessions:
 | Fetch upscaler sidecars | `npm run fetch:upscaler-binaries` | Sidecar executables for upscaler tools |
 | Verify environment | `npm run check:env` | Check Node and system prerequisites |
 
+> **Concurrency note**: Independent console commands can be executed concurrently (e.g. running `npm test` alongside `cargo test`), and console commands can also run concurrently with other operations (such as file reads, searches, edits, or sub-agents).
+
 ---
 
 ## 5. Agent Workflow Sequence
@@ -75,8 +79,16 @@ These rules are non-negotiable across all sessions:
 4. **Update Documentation**: Update relevant notes in `docs/` when behavior, interfaces, or commands change (see `docs/skills/docs-and-mermaid/SKILL.md`).
 5. **Verify Runtime**:
    - Follow [Verification Guide](docs/app/verify.md) — never rely on reading code alone.
-   - Run tests (`npm test`, `cargo test` when Rust changed, `npm run build`).
+   - Run tests (`npm test`, `cargo test` when Rust changed, `npm run build` — independent verification commands can run concurrently).
 6. **Clean Up Processes**: Kill and stop all background servers, dev watchers, and app instances launched during the session.
-7. **Pre-Review QA**:
-   - Run [Pre-Review QA](docs/processes/pre-review-qa.md) audit over the diff.
-   - Report status against Definition of Done before concluding.
+7. **Review (Major Changes Only)**:
+   - Perform a formal review audit per [Pre-Review QA](docs/processes/pre-review-qa.md) only at the end of major changes (or when requested by the human). Do not run review audits on routine or minor changes.
+   - Run git checks only if needed to review earlier versions, not by default.
+   - Confirm status against Definition of Done before concluding.
+
+---
+
+## 6. Concurrency & Parallel Execution
+
+- **Concurrent Console Commands**: Console commands (e.g., test suites, build checks, and environment validations) can be executed concurrently whenever they do not depend on each other's outputs or conflict over shared resources (such as running `npm test` and `cargo test` in parallel).
+- **Concurrency Across Operations**: Console commands can also be made concurrent with other operations — including file inspections, file modifications, codebase searches, documentation updates, and sub-agent executions — provided there are no overlapping file mutations or unresolved dependencies between them.

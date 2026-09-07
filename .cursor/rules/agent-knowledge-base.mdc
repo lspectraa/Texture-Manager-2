@@ -13,7 +13,7 @@ This repo’s agent vault lives at `docs/`.
 2. For product shape, skim `docs/app/purpose-and-flows.md` and `docs/app/layout.md`. Touching a tool panel → also `docs/app/tools.md` and `docs/app/invoke-surface.md`. Internals → `docs/app/systems/overview.md`.
 3. Commands / env / release → `docs/app/run-test-lint.md`, `docs/app/config-env.md`, `docs/app/publish.md`.
 4. Verify runtime work per `docs/app/verify.md` (not code-reading alone).
-5. Before the human opens a PR → `docs/processes/pre-review-qa.md`.
+5. End of major changes only → `docs/processes/pre-review-qa.md` (do not run review audits on minor/routine tasks).
 6. After meaningful feature work (or when the human asks) → load skill `compounding-knowledge` (source: `docs/skills/compounding-knowledge/SKILL.md`). Do not treat every agent stop as a vault-update trigger.
 
 Load other vault skills from `docs/skills/*/SKILL.md` when the task matches (also mirrored under `.cursor/skills/` for discovery). Follow Obsidian `[[wikilinks]]` only when you need that file.
@@ -26,4 +26,6 @@ Load other vault skills from `docs/skills/*/SKILL.md` when the task matches (als
 - Stop all servers, background processes, and application runs started by the agent before being done.
 - Prefer editing an existing vault note over creating a duplicate.
 - ADRs under `docs/adrs/` are optional background — do not block on them unless the human asks.
+- Reviews are only done at the end of major changes; do not run review checklists on minor tasks.
+- Git checks are only done when needing to review earlier versions, not by default.
 - Do not say done while Definition of Done still has unchecked items you can satisfy.
