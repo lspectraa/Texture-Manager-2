@@ -704,6 +704,18 @@ function App() {
             break;
           }
         }
+      } catch (error) {
+        setAvailableUpdate(null);
+        if (silent) {
+          setUpdateStatusMessage(null);
+          setUpdateStatusTone(null);
+        } else {
+          const message = error instanceof Error ? error.message : String(error);
+          setUpdateStatusMessage(
+            t("settings:updates.checkFailed", { error: message }),
+          );
+          setUpdateStatusTone("danger");
+        }
       } finally {
         updateCheckBusyRef.current = false;
         setUpdateCheckBusy(false);

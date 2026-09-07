@@ -17,9 +17,8 @@ docs/
   playbook.md
   lessons-learned.md
   adrs.md
-  app/                 # product map + app/systems/ how-it-works
+  app/                 # product map + architecture.md
   processes/
-  skills/<name>/SKILL.md
   templates/
   prompts/session-start.md
   adrs/                # optional; human reviews
@@ -27,7 +26,7 @@ docs/
 
 .cursor/
   rules/agent-knowledge-base.mdc
-  skills/              # Cursor discovery wrappers → docs/skills
+  skills/              # Native Cursor agent skills
   hooks.json
   hooks/
 ```

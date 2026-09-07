@@ -119,6 +119,28 @@ async function downloadAndInstallSimulatedUpdate(
   pendingSimulatedUpdate = false;
 }
 
+const UPDATE_CHECK_TIMEOUT_MS = 25_000;
+const VERSION_FETCH_TIMEOUT_MS = 5_000;
+
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+  });
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  });
+}
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message;
@@ -131,7 +153,11 @@ export async function getAppPackageVersion(): Promise<string> {
     return APP_VERSION;
   }
   try {
-    return await getVersion();
+    return await withTimeout(
+      getVersion(),
+      VERSION_FETCH_TIMEOUT_MS,
+      "Version lookup timed out.",
+    );
   } catch {
     return APP_VERSION;
   }
@@ -142,8 +168,10 @@ async function checkForAndroidAppUpdate(
 ): Promise<UpdateCheckResult> {
   try {
     clearPendingUpdate();
-    const result = await invoke<AndroidUpdateCheckResult>(
-      "android_check_app_update",
+    const result = await withTimeout(
+      invoke<AndroidUpdateCheckResult>("android_check_app_update"),
+      UPDATE_CHECK_TIMEOUT_MS,
+      "Update check timed out. Please check your network connection.",
     );
 
     switch (result.status) {
@@ -188,7 +216,11 @@ async function checkForDesktopAppUpdate(
 ): Promise<UpdateCheckResult> {
   try {
     clearPendingUpdate();
-    const update = await check();
+    const update = await withTimeout(
+      check(),
+      UPDATE_CHECK_TIMEOUT_MS,
+      "Update check timed out. Please check your network connection.",
+    );
     if (!update) {
       return { status: "upToDate", currentVersion };
     }

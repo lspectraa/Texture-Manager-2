@@ -1,12 +1,26 @@
 [package]
 name = "texture-manager-2"
 version = "0.4.1"
+default-run = "texture-manager-2"
 description = "Geometry Dash texture tooling remake"
 authors = ["Spectra"]
 license = "GPL-3.0-or-later"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "texture-manager-2"
+path = "src/main.rs"
+
+[[bin]]
+name = "generate_android_icons"
+path = "dev-tools/generate_android_icons.rs"
+required-features = ["icon-gen"]
+
+[features]
+default = []
+icon-gen = []
 
 [lib]
 # The `_lib` suffix may seem redundant but it is necessary
@@ -39,6 +53,7 @@ winreg = "0.56"
 
 [target.'cfg(target_os = "android")'.dependencies]
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
+webpki-root-certs = "1.0"
 futures-util = "0.3"
 tokio = { version = "1", default-features = false, features = ["fs", "io-util"] }
 

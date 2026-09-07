@@ -2,6 +2,20 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-09-06 — Never place standalone helper binaries in `src-tauri/src/bin/`
+
+- Context: adding utility / developer tooling binaries to a Tauri v2 project
+- Mistake or surprise: Tauri CLI automatically scans `src-tauri/src/bin/` for binaries and bundles every discovered binary into desktop release packages (MSI, DMG, etc.). Without an explicit `default-run` in `Cargo.toml`, alphabetical ordering can cause a helper binary to hijack the primary application executable (`File Id="Path"` in WiX/MSI), completely omitting the real app and causing installed shortcuts to fail or crash on startup.
+- What to do next time: keep dev-tools/scripts outside `src-tauri/src/bin/` (e.g. in `src-tauri/dev-tools/`), always specify `default-run = "texture-manager-2"` under `[package]` in `Cargo.toml`, gate helper binaries behind optional Cargo features with `required-features`, and explicitly set `mainBinaryName: "texture-manager-2"` in `tauri.conf.json`.
+- Files involved: `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`, `src-tauri/dev-tools/generate_android_icons.rs`, `package.json`
+
+### 2026-09-06 — Knowledge base efficiency: strict on-demand consultation and single source of truth
+
+- Context: agent latency, token bloat, and file read loops caused by vault fragmentation and mandatory pre-flight checklists
+- Mistake or surprise: prompting agents to pre-read multiple vault files before starting work added 15k–25k tokens of context and 15–30s of turn latency on every task; redundant alwaysApply rules and duplicate skill trees compounded the problem
+- What to do next time: enforce strict just-in-time doc lookups; keep rules concise and non-redundant; scope browser/node rules to UI globs; consolidate micro-notes into unified architecture guides; maintain skills directly in `.cursor/skills/`
+- Files involved: `AGENTS.md`, `.cursor/rules/agent-knowledge-base.mdc`, `.cursor/rules/ironbee-devtools-use.mdc`, `.cursor/hooks/session-start.cjs`, `docs/app/architecture.md`, `.cursor/skills/`
+
 ### 2026-09-06 — Reviews only on major changes; no git checks by default
 
 - Context: finishing agent tasks and pre-review workflows
@@ -71,6 +85,13 @@ Newest entry at the top. Written after a session via [[compounding-knowledge]].
 - Mistake or surprise: frontend catalogs alone are not enough; Rust `SUPPORTED_LANGUAGES` must stay in sync
 - What to do next time: follow `src/i18n/CONTRIBUTING.md` end-to-end including `settings.rs` tests
 - Files involved: `src/i18n/CONTRIBUTING.md`, `src-tauri/src/core/settings.rs`
+
+### 2026-09-06 — Android reqwest TLS requires webpki roots or rustls-platform-verifier panics
+
+- Context: Android in-app update checking and APK downloading
+- Mistake or surprise: `reqwest` 0.13 with `rustls` uses `rustls-platform-verifier` by default, which panics on Android if not initialized with JVM/JNI handles. An unhandled panic in a Tauri async command aborts the Tokio task and drops the IPC response channel, leaving the frontend `invoke()` promise permanently hung.
+- What to do next time: configure `reqwest::ClientBuilder` with `webpki-root-certs` via `tls_certs_only` and explicit timeouts, catch panics in command handlers, and add timeout safeguards to frontend updater calls.
+- Files involved: `src-tauri/Cargo.toml`, `src-tauri/src/android_apk_update.rs`, `src/services/tauriUpdater.ts`, `src/App.tsx`
 
 ### YYYY-MM-DD — short title
 

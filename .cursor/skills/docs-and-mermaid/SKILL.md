@@ -5,4 +5,8 @@ description: Write Markdown docs and Mermaid diagrams in the same change as the 
 
 # Docs and Mermaid
 
-Read and follow `docs/skills/docs-and-mermaid/SKILL.md` — that file is the source of truth.
+Documentation is part of the change. Do not leave the next session to discover a stale README.
+
+Update the existing user-facing doc if one exists. Put diagrams in Markdown so they live in git. Prefer sequenceDiagram or flowchart LR, and name nodes after real modules or services in this repo.
+
+If a design decision was made and the human wants it recorded, also write an ADR ([[living-adr]]). If the default agent sequence changed, update [[playbook]].

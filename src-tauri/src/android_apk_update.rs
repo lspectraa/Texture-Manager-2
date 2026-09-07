@@ -142,6 +142,26 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     .build()
 }
 
+#[cfg(target_os = "android")]
+fn create_update_client(timeout: Option<std::time::Duration>) -> Result<reqwest::Client, String> {
+  let roots = webpki_root_certs::TLS_SERVER_ROOT_CERTS
+    .iter()
+    .filter_map(|der| reqwest::tls::Certificate::from_der(der.as_ref()).ok());
+
+  let mut builder = reqwest::Client::builder()
+    .user_agent(concat!("Texture-Manager-2/", env!("CARGO_PKG_VERSION")))
+    .connect_timeout(std::time::Duration::from_secs(10))
+    .tls_certs_only(roots);
+
+  if let Some(timeout) = timeout {
+    builder = builder.timeout(timeout);
+  }
+
+  builder
+    .build()
+    .map_err(|err| format!("Failed to build HTTP client: {err}"))
+}
+
 pub async fn check_app_update<R: Runtime>(app: AppHandle<R>) -> Result<serde_json::Value, String> {
   #[cfg(not(target_os = "android"))]
   {
@@ -151,46 +171,63 @@ pub async fn check_app_update<R: Runtime>(app: AppHandle<R>) -> Result<serde_jso
 
   #[cfg(target_os = "android")]
   {
-    let current_version = app.package_info().version.to_string();
-    let client = reqwest::Client::builder()
-      .user_agent(concat!("Texture-Manager-2/", env!("CARGO_PKG_VERSION")))
-      .build()
-      .map_err(|err| err.to_string())?;
+    use futures_util::FutureExt;
 
-    let manifest: UpdateManifest = client
-      .get(MANIFEST_URL)
-      .send()
-      .await
-      .map_err(|err| format!("Failed to fetch update manifest: {err}"))?
-      .error_for_status()
-      .map_err(|err| format!("Update manifest request failed: {err}"))?
-      .json()
-      .await
-      .map_err(|err| format!("Invalid update manifest JSON: {err}"))?;
+    let res = std::panic::AssertUnwindSafe(async {
+      let current_version = app.package_info().version.to_string();
+      let client = create_update_client(Some(std::time::Duration::from_secs(20)))?;
 
-    if !is_newer_version(&manifest.version, &current_version) {
-      return Ok(serde_json::json!({
-        "status": "upToDate",
+      let manifest: UpdateManifest = client
+        .get(MANIFEST_URL)
+        .send()
+        .await
+        .map_err(|err| format!("Failed to fetch update manifest: {err}"))?
+        .error_for_status()
+        .map_err(|err| format!("Update manifest request failed: {err}"))?
+        .json()
+        .await
+        .map_err(|err| format!("Invalid update manifest JSON: {err}"))?;
+
+      if !is_newer_version(&manifest.version, &current_version) {
+        return Ok(serde_json::json!({
+          "status": "upToDate",
+          "currentVersion": current_version,
+        }));
+      }
+
+      let artifact = manifest
+        .platforms
+        .get(PLATFORM_KEY)
+        .ok_or_else(|| format!("Update manifest missing platform '{PLATFORM_KEY}'"))?;
+
+      validate_download_url(&artifact.url)?;
+
+      Ok(serde_json::json!({
+        "status": "available",
         "currentVersion": current_version,
-      }));
+        "version": manifest.version,
+        "notes": manifest.notes,
+        "date": manifest.pub_date,
+        "url": artifact.url,
+        "sha256": artifact.sha256,
+      }))
+    })
+    .catch_unwind()
+    .await;
+
+    match res {
+      Ok(outcome) => outcome,
+      Err(panic_payload) => {
+        let msg = if let Some(s) = panic_payload.downcast_ref::<&str>() {
+          (*s).to_string()
+        } else if let Some(s) = panic_payload.downcast_ref::<String>() {
+          s.clone()
+        } else {
+          "Unknown panic during Android update check".to_string()
+        };
+        Err(format!("Android update check panicked: {msg}"))
+      }
     }
-
-    let artifact = manifest
-      .platforms
-      .get(PLATFORM_KEY)
-      .ok_or_else(|| format!("Update manifest missing platform '{PLATFORM_KEY}'"))?;
-
-    validate_download_url(&artifact.url)?;
-
-    Ok(serde_json::json!({
-      "status": "available",
-      "currentVersion": current_version,
-      "version": manifest.version,
-      "notes": manifest.notes,
-      "date": manifest.pub_date,
-      "url": artifact.url,
-      "sha256": artifact.sha256,
-    }))
   }
 }
 
@@ -225,10 +262,7 @@ pub async fn download_app_update<R: Runtime>(
     let dest = updates_dir.join("update.apk");
     let tmp = updates_dir.join("update.apk.partial");
 
-    let client = reqwest::Client::builder()
-      .user_agent(concat!("Texture-Manager-2/", env!("CARGO_PKG_VERSION")))
-      .build()
-      .map_err(|err| err.to_string())?;
+    let client = create_update_client(None)?;
 
     let response = client
       .get(&url)

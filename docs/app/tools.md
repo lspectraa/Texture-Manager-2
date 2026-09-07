@@ -1,19 +1,19 @@
 # Tools catalog
 
-Nav IDs from `src/config/toolNavigation.ts`. Panels under `src/components/tools/`. Systems deep-dives: [[overview]].
+Nav IDs from `src/config/toolNavigation.ts`. Panels under `src/components/tools/`. Architecture & system details: [[architecture]].
 
-| Tool id | Panel | Run path | Deep dive |
+| Tool id | Panel | Run path | Architecture section |
 | --- | --- | --- | --- |
-| `iconEditor` | `IconEditorToolPanel.tsx` | Dedicated (`tauriIconEditor`, glow via `tauriIconGlow`) | [[editors]] |
-| `glowMaker` | `GlowMakerToolPanel.tsx` | Preview dedicated; **Run** → `glowMaker` | [[glow-maker]], [[batch-pipeline]] |
-| `geodeButtons` | `GeodeButtonsToolPanel.tsx` | Preview dedicated; **Run** → `geodeButtons` | [[editors]], [[geode-texture-loader]] |
-| `particleEditor` | `ParticleEditorToolPanel.tsx` | Dedicated (`tauriParticleEditor`) | [[editors]] |
-| `splitter` | `SplitterToolPanel.tsx` | Batch `splitter` | [[batch-pipeline]] |
-| `merger` | `MergerToolPanel.tsx` | Batch `merger` | [[batch-pipeline]] |
-| `porter` | `PorterToolPanel.tsx` | Batch **`porterSplitter`** | [[batch-pipeline]] |
-| `upscaler` | `UpscalerToolPanel.tsx` | Batch `upscaler` (desktop-only) | [[upscaler]] |
-| `randomizer` | `RandomizerToolPanel.tsx` | Batch `randomizer` | [[batch-pipeline]] |
-| `convertToNewVersion` | `ConvertToNewVersionToolPanel.tsx` | Batch `convertToNewVersion` (desktop-only) | [[batch-pipeline]] |
-| `texturePackInstaller` | `TexturePackInstallerToolPanel.tsx` | Dedicated + `pack-install-progress` | [[pack-installer]] |
+| `iconEditor` | `IconEditorToolPanel.tsx` | Dedicated (`tauriIconEditor`, glow via `tauriIconGlow`) | [[architecture]] |
+| `glowMaker` | `GlowMakerToolPanel.tsx` | Preview dedicated; **Run** → `glowMaker` | [[architecture]] |
+| `geodeButtons` | `GeodeButtonsToolPanel.tsx` | Preview dedicated; **Run** → `geodeButtons` | [[architecture]] |
+| `particleEditor` | `ParticleEditorToolPanel.tsx` | Dedicated (`tauriParticleEditor`) | [[architecture]] |
+| `splitter` | `SplitterToolPanel.tsx` | Batch `splitter` | [[architecture]] |
+| `merger` | `MergerToolPanel.tsx` | Batch `merger` | [[architecture]] |
+| `porter` | `PorterToolPanel.tsx` | Batch **`porterSplitter`** | [[architecture]] |
+| `upscaler` | `UpscalerToolPanel.tsx` | Batch `upscaler` (desktop-only) | [[architecture]] |
+| `randomizer` | `RandomizerToolPanel.tsx` | Batch `randomizer` | [[architecture]] |
+| `convertToNewVersion` | `ConvertToNewVersionToolPanel.tsx` | Batch `convertToNewVersion` (desktop-only) | [[architecture]] |
+| `texturePackInstaller` | `TexturePackInstallerToolPanel.tsx` | Dedicated + `pack-install-progress` | [[architecture]] |
 
-Non-tool surfaces: `home`, `settings`, `about` (mobile About page; desktop copyright dialog). Shell wiring: [[frontend-shell]].
+Non-tool surfaces: `home`, `settings`, `about` (mobile About page; desktop copyright dialog). Shell wiring: [[architecture]].

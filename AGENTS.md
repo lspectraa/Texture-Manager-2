@@ -16,7 +16,7 @@ The primary source of truth for repository structure, architecture, workflows, a
 - **[Run, Test, Lint](docs/app/run-test-lint.md)** (`docs/app/run-test-lint.md`) — Day-to-day commands, build instructions, and testing.
 
 ### Architecture & System Maps
-- **[Systems Overview](docs/app/systems/overview.md)** (`docs/app/systems/overview.md`) — Core architecture and component map.
+- **[Architecture & Systems](docs/app/architecture.md)** (`docs/app/architecture.md`) — Consolidated architecture, systems, and component guide.
 - **[Purpose & Flows](docs/app/purpose-and-flows.md)** (`docs/app/purpose-and-flows.md`) — App purpose, user journeys, and screens.
 - **[Tools Catalog](docs/app/tools.md)** (`docs/app/tools.md`) — Breakdown of all built-in tools (Icon Editor, Glow Maker, Upscaler, etc.).
 - **[Invoke Surface](docs/app/invoke-surface.md)** (`docs/app/invoke-surface.md`) — IPC contract between frontend and Rust/Tauri.
@@ -39,6 +39,8 @@ These rules are non-negotiable across all sessions:
 6. **Preserve Knowledge Base Quality**: Prefer editing existing notes over creating duplicate files. ADRs under `docs/adrs/` are optional background unless explicitly requested.
 7. **Reviews Only on Major Changes**: Formal reviews (such as Pre-Review QA audits) must only be performed at the end of major changes or when explicitly requested. Do not run review audits on minor tasks, routine edits, or small fixes.
 8. **Git Checks Not Default**: Git checks (e.g. `git status`, `git diff`, `git log`) must only be performed if there is a specific need to review earlier versions or history. Do not run git checks by default.
+9. **No Pre-Flight Reading Loops**: Do NOT read documentation files (such as `playbook.md`, `definition-of-done.md`, or architecture guides) as a mandatory pre-flight routine. For targeted tasks (e.g. bug fixes, component edits, configuration updates), proceed directly to the relevant files.
+10. **No Output Boilerplate**: Answer concisely and directly. Do not generate unrequested markdown review tables, checklists, or Definition of Done tables in regular responses.
 
 ---
 
@@ -70,21 +72,19 @@ These rules are non-negotiable across all sessions:
 ## 5. Agent Workflow Sequence
 
 1. **Align on Intent**: Confirm the task scope if there are ambiguities. If an IDE plan exists, wait for plan approval. Do not invent an unrequested secondary planning mode.
-2. **Consult Knowledge Base**:
-   - Skim [Playbook](docs/playbook.md).
-   - Keep [Definition of Done](docs/processes/definition-of-done.md) open throughout the session.
-   - For UI / panels: read [Purpose & Flows](docs/app/purpose-and-flows.md), [Tools](docs/app/tools.md), and [Layout](docs/app/layout.md).
-   - For backend / commands: read [Systems Overview](docs/app/systems/overview.md) and [Invoke Surface](docs/app/invoke-surface.md).
+2. **Consult Docs On-Demand Only**:
+   - Skip reading documentation for targeted, well-defined tasks (e.g., editing known files, fixing a bug, updating config, running tests). Proceed directly to the task.
+   - Consult specific docs (e.g. `docs/app/architecture.md`, `docs/app/invoke-surface.md`) strictly just-in-time when working on an unfamiliar subsystem.
 3. **Implement**: Small, focused steps. Avoid drive-by refactorings.
-4. **Update Documentation**: Update relevant notes in `docs/` when behavior, interfaces, or commands change (see `docs/skills/docs-and-mermaid/SKILL.md`).
+4. **Update Documentation**: Update relevant notes in `docs/` only when behavior, public contracts, or interfaces change.
 5. **Verify Runtime**:
-   - Follow [Verification Guide](docs/app/verify.md) — never rely on reading code alone.
+   - Follow [Verification Guide](docs/app/verify.md) when verifying UI or runtime behavior.
    - Run tests (`npm test`, `cargo test` when Rust changed, `npm run build` — independent verification commands can run concurrently).
 6. **Clean Up Processes**: Kill and stop all background servers, dev watchers, and app instances launched during the session.
-7. **Review (Major Changes Only)**:
-   - Perform a formal review audit per [Pre-Review QA](docs/processes/pre-review-qa.md) only at the end of major changes (or when requested by the human). Do not run review audits on routine or minor changes.
+7. **Complete Concisely**:
+   - Answer directly and concisely without outputting boilerplate review checklists.
+   - Perform a formal Pre-Review QA audit only at the end of major changes or upon explicit human request.
    - Run git checks only if needed to review earlier versions, not by default.
-   - Confirm status against Definition of Done before concluding.
 
 ---
 

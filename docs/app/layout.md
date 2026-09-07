@@ -45,4 +45,4 @@ Local UI keys: `texture-manager-2.nav-collapsed`, `texture-manager-2.report-coll
 
 Entrypoints: `src/main.tsx` → `src/App.tsx`; tool list `src/config/toolNavigation.ts`; invoke registry `src-tauri/src/lib.rs`; batch dispatch `src-tauri/src/core/executor.rs`.
 
-Invoke mapping: [[invoke-surface]]. How systems work: [[overview]]. Shell behavior: [[frontend-shell]].
+Invoke mapping: [[invoke-surface]]. Systems and architecture: [[architecture]].

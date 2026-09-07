@@ -1,6 +1,7 @@
 ---
-description: "Enforce IronBee DevTools for driving and verifying running applications. Each enabled platform (browser, node, backend) contributes its own section. Verify changes against the running app before finishing; use execute for multi-step flows."
-alwaysApply: true
+description: "Enforce IronBee DevTools for driving and verifying running UI and frontend applications. Verify changes against the running app before finishing; use execute for multi-step flows."
+globs: "src/**/*.{ts,tsx,css,html}"
+alwaysApply: false
 ---
 
 # Use IronBee DevTools to drive and verify the running application

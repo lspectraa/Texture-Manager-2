@@ -5201,6 +5201,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-updater",
  "tokio",
+ "webpki-root-certs",
  "winreg 0.56.0",
  "zip 8.6.0",
 ]

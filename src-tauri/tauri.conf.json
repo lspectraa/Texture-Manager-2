@@ -3,6 +3,7 @@
   "productName": "Texture Manager 2",
   "version": "0.4.1",
   "identifier": "com.spectra.texturemanager2",
+  "mainBinaryName": "texture-manager-2",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",

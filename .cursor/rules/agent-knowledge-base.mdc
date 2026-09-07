@@ -1,31 +1,13 @@
 ---
-description: Load the Texture Manager 2 agent knowledge base (docs/playbook, app map) after plan approval. No PRs; verify via docs/app/verify.md.
+description: Reference for Texture Manager 2 agent knowledge base under docs/. Consult on-demand only.
 alwaysApply: true
 ---
 
 # Agent knowledge base
 
-This repo’s agent vault lives at `docs/`.
+The living vault is under `docs/`. Follow `AGENTS.md` as the primary repository guide.
 
-## After the IDE plan is approved
-
-1. Read `docs/playbook.md`, then keep `docs/processes/definition-of-done.md` open until the end.
-2. For product shape, skim `docs/app/purpose-and-flows.md` and `docs/app/layout.md`. Touching a tool panel → also `docs/app/tools.md` and `docs/app/invoke-surface.md`. Internals → `docs/app/systems/overview.md`.
-3. Commands / env / release → `docs/app/run-test-lint.md`, `docs/app/config-env.md`, `docs/app/publish.md`.
-4. Verify runtime work per `docs/app/verify.md` (not code-reading alone).
-5. End of major changes only → `docs/processes/pre-review-qa.md` (do not run review audits on minor/routine tasks).
-6. After meaningful feature work (or when the human asks) → load skill `compounding-knowledge` (source: `docs/skills/compounding-knowledge/SKILL.md`). Do not treat every agent stop as a vault-update trigger.
-
-Load other vault skills from `docs/skills/*/SKILL.md` when the task matches (also mirrored under `.cursor/skills/` for discovery). Follow Obsidian `[[wikilinks]]` only when you need that file.
-
-## Hard limits
-
-- Do not open, merge, or approve pull requests.
-- Do not invent passing tests that skip the real path.
-- Do not put secrets in files or chat.
-- Stop all servers, background processes, and application runs started by the agent before being done.
-- Prefer editing an existing vault note over creating a duplicate.
-- ADRs under `docs/adrs/` are optional background — do not block on them unless the human asks.
-- Reviews are only done at the end of major changes; do not run review checklists on minor tasks.
-- Git checks are only done when needing to review earlier versions, not by default.
-- Do not say done while Definition of Done still has unchecked items you can satisfy.
+- **On-Demand Consultation Only**: Do NOT perform pre-flight reading loops (do not read `playbook.md`, `definition-of-done.md`, or app maps by default). For targeted tasks, proceed directly to the relevant code or config files.
+- **Hard Limits**: No PR operations (opening/merging/approving). No fake tests. No secrets. Stop all dev servers and background processes before finishing.
+- **No Routine Reviews / Git Checks**: Pre-Review QA audits are reserved strictly for the end of major changes or explicit user requests. Do not run git checks (`git status`, `git diff`) by default.
+- **No Output Boilerplate**: Answer concisely without generating unrequested markdown review tables or checklists.

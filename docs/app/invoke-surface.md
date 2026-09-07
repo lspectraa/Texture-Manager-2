@@ -1,30 +1,30 @@
 # Invoke surface
 
-Frontend wrappers: `src/services/`. Commands: `src-tauri/src/lib.rs`. Systems: [[overview]].
+Frontend wrappers: `src/services/`. Commands: `src-tauri/src/lib.rs`. Architecture: [[architecture]].
 
 ## Batch path
 
-`tauriOperations.ts` → `get_phase_defaults` / `run_operation` / `cancel_operation` → [[batch-pipeline]].
+`tauriOperations.ts` → `get_phase_defaults` / `run_operation` / `cancel_operation` (see [[architecture]] section 3).
 
 Used by: Splitter, Merger, Porter (`porterSplitter`), Randomizer, Convert, Upscaler, Glow Maker (run), Geode Buttons (run).
 
 ## Dedicated paths
 
-| Service | Role | Deep dive |
+| Service | Role | Architecture Reference |
 | --- | --- | --- |
-| `tauriSettings.ts` | Settings, GD dir, backgrounds, sprite index, `open_path_in_os` | [[game-files-and-settings]] |
-| `tauriPackInstaller.ts` | Discover/install, library, applied order, pack ops | [[pack-installer]] |
-| `tauriIconEditor.ts` | Icon sheet edit | [[editors]] |
-| `tauriIconGlow.ts` / `tauriGlowMaker.ts` | Glow previews | [[editors]] |
-| `tauriGeodeButtons.ts` | Template index/preview + `get_game_files_layout` | [[editors]], [[geode-texture-loader]] |
-| `tauriParticleEditor.ts` | Particle open/save/texture/preview | [[editors]] |
-| `tauriPicker.ts` | Android SAF / desktop dialogs | [[mobile-android]] |
-| `tauriMobileFs.ts` | Import, allocate output, zip export | [[mobile-android]] |
-| `tauriAndroidStorage.ts` | All-files / Geode probe | [[mobile-android]] |
-| `tauriUpdater.ts` | Desktop plugin / Android APK | [[updater]] |
-| `appBackgroundImages.ts` | Background PNG data URLs | [[game-files-and-settings]] |
-| `iconEditorHistory.ts` / `particleEditorHistory.ts` | In-memory undo | [[editors]] |
-| `particleConfig.ts` | Legacy re-export — prefer `domain/particleConfig` | [[editors]] |
+| `tauriSettings.ts` | Settings, GD dir, backgrounds, sprite index, `open_path_in_os` | [[architecture]] |
+| `tauriPackInstaller.ts` | Discover/install, library, applied order, pack ops | [[architecture]] |
+| `tauriIconEditor.ts` | Icon sheet edit | [[architecture]] |
+| `tauriIconGlow.ts` / `tauriGlowMaker.ts` | Glow previews | [[architecture]] |
+| `tauriGeodeButtons.ts` | Template index/preview + `get_game_files_layout` | [[architecture]] |
+| `tauriParticleEditor.ts` | Particle open/save/texture/preview | [[architecture]] |
+| `tauriPicker.ts` | Android SAF / desktop dialogs | [[architecture]] |
+| `tauriMobileFs.ts` | Import, allocate output, zip export | [[architecture]] |
+| `tauriAndroidStorage.ts` | All-files / Geode probe | [[architecture]] |
+| `tauriUpdater.ts` | Desktop plugin / Android APK | [[architecture]] |
+| `appBackgroundImages.ts` | Background PNG data URLs | [[architecture]] |
+| `iconEditorHistory.ts` / `particleEditorHistory.ts` | In-memory undo | [[architecture]] |
+| `particleConfig.ts` | Legacy re-export — prefer `domain/particleConfig` | [[architecture]] |
 
 ## Domain contracts
 

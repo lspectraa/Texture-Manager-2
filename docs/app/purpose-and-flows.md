@@ -40,4 +40,4 @@ Screenshots: `docs/screenshots/01-home.png`, `02-icon-editor.png`, `03-glow-make
 
 ## How systems work
 
-Start at [[overview]] for architecture, then [[frontend-shell]], [[batch-pipeline]], [[pack-installer]], [[editors]], [[glow-maker]], [[upscaler]], [[mobile-android]], [[updater]], [[game-files-and-settings]], [[geode-texture-loader]].
+See the consolidated architecture and internal systems guide: [[architecture]].

@@ -5,4 +5,8 @@ description: Write an architecture decision record in the same change as the wor
 
 # Living ADRs
 
-Read and follow `docs/skills/living-adr/SKILL.md` — that file is the source of truth. In this repo, ADRs are optional unless the human asks.
+The question "why did we choose X?" should hit a file, not folklore.
+
+Write one when the human asks, or when two real options existed and they want it recorded. Use [[adr]] and create `docs/adrs/NNN-short-slug.md` with the next free number. Include the rejected option. Set status to accepted if the decision is already in the code.
+
+Do not write an ADR for a typo fix, do not block shipping on ADR polish, and do not leave Status as proposed after the code already shipped the choice.
