@@ -7,6 +7,7 @@ Nav IDs from `src/config/toolNavigation.ts`. Panels under `src/components/tools/
 | `iconEditor` | `IconEditorToolPanel.tsx` | Dedicated (`tauriIconEditor`, glow via `tauriIconGlow`) | [[architecture]] |
 | `glowMaker` | `GlowMakerToolPanel.tsx` | Preview dedicated; **Run** → `glowMaker` | [[architecture]] |
 | `geodeButtons` | `GeodeButtonsToolPanel.tsx` | Preview dedicated; **Run** → `geodeButtons` | [[architecture]] |
+| `menuRecolor` | `MenuRecolorToolPanel.tsx` | Grid preview in the panel; **Run** → `menuRecolor` | [[architecture]] |
 | `particleEditor` | `ParticleEditorToolPanel.tsx` | Dedicated (`tauriParticleEditor`) | [[architecture]] |
 | `splitter` | `SplitterToolPanel.tsx` | Batch `splitter` | [[architecture]] |
 | `merger` | `MergerToolPanel.tsx` | Batch `merger` | [[architecture]] |

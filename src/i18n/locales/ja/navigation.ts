@@ -75,6 +75,11 @@ const navigation = {
       shortLabel: "Geode ボタン",
       description: "Geode メニューボタンのゲームシートを作成",
     },
+    menuRecolor: {
+      label: "Menu Recolor",
+      shortLabel: "Recolor",
+      description: "Recolor menu sprites with hue bands.",
+    },
     particleEditor: {
       label: "パーティクルエディター",
       description: "パーティクルエフェクトを作って調整します。",

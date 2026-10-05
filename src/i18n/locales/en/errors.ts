@@ -26,6 +26,8 @@ const errors = {
       "Randomizer requires both input and output directories.",
     geodeButtonsPathsRequired:
       "Create Geode Buttons requires both input and output directories.",
+    menuRecolorPathsRequired:
+      "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "No operation request was built.",
   },
   operation: {

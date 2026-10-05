@@ -75,6 +75,11 @@ const navigation = {
       shortLabel: "Geode 버튼",
       description: "Geode 메뉴 버튼 게임시트를 만들기",
     },
+    menuRecolor: {
+      label: "Menu Recolor",
+      shortLabel: "Recolor",
+      description: "Recolor menu sprites with hue bands.",
+    },
     particleEditor: {
       label: "파티클 편집기",
       description: "파티클 효과를 만들고 다듬습니다.",

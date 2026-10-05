@@ -21,6 +21,7 @@ const errors = {
     convertVersionRequired: "转换到新版本需要指定此前的游戏版本。",
     randomizerPathsRequired: "随机器需要同时指定输入和输出目录。",
     geodeButtonsPathsRequired: "创建 Geode 按钮需要同时指定输入和输出目录。",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "没有构建任何操作请求。",
   },
   operation: {

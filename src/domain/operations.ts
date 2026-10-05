@@ -1,3 +1,5 @@
+import type { MenuRecolorOptions } from "./menuRecolor";
+
 export type OperationKind =
   | "splitter"
   | "porterSplitter"
@@ -6,7 +8,8 @@ export type OperationKind =
   | "randomizer"
   | "glowMaker"
   | "geodeButtons"
-  | "upscaler";
+  | "upscaler"
+  | "menuRecolor";
 
 export type UpscalerModel = "realesrganAnime" | "waifu2x";
 
@@ -124,7 +127,8 @@ export type OperationOptions =
       compositeLayers: boolean;
     }
   | ({ type: "geodeButtons" } & GeodeButtonsOptions)
-  | ({ type: "upscaler" } & UpscalerOptions);
+  | ({ type: "upscaler" } & UpscalerOptions)
+  | ({ type: "menuRecolor" } & MenuRecolorOptions);
 
 export interface OperationRequest {
   kind: OperationKind;

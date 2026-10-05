@@ -34,6 +34,7 @@ const errors: AppLocaleResources["errors"] = {
       "Для рандомизации необходимо указать входную и выходную папки.",
     geodeButtonsPathsRequired:
       "Для создания кнопок Geode необходимо указать входную и выходную папки.",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Запрос на выполнение операции не был создан.",
   },
   operation: {

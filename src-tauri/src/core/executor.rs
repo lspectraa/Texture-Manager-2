@@ -10,8 +10,8 @@ use image::imageops::{self, FilterType};
 use rayon::prelude::*;
 
 use crate::core::contracts::{
-    phase_defaults, GeodeButtonsOptions, MergerOptions, OperationKind, OperationOptions,
-    OperationPlan, PorterOptions, SplitterOptions,
+    phase_defaults, GeodeButtonsOptions, MenuRecolorOptions, MergerOptions, OperationKind,
+    OperationOptions, OperationPlan, PorterOptions, SplitterOptions,
 };
 use crate::core::convert_to_new_version::{
     execute_convert_to_new_version as run_convert_to_new_version, sheet_is_under_icons,
@@ -26,6 +26,7 @@ use crate::core::game_files::{
 use crate::core::geode_buttons::run_geode_buttons;
 use crate::core::glow_maker::execute_glow_maker as run_glow_maker;
 use crate::core::image_alpha::clear_orthogonally_isolated_pixels;
+use crate::core::menu_recolor::run_menu_recolor_shared;
 use crate::core::merger::{direct_plist_files, merge_one_plist_file, merge_plist_from_memory};
 use crate::core::plist::count_frames_in_plist;
 use crate::core::porter::{
@@ -315,14 +316,39 @@ where
             &on_progress,
             cancel,
         )?,
+        (OperationKind::MenuRecolor, OperationOptions::MenuRecolor(options)) => {
+            execute_menu_recolor(input_dir, output_dir, started_at, options, &on_progress, cancel)?
+        }
         _ => {
             return Err(AppError::InvalidOperation(
-                "executor currently supports splitter, porter, merger, convert to new version, glow maker, randomizer, geode buttons, and upscaler",
+                "executor currently supports splitter, porter, merger, convert to new version, glow maker, randomizer, geode buttons, upscaler, and menu recolor",
             ));
         }
     };
 
     Ok(report)
+}
+
+fn execute_menu_recolor<F>(
+    input_dir: &Path,
+    output_dir: &Path,
+    started_at: Instant,
+    options: &MenuRecolorOptions,
+    on_progress: &Arc<Mutex<F>>,
+    cancel: Arc<AtomicBool>,
+) -> Result<OperationReport, AppError>
+where
+    F: FnMut(OperationProgress) + Send + 'static,
+{
+    check_cancel(cancel.as_ref())?;
+    run_menu_recolor_shared(
+        input_dir,
+        output_dir,
+        options,
+        started_at,
+        on_progress,
+        cancel,
+    )
 }
 
 fn execute_geode_buttons<F>(

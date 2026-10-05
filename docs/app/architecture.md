@@ -125,6 +125,7 @@ flowchart LR
 | `randomizer` | `randomizer` | Seeded icon sheet shuffle | `Randomized/` |
 | `glowMaker` | `glowMaker` | Batch generates missing `_glow_*` frames | `GeneratedGlow/` |
 | `geodeButtons` | `geodeButtons` | Recolor Geode button sprite families with HSV adjustments | Tool output dir |
+| `menuRecolor` | `menuRecolor` | Hue-band recolor of discovered menu sprites, with per-sprite overrides | Tool output dir |
 | `upscaler` | `upscaler` | AI upscale pipeline with sidecars (desktop only) | `Upscaled/` |
 
 - **Concurrency**: Upscaler concurrency is strictly clamped to `1`. Other operations clamp sheet concurrency between 1 and 64 (default `5` from settings).
@@ -145,6 +146,22 @@ flowchart LR
 ### Geode Buttons (Hybrid)
 - **Files**: `src/components/tools/GeodeButtonsToolPanel.tsx`, `src/services/tauriGeodeButtons.ts`, `src-tauri/src/core/geode_buttons.rs`.
 - Resolves BlankSheet templates from GD `Resources` or Android Geode media. Generates HSV family variations. On Android, prefers Geode media over split-cache.
+- Whole-sprite HSV lives in `src-tauri/src/core/color.rs` (`apply_hsv_delta`). Geode Buttons behavior is unchanged.
+
+### Menu Recolor
+- **Files**: `src/components/tools/MenuRecolorToolPanel.tsx`, `src/services/tauriMenuRecolor.ts`, `src-tauri/src/core/menu_recolor.rs`, `src-tauri/src/core/color.rs`.
+- Discovers plist frames and loose PNGs, tags them (`icons`, `faces`, `geode`, `font`, `sheet:<stem>`), and applies a rule set plus per-sprite overrides.
+- Color is a weighted HSV band mixer (Neutral and Gold locks on by default). Value uses `apply_value_delta_rgb`. `points` stays empty.
+- Writes split PNGs that are in the apply set and differ from the source. The grid previews with the same mixer in `src/domain/menuRecolorColor.ts`.
+
+```mermaid
+flowchart LR
+  Input[input dir] --> Discover[menu_recolor discover]
+  Discover --> Tags[tag and rule set]
+  Tags --> Recipe[ColorRecipe plus overrides]
+  Recipe --> Apply[apply_color_recipe]
+  Apply --> Write[changed PNGs]
+```
 
 ---
 

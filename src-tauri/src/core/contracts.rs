@@ -1,4 +1,8 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
+
+use crate::core::color::ColorRecipe;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -11,6 +15,7 @@ pub enum OperationKind {
     GlowMaker,
     GeodeButtons,
     Upscaler,
+    MenuRecolor,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -215,6 +220,42 @@ pub enum OperationOptions {
     GlowMaker(GlowMakerOptions),
     GeodeButtons(GeodeButtonsOptions),
     Upscaler(UpscalerOptions),
+    MenuRecolor(MenuRecolorOptions),
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub enum MenuRecolorRuleSet {
+    #[default]
+    MenuChrome,
+    ExceptIcons,
+    FacesOnly,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "mode", rename_all = "camelCase")]
+pub enum SpriteOverride {
+    Inherit,
+    Off,
+    Strength { amount: f32 },
+    Custom { recipe: ColorRecipe },
+}
+
+impl Default for SpriteOverride {
+    fn default() -> Self {
+        Self::Inherit
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MenuRecolorOptions {
+    pub rule_set: MenuRecolorRuleSet,
+    pub recipe: ColorRecipe,
+    #[serde(default)]
+    pub overrides: BTreeMap<String, SpriteOverride>,
+    #[serde(default)]
+    pub includes: BTreeMap<String, bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

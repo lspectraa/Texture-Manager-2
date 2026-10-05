@@ -35,6 +35,7 @@ const errors: AppLocaleResources["errors"] = {
       "El Aleatorizador requiere los directorios de entrada y salida.",
     geodeButtonsPathsRequired:
       "Crear botones de Geode requiere los directorios de entrada y salida.",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "No se creó ninguna solicitud de operación.",
   },
   operation: {

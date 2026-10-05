@@ -18,6 +18,10 @@ use crate::core::geode_buttons::{
     resolve_geode_buttons_default_input_dir, resolve_geode_buttons_default_sheet,
     resolve_geode_buttons_plist, GeodeButtonsTargetGroup,
 };
+use crate::core::menu_recolor::{
+    discover_menu_sprites, menu_recolor_thumbs, read_recipe_file_str, write_recipe_file_str,
+    DiscoveredSprite, MenuRecolorRecipeFile, MenuRecolorThumb,
+};
 use crate::core::glow_preview::{
     generate_icon_glow_data_url, glow_maker_preview_data_url, random_uhd_icon_preview_data_url,
 };
@@ -931,6 +935,42 @@ fn geode_buttons_default_input_dir_cmd(game_files: tauri::State<'_, GameFilesSta
 }
 
 #[tauri::command]
+async fn menu_recolor_discover_cmd(input_dir: String) -> Result<Vec<DiscoveredSprite>, String> {
+    run_blocking(move || {
+        let path = crate::core::safe_fs::parse_user_absolute_path(&input_dir)
+            .map_err(|err| err.to_string())?;
+        discover_menu_sprites(&path).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn menu_recolor_thumbs_cmd(
+    input_dir: String,
+    sprite_ids: Vec<String>,
+) -> Result<Vec<MenuRecolorThumb>, String> {
+    run_blocking(move || {
+        let path = crate::core::safe_fs::parse_user_absolute_path(&input_dir)
+            .map_err(|err| err.to_string())?;
+        menu_recolor_thumbs(&path, &sprite_ids).map_err(|err| err.to_string())
+    })
+    .await
+}
+
+#[tauri::command]
+async fn menu_recolor_read_recipe_cmd(path: String) -> Result<MenuRecolorRecipeFile, String> {
+    run_blocking(move || read_recipe_file_str(&path).map_err(|err| err.to_string())).await
+}
+
+#[tauri::command]
+async fn menu_recolor_write_recipe_cmd(
+    path: String,
+    recipe: MenuRecolorRecipeFile,
+) -> Result<(), String> {
+    run_blocking(move || write_recipe_file_str(&path, recipe).map_err(|err| err.to_string())).await
+}
+
+#[tauri::command]
 async fn geode_buttons_template_preview_data_url_cmd(path: String) -> Result<String, String> {
     run_blocking(move || {
         geode_buttons_template_preview_data_url(path.as_str()).map_err(|err| err.to_string())
@@ -1085,6 +1125,10 @@ pub fn run() {
             geode_buttons_autoselect_plist_cmd,
             geode_buttons_default_input_dir_cmd,
             geode_buttons_template_preview_data_url_cmd,
+            menu_recolor_discover_cmd,
+            menu_recolor_thumbs_cmd,
+            menu_recolor_read_recipe_cmd,
+            menu_recolor_write_recipe_cmd,
             generate_icon_glow_cmd,
             glow_maker_preview_cmd,
             particle_editor_preview_icon_cmd,

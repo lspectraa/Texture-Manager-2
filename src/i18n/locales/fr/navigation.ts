@@ -75,6 +75,11 @@ const navigation = {
       shortLabel: "Boutons Geode",
       description: "Créer le gamesheet des boutons de menu Geode",
     },
+    menuRecolor: {
+      label: "Menu Recolor",
+      shortLabel: "Recolor",
+      description: "Recolor menu sprites with hue bands.",
+    },
     particleEditor: {
       label: "Éditeur de particules",
       description: "Créez et ajustez des effets de particules.",

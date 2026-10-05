@@ -114,6 +114,11 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Nút Geode",
       description: "Tạo gamesheet nút menu Geode",
     },
+    menuRecolor: {
+      label: "Menu Recolor",
+      shortLabel: "Recolor",
+      description: "Recolor menu sprites with hue bands.",
+    },
     particleEditor: {
       label: "Chỉnh sửa hạt",
       description: "Tạo và tinh chỉnh hiệu ứng hạt.",

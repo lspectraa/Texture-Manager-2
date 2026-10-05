@@ -23,6 +23,7 @@ const errors = {
     randomizerPathsRequired: "O Randomizador exige os diretórios de entrada e de saída.",
     geodeButtonsPathsRequired:
       "Criar botões Geode exige os diretórios de entrada e de saída.",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Nenhuma solicitação de operação foi construída.",
   },
   operation: {

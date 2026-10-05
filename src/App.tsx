@@ -29,6 +29,10 @@ import type {
   UpscalerTargetGraphics,
 } from "./domain/operations";
 import {
+  defaultMenuRecolorOptions,
+  type MenuRecolorOptions,
+} from "./domain/menuRecolor";
+import {
   DEFAULT_PACK_INSTALLER_BRIDGE,
   type PackInstallerBridge,
 } from "./domain/packInstaller";
@@ -47,6 +51,7 @@ import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVer
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
 import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
+import { MenuRecolorToolPanel } from "./components/tools/MenuRecolorToolPanel";
 import { ParticleEditorToolPanel } from "./components/tools/ParticleEditorToolPanel";
 import { SettingsToolPanel } from "./components/tools/SettingsToolPanel";
 import {
@@ -138,6 +143,7 @@ type PrimaryTool =
   | "convertToNewVersion"
   | "glowMaker"
   | "geodeButtons"
+  | "menuRecolor"
   | "texturePackInstaller"
   | "particleEditor"
   | "upscaler";
@@ -384,6 +390,11 @@ function App() {
 
   const [geodeButtonsInputDir, setGeodeButtonsInputDir] = useState("");
   const [geodeButtonsOutputDir, setGeodeButtonsOutputDir] = useState("");
+  const [menuRecolorInputDir, setMenuRecolorInputDir] = useState("");
+  const [menuRecolorOutputDir, setMenuRecolorOutputDir] = useState("");
+  const [menuRecolorOptions, setMenuRecolorOptions] = useState<MenuRecolorOptions>(
+    defaultMenuRecolorOptions,
+  );
   const [geodeButtonsOptions, setGeodeButtonsOptions] = useState<GeodeButtonsOptions>(() => ({
     sheetStem: "BlankSheet-uhd",
     templates: {
@@ -893,6 +904,22 @@ function App() {
         options: {
           type: "geodeButtons",
           ...geodeButtonsOptions,
+        },
+      };
+    }
+
+    if (selectedTool === "menuRecolor") {
+      if (!menuRecolorInputDir.trim() || !menuRecolorOutputDir.trim()) {
+        setRunError(t("errors:validation.menuRecolorPathsRequired"));
+        return;
+      }
+      request = {
+        kind: "menuRecolor",
+        inputDir: menuRecolorInputDir,
+        outputDir: menuRecolorOutputDir,
+        options: {
+          type: "menuRecolor",
+          ...menuRecolorOptions,
         },
       };
     }
@@ -1516,6 +1543,18 @@ function App() {
             pickFolder={pickFolder}
             geometryDashFound={appSettings.geometryDashFound}
             onAppSettingsUpdated={applySettingsView}
+          />
+        );
+      case "menuRecolor":
+        return (
+          <MenuRecolorToolPanel
+            inputDir={menuRecolorInputDir}
+            outputDir={menuRecolorOutputDir}
+            options={menuRecolorOptions}
+            onInputDirChange={setMenuRecolorInputDir}
+            onOutputDirChange={setMenuRecolorOutputDir}
+            onOptionsChange={setMenuRecolorOptions}
+            pickFolder={pickFolder}
           />
         );
       case "particleEditor":
