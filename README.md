@@ -78,7 +78,7 @@ Open beta started at **v0.1.0** (Windows, with a first macOS build). The app now
 | Platform | Package | Notes |
 | --- | --- | --- |
 | **Windows** x64 | `.msi` | Primary desktop install |
-| **macOS** Apple Silicon / Intel | `.dmg` | Separate builds per architecture |
+| **macOS** Apple Silicon / Intel | `.dmg` | Separate builds per architecture. Ad-hoc signed, not notarized — see [macOS install](#macos-install) |
 | **Android** | `.apk` (arm64) | Sideload from Releases; mobile shell. Tagged CI publishes require Play/release signing secrets. |
 
 ### Requirements
@@ -99,6 +99,15 @@ Open beta started at **v0.1.0** (Windows, with a first macOS build). The app now
    - Confirm or browse to your Geometry Dash folder (desktop) or Geode media folder (Android)
 
 After that, use **Home** (or the mobile dock) to open a tool, set input/output folders, and run the operation.
+
+### macOS install
+
+Release DMGs are **ad-hoc signed** (`codesign -s -`) and are **not notarized**. Apple Silicon requires a signature on the app bundle; without one, macOS reports the app as damaged. Ad-hoc signing usually replaces that with the normal unidentified-developer prompt:
+
+1. Open the DMG and drag **Texture Manager 2** to **Applications**.
+2. Right-click the app and choose **Open**, or go to **System Settings → Privacy & Security → Open Anyway**.
+
+macOS: If the app says it's damaged or won't open after installing from the DMG, Gatekeeper is blocking the download because the build isn't notarized. Open Terminal and run `xattr -cr "/Applications/Texture Manager 2.app"`, then open Texture Manager 2 again.
 
 ### Updates
 
