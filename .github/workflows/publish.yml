@@ -87,30 +87,42 @@ jobs:
           args: ${{ matrix.args }}
 
       # macOS runners ship bash 3.2. Windows skips this step.
+      # Tauri removes the loose macos/*.app after DMG creation, so verify the
+      # .app inside each DMG (and any loose .app that is still present).
       - name: Verify macOS code signature
         if: matrix.platform == 'macos-latest'
         shell: bash
         run: |
           set -euo pipefail
+
           verify_app() {
-            echo "Verifying ${1}"
-            codesign --verify --deep --strict --verbose=2 "$1"
-            codesign -dv --verbose=2 "$1"
+            local app="$1"
+            local details
+            echo "Verifying ${app}"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            # codesign -dv writes details to stderr
+            details="$(codesign -dv --verbose=2 "$app" 2>&1)"
+            printf '%s\n' "$details"
+            if ! printf '%s\n' "$details" | grep -q '^Signature='; then
+              echo "codesign -dv did not report Signature= for ${app}"
+              return 1
+            fi
+            printf '%s\n' "$details" | grep '^Signature='
           }
-          app_count=0
+
+          # Loose .app is optional: tauri cleans it after DMG creation.
           while IFS= read -r -d '' app; do
-            app_count=$((app_count + 1))
             verify_app "$app"
-          done < <(find src-tauri/target -type d -path '*/release/bundle/macos/*.app' -print0)
-          if [ "$app_count" -eq 0 ]; then
-            echo "No .app bundle found under src-tauri/target"
-            find src-tauri/target -type d -name '*.app' -print || true
-            exit 1
-          fi
+          done < <(find src-tauri/target -type d -name '*.app' -path '*bundle/macos*' -print0)
+
           dmg_count=0
           while IFS= read -r -d '' dmg; do
             dmg_count=$((dmg_count + 1))
             mount="$(mktemp -d)"
+            # Capture mount path into the trap so EXIT always detaches, even on set -e failure.
+            # shellcheck disable=SC2064
+            trap 'hdiutil detach "'"$mount"'" >/dev/null 2>&1 || true; rmdir "'"$mount"'" 2>/dev/null || true' EXIT
+            echo "Attaching ${dmg} at ${mount}"
             hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
             found=0
             for app in "$mount"/*.app; do
@@ -118,19 +130,17 @@ jobs:
                 continue
               fi
               found=1
-              if ! verify_app "$app"; then
-                hdiutil detach "$mount" || true
-                exit 1
-              fi
+              verify_app "$app"
             done
             if [ "$found" -eq 0 ]; then
               echo "DMG contains no .app: ${dmg}"
-              hdiutil detach "$mount" || true
               exit 1
             fi
             hdiutil detach "$mount"
             rmdir "$mount" || true
-          done < <(find src-tauri/target -type f -path '*/release/bundle/dmg/*.dmg' -print0)
+            trap - EXIT
+          done < <(find src-tauri/target -type f -name '*.dmg' -path '*bundle/dmg*' -print0)
+
           if [ "$dmg_count" -eq 0 ]; then
             echo "No DMG found under src-tauri/target"
             find src-tauri/target -type f -name '*.dmg' -print || true
