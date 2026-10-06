@@ -2,13 +2,6 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
-### 2026-10-06 — Verify the macOS DMG before uploading the draft release
-
-- Context: `publish.yml` macOS matrix rows and `tauri-apps/tauri-action@v0` (0.6.2, commit `84b9d35`)
-- Mistake or surprise: that action uploads the DMG, the updater `.app.tar.gz` and `.sig`, and `latest.json` during the build step. A later `codesign --verify` failure leaves the bad DMG on the draft. v0 has no upload-only input; `includeUpdaterJson` runs only after a build when `tagName` or `releaseId` is set. Omitting `tagName`, `releaseName`, and `releaseId` is the documented build-without-upload path.
-- What to do next time: on macOS, build with that omission, run the existing DMG `codesign` gate, then invoke the action again with `tauriScript` set to `.github/scripts/skip-tauri-rebuild.sh`, `includeUpdaterJson: false`, and the same release inputs as Windows. The upload step's `if` must include `success()`, or a failed verify still uploads. Merge `latest.json` only after `windows-x86_64` is already in the file, and retry if the other macOS arch replaces it. The action's own merge is not locked. Windows stays one build-and-upload step.
-- Files involved: `.github/workflows/publish.yml`, `.github/scripts/skip-tauri-rebuild.sh`, `.github/scripts/merge-macos-latest-json.mjs`, `docs/app/publish.md`
-
 ### 2026-10-05 — Unsigned macOS bundles show as damaged on Apple Silicon
 
 - Context: GitHub release DMGs built by `publish.yml` with no Apple signing identity
