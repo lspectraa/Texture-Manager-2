@@ -56,7 +56,10 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
 
+      # Windows: build and upload in one step, same as before.
+      # success() is required because a custom `if` replaces the default.
       - name: Build installer and draft GitHub release
+        if: success() && matrix.platform != 'macos-latest'
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -84,6 +87,18 @@ jobs:
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: false
+          args: ${{ matrix.args }}
+
+      # macOS: v0 uploads whenever tagName or releaseId is set. Omit both
+      # (and releaseName) so this invocation only builds. APPLE_SIGNING_IDENTITY
+      # and TAURI_SIGNING_PRIVATE_KEY are already in the environment.
+      - name: Build macOS installer
+        if: success() && matrix.platform == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
           args: ${{ matrix.args }}
 
       # macOS runners ship bash 3.2. Windows skips this step.
@@ -146,6 +161,57 @@ jobs:
             find src-tauri/target -type f -name '*.dmg' -print || true
             exit 1
           fi
+
+      # Upload only after codesign succeeded. success() is required: an `if`
+      # that only checks the matrix replaces GitHub's default success() check,
+      # and a failed verify would still upload.
+      # tauriScript skips the rebuild. v0 then finds the existing DMG,
+      # .app.tar.gz, and .sig, creates or reuses the draft, and merges
+      # latest.json the same way the Windows step does (download platforms,
+      # set this target's darwin-<arch> and darwin-<arch>-app, replace the asset).
+      - name: Upload verified macOS release
+        if: success() && matrix.platform == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        with:
+          tauriScript: bash .github/scripts/skip-tauri-rebuild.sh
+          tagName: v__VERSION__
+          releaseName: "Texture Manager 2 v__VERSION__"
+          releaseBody: |
+            Texture Manager 2 builds — Windows MSI, macOS DMG (Apple Silicon + Intel), and Android APK (arm64).
+
+            ### 📥 Which file should I download?
+            - **Windows:** Download the `.msi` installer (e.g. `Texture-Manager-2_..._x64_en-US.msi`).
+            - **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
+            - **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
+            - **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+            ### macOS
+            These DMGs are ad-hoc signed and are not notarized. After copying the app to Applications, macOS usually shows an unidentified-developer warning: right-click **Texture Manager 2** and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**.
+
+            macOS: If the app says it's damaged or won't open after installing from the DMG, Gatekeeper is blocking the download because the build isn't notarized. Open Terminal and run `xattr -cr "/Applications/Texture Manager 2.app"`, then open Texture Manager 2 again.
+          releaseDraft: true
+          prerelease: false
+          # Assets only. latest.json is merged in the next step so this job
+          # does not replace the file before Windows has written its platforms.
+          includeUpdaterJson: false
+          updaterJsonPreferNsis: false
+          args: ${{ matrix.args }}
+
+      # v0's uploadVersionJSON copies platforms from the current latest.json
+      # and sets darwin-<arch> plus darwin-<arch>-app from the .app.tar.gz.sig.
+      # That read-modify-write is not locked, and a sibling matrix job can
+      # replace the file. This step waits until windows-x86_64 is present
+      # (Windows uploads latest.json in its build step), then merges this
+      # target's keys and retries if the other macOS job wins the race.
+      - name: Merge verified macOS updater into latest.json
+        if: success() && matrix.platform == 'macos-latest'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_ARGS: ${{ matrix.args }}
+        run: node .github/scripts/merge-macos-latest-json.mjs
 
   publish-android:
     runs-on: ubuntu-latest

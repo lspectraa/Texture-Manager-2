@@ -2,12 +2,21 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-10-06 — Verify the macOS DMG before uploading the draft release
+
+- Context: `publish.yml` macOS matrix rows and `tauri-apps/tauri-action@v0` (0.6.2, commit `84b9d35`)
+- Mistake or surprise: that action uploads the DMG, the updater `.app.tar.gz` and `.sig`, and `latest.json` during the build step. A later `codesign --verify` failure leaves the bad DMG on the draft. v0 has no upload-only input; `includeUpdaterJson` runs only after a build when `tagName` or `releaseId` is set. Omitting `tagName`, `releaseName`, and `releaseId` is the documented build-without-upload path.
+- What to do next time: on macOS, build with that omission, run the existing DMG `codesign` gate, then invoke the action again with `tauriScript` set to `.github/scripts/skip-tauri-rebuild.sh`, `includeUpdaterJson: false`, and the same release inputs as Windows. The upload step's `if` must include `success()`, or a failed verify still uploads. Merge `latest.json` only after `windows-x86_64` is already in the file, and retry if the other macOS arch replaces it. The action's own merge is not locked. Windows stays one build-and-upload step.
+- Files involved: `.github/workflows/publish.yml`, `.github/scripts/skip-tauri-rebuild.sh`, `.github/scripts/merge-macos-latest-json.mjs`, `docs/app/publish.md`
+
 ### 2026-10-05 — Unsigned macOS bundles show as damaged on Apple Silicon
 
 - Context: GitHub release DMGs built by `publish.yml` with no Apple signing identity
 - Mistake or surprise: Tauri 2 skips `.app` signing when neither `bundle.macOS.signingIdentity` nor `APPLE_SIGNING_IDENTITY` is set. The binary stays linker-signed only, with no sealed `CodeResources`. Quarantined Apple Silicon installs then fail with "damaged" until `xattr -cr`.
 - What to do next time: keep `signingIdentity` set to `-` for ad-hoc signing, and keep the macOS `codesign --verify --deep --strict` step. Ad-hoc is not notarization; document the unidentified-developer prompt and the `xattr` fallback. Do not treat updater `TAURI_SIGNING_PRIVATE_KEY` as macOS code signing.
 - Files involved: `src-tauri/tauri.conf.json`, `.github/workflows/publish.yml`, `README.md`, `docs/app/publish.md`
+
+### 2026-09-06 — Declare vendor-prefixed CSS before standard properties to avoid minifier stripping
 
 - Context: frosted glass styling and backdrop-filter in Tauri / WebView2
 - Mistake or surprise: declaring `backdrop-filter` followed by `-webkit-backdrop-filter` worked in dev mode, but LightningCSS (used by Vite in production builds) treated `-webkit-backdrop-filter` as overriding the preceding `backdrop-filter` and dropped the standard property. Because Chromium / WebView2 does not support `-webkit-backdrop-filter` (only standard `backdrop-filter`), all frost blur effects disappeared in the compiled application.
