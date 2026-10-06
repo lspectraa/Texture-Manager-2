@@ -9,6 +9,8 @@ Newest entry at the top. Written after a session via [[compounding-knowledge]].
 - What to do next time: keep `signingIdentity` set to `-` for ad-hoc signing, and keep the macOS `codesign --verify --deep --strict` step. Ad-hoc is not notarization; document the unidentified-developer prompt and the `xattr` fallback. Do not treat updater `TAURI_SIGNING_PRIVATE_KEY` as macOS code signing.
 - Files involved: `src-tauri/tauri.conf.json`, `.github/workflows/publish.yml`, `README.md`, `docs/app/publish.md`
 
+### 2026-09-06 — Declare vendor-prefixed CSS before standard properties to avoid minifier stripping
+
 - Context: frosted glass styling and backdrop-filter in Tauri / WebView2
 - Mistake or surprise: declaring `backdrop-filter` followed by `-webkit-backdrop-filter` worked in dev mode, but LightningCSS (used by Vite in production builds) treated `-webkit-backdrop-filter` as overriding the preceding `backdrop-filter` and dropped the standard property. Because Chromium / WebView2 does not support `-webkit-backdrop-filter` (only standard `backdrop-filter`), all frost blur effects disappeared in the compiled application.
 - What to do next time: always follow the CSS vendor prefix convention by declaring `-webkit-backdrop-filter` first and standard `backdrop-filter` second; ensure unit tests verify declaration ordering so minification preserves standard properties.
