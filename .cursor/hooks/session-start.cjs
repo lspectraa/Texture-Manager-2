@@ -22,6 +22,7 @@ const payload = {
   env: {
     TM2_AGENT_VAULT: "docs",
     TM2_AGENT_PLAYBOOK: "docs/playbook.md",
+    TM2_AGENT_SKILLS: "skills",
   },
 };
 

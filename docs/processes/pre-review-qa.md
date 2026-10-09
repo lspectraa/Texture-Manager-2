@@ -1,33 +1,13 @@
 # Pre-review QA
 
-Last pass before the human opens a pull request on major changes. Do not run review audits on minor tasks or routine updates. You do not open the PR.
+Major changes only. Skip for small edits. No default git. Do not print this table on routine work. You do not open the PR.
 
-Git checks (e.g. `git status`, `git diff`, `git log`) are only done if there is a specific need to review earlier versions or history, and must not be done by default.
+Audit the change. One line per item: PASS, FAIL, or N/A. List files the human should read. Stop.
 
-Load [[definition-of-done]] and this note. Audit the changes. For each item report PASS, FAIL, or N/A with one line of reason. List the exact files the human should read. Stop.
-
-- [ ] Best practices for this language and framework in the touched files
-- [ ] No leftover debug logs, agent breadcrumbs, or commented-out experiments
-- [ ] No hardcoded secrets or environment URLs that belong in config
-- [ ] Tests exist for new behavior and were run
-- [ ] All servers, background processes, and application runs started by the agent have been stopped
-- [ ] Docs or diagrams updated if behavior changed
-- [ ] Diff is scoped to the stated task
-- [ ] Definition of Done is green, or gaps are listed for the human
-
-```
-QA
-- best practices — PASS|FAIL|N/A — reason
-- secrets / config — …
-- tests — …
-- servers / cleanup — PASS|FAIL|N/A — reason
-- docs — …
-- scope — …
-- DoD — …
-
-Files to review
-- path — why
-
-Blockers
-- none | …
-```
+- Best practices in touched files
+- No debug leftovers
+- No secrets in source
+- Tests for new behavior were run when they exist
+- Processes this session started have been stopped
+- Docs updated if contracts changed
+- Scope matches the task

@@ -1,9 +1,7 @@
 # Agent Knowledge Base
 
-After the IDE plan is approved, start with [[playbook]].
+`AGENTS.md` is the guide. This index is on-demand lookup — not a pre-flight list.
 
-For product shape, read [[purpose-and-flows]] then [[layout]] / [[tools]]. For how internals work, read [[architecture]].
+App systems: [[architecture]]. Product notes (open one when that surface is unfamiliar): [[purpose-and-flows]], [[layout]], [[tools]], [[invoke-surface]], [[config-env]], [[publish]]. Run/test: [[run-test-lint]]. Runtime check: [[verify]].
 
-Skills live under `.cursor/skills/<name>/SKILL.md`. Load one when the task matches its description — docs and diagrams, sub-agents, ADRs, or vault updates. Entry skill for this repo: `agent-knowledge-base`.
-
-Processes are [[definition-of-done]], [[pre-review-qa]], and [[sprint-security-audit]]. Pitfalls go in [[lessons-learned]]. App map also includes [[invoke-surface]], [[run-test-lint]], [[config-env]], [[publish]], [[verify]].
+Skills live in `skills/`. Processes: [[definition-of-done]], [[pre-review-qa]], [[sprint-security-audit]]. Pitfalls: [[lessons-learned]]. Rules: [[parallel-operations]], [[report-deleted-logic]], [[report-major-changes]], [[stop-what-you-start]].

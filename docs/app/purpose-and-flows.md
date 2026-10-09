@@ -23,12 +23,12 @@ Desktop-only (omitted on mobile shell): **Upscaler** (Vulkan sidecars), **Conver
 
 ## Core user flows
 
-1. **First run** — language, theme, (Android) All files access, Geometry Dash / Geode path. Mobile requires onboarding version 2; desktop version 1 ([[005-mobile-onboarding-version]]).
+1. **First run** — language, theme, (Android) All files access, Geometry Dash / Geode path. Mobile requires onboarding version 2; desktop version 1.
 2. **Home → tool** — desktop sidebar or mobile dock/grid; set folders; run.
 3. **Self-contained tools** — Icon Editor, Particle Editor, Pack Installer use dedicated Tauri invokes (not the shared operation rail). Geode Buttons is hybrid: panel owns preview/index; generation still uses shared Run → `run_operation`.
 4. **Batch operation** — App builds the request → `run_operation` → progress overlay → report rail (issues CSV; Android can zip-export output). Porter’s operation kind is `porterSplitter`, not `porter`.
 5. **Settings / About** — theme, language, concurrency, GD path, backgrounds, updates. Desktop About is a copyright dialog; mobile About is a tool page (both use `AboutContent`).
-6. **Updates** — desktop Tauri updater + `latest.json`; Android APK + `android-latest.json` ([[002-dual-updater-channels]]).
+6. **Updates** — desktop Tauri updater + `latest.json`; Android APK + `android-latest.json`.
 
 ## Platform notes
 
