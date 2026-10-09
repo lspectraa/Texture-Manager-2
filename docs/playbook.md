@@ -1,9 +1,11 @@
 # Playbook
 
-Read this on-demand only when tackling an unfamiliar subsystem. Do not invent a second plan mode.
+Read this only when a subsystem is unfamiliar. Do not invent a second plan mode.
 
-Do NOT perform mandatory pre-flight reading loops across the vault (do not pre-read playbook, definition-of-done, or app maps by default). For targeted tasks, proceed directly to the code or config files. Consult [[overview]] or specific app notes strictly just-in-time when context is missing.
+Do not pre-read playbook, DoD, or app maps by default. For targeted tasks, go straight to code. Consult [[architecture]] just-in-time when context is missing.
 
-Implement in small steps. Update docs only when behavior or contracts change ([[docs-and-mermaid]]). Split work with [[concurrent-subagents]] only when layers are independent. Console commands can also be made concurrent (e.g. running independent commands in parallel), including running concurrently with other operations (such as searches, file inspections/edits, or sub-agents), as long as they do not conflict over shared files or dependencies. Before the human opens a PR for major changes, run [[pre-review-qa]]; do not run reviews on minor tasks or routine updates. Git checks are only done if it needs to review earlier versions, and must not be done by default. Run [[compounding-knowledge]] only when the human asks or after meaningful feature work — not on every stop.
+Implement in small steps. Update docs only when behavior or contracts change ([[docs-and-mermaid]]). Split work with [[concurrent-subagents]] when layers are independent. Console commands may run with searches, edits, and sub-agents when they do not share a file.
 
-Do not open, merge, or approve pull requests. Do not invent passing tests that skip the real path. Do not put secrets in files or chat. Stop all servers, background processes, and application runs started during the session before claiming done. Reviews are only done at the end of major changes, and git checks are only run when earlier versions must be reviewed (not by default). Do not output ceremonial review tables or checklists on routine responses. Do not say done while Definition of Done still has unchecked items you can satisfy. Prefer editing an existing note over creating a duplicate. ADRs under `adrs/` are optional background — do not block on writing new ones unless the human asks.
+[[pre-review-qa]] only after a major change or when asked. No default git. [[compounding-knowledge]] only when asked or after meaningful feature work.
+
+No PRs. No fake tests. No secrets. Stop processes you started. Do not print ceremonial review tables on routine replies. Prefer editing an existing note. ADRs are optional unless asked; when you write one, comment the affected code. Deleted logic is reported as `## WARNING` plus a `---` rule.

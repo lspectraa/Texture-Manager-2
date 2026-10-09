@@ -1,4 +1,6 @@
-# ADR 004 — Waifu2x for gamesheets, Real-ESRGAN for icons
+# ADR 002 — Waifu2x for gamesheets, Real-ESRGAN for icons
+
+An earlier draft index called this ADR 004. The filename number is the id.
 
 - Status: accepted
 - Date: 2026-09-04
@@ -16,6 +18,14 @@ Gamesheets and icon sprites need different AI upscale characteristics; both run 
 ## Decision
 
 We chose option 2.
+
+## Code anchors
+
+Source comments are not in the tree yet. Sites that should carry `ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md`:
+
+- `src/domain/operations.ts` — `UpscalerModel`
+- `src-tauri/src/core/upscaler.rs` — icon vs gamesheet routing
+- `src-tauri/src/core/upscaler_sidecar.rs` — sidecar binary names
 
 ## Consequences
 

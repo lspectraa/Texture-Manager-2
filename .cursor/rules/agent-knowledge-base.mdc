@@ -1,13 +1,13 @@
 ---
-description: Reference for Texture Manager 2 agent knowledge base under docs/. Consult on-demand only.
+description: Texture Manager 2 agent knowledge base. Consult docs on demand only.
 alwaysApply: true
 ---
 
 # Agent knowledge base
 
-The living vault is under `docs/`. Follow `AGENTS.md` as the primary repository guide.
+Follow `AGENTS.md`. The vault is `docs/`. Skills are `skills/<name>/SKILL.md`.
 
-- **On-Demand Consultation Only**: Do NOT perform pre-flight reading loops (do not read `playbook.md`, `definition-of-done.md`, or app maps by default). For targeted tasks, proceed directly to the relevant code or config files.
-- **Hard Limits**: No PR operations (opening/merging/approving). No fake tests. No secrets. Stop all dev servers and background processes before finishing.
-- **No Routine Reviews / Git Checks**: Pre-Review QA audits are reserved strictly for the end of major changes or explicit user requests. Do not run git checks (`git status`, `git diff`) by default.
-- **No Output Boilerplate**: Answer concisely without generating unrequested markdown review tables or checklists.
+- Do not pre-read the vault. For targeted work, go straight to code. Open one note only when a subsystem is unfamiliar.
+- No PR open, merge, or approve. No fake tests. No secrets. Stop processes you started.
+- Reviews and DoD lists only after a major change or when asked. No default git.
+- An ADR needs a code comment pointing at `docs/adrs/NNN-slug.md`. Deleted application logic is reported as `## WARNING` plus a `---` rule (`docs/rules/report-deleted-logic.md`).

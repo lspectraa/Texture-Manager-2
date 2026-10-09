@@ -27,8 +27,8 @@ Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
 - Context: agent latency, token bloat, and file read loops caused by vault fragmentation and mandatory pre-flight checklists
 - Mistake or surprise: prompting agents to pre-read multiple vault files before starting work added 15k–25k tokens of context and 15–30s of turn latency on every task; redundant alwaysApply rules and duplicate skill trees compounded the problem
-- What to do next time: enforce strict just-in-time doc lookups; keep rules concise and non-redundant; scope browser/node rules to UI globs; consolidate micro-notes into unified architecture guides; maintain skills directly in `.cursor/skills/`
-- Files involved: `AGENTS.md`, `.cursor/rules/agent-knowledge-base.mdc`, `.cursor/rules/ironbee-devtools-use.mdc`, `.cursor/hooks/session-start.cjs`, `docs/app/architecture.md`, `.cursor/skills/`
+- What to do next time: enforce strict just-in-time doc lookups; keep rules concise and non-redundant; scope browser/node rules to UI globs; consolidate micro-notes into unified architecture guides; keep one skill tree at `skills/` (do not copy bodies under `.cursor/skills/`)
+- Files involved: `AGENTS.md`, `.cursor/rules/agent-knowledge-base.mdc`, `.cursor/rules/ironbee-devtools-use.mdc`, `.cursor/hooks/session-start.cjs`, `docs/app/architecture.md`, `skills/`
 
 ### 2026-09-06 — Reviews only on major changes; no git checks by default
 

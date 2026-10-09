@@ -1,6 +1,6 @@
 # Verify changes
 
-Do not claim UI or runtime work done from reading code alone. Prefer the running app.
+When UI or runtime behavior changed, check the running app. Do not finish from a code read alone. Verify once at the end of the change, not after every edit. Skip when the change has no runtime effect (docs, CI config).
 
 ## What to run
 
@@ -23,4 +23,4 @@ This project’s Cursor rules prefer **IronBee DevTools** (browser + node MCP) f
 
 ## Pass criteria
 
-Exercise the changed path (click/fill/run, not only open the screen). Check console/errors for unexpected failures. Match [[definition-of-done]]. Always shut down any dev servers, background processes, or app runs started during verification before claiming done.
+Exercise the changed path (click/fill/run, not only open the screen). Check console/errors for unexpected failures. On a major change, use [[definition-of-done]]. Stop anything this session started when finished ([[stop-what-you-start]]).
