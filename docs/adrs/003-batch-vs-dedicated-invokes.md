@@ -21,11 +21,10 @@ We chose option 2. Batch tools go through `tauriOperations` / `executor`. Intera
 
 ## Code anchors
 
-Source comments are not in the tree yet. Sites that should carry `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`:
-
-- `src/services/tauriOperations.ts` — `run_operation`
-- `src/App.tsx` — batch vs dedicated tool wiring
-- `src-tauri/src/lib.rs` — command registration
+- `src/services/tauriOperations.ts` (`runOperation`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
+- `src/App.tsx` (`executeSelectedOperation`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
+- `src/App.tsx` (`showOperationAndReport`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
+- `src-tauri/src/lib.rs` (`invoke_handler`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
 
 ## Consequences
 

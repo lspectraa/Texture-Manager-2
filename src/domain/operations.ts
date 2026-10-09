@@ -8,6 +8,7 @@ export type OperationKind =
   | "geodeButtons"
   | "upscaler";
 
+// ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md
 export type UpscalerModel = "realesrganAnime" | "waifu2x";
 
 /** Gamesheet default. Icons always use Real-ESRGAN AnimeVideo v3. */
