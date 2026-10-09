@@ -24,9 +24,9 @@ Rust unit tests: `cargo test` from `src-tauri/` (many `#[cfg(test)]` modules). N
 
 ## Concurrent execution
 
-Independent commands may run in the same turn as each other and as reads, searches, edits, or sub-agents, as long as they do not write the same file or share a mutating cwd. Examples: `npm test` with `cargo test` in `src-tauri/`; `npm run check:env` with `npm run build`.
+Independent commands may run in the same turn as each other and as reads, searches, edits, or sub-agents, as long as they do not write the same file or share a mutating cwd. Examples: `npm test` with `cargo test` in `src-tauri/`; `npm run check:env` with `npm run build`. Full rule: [[parallel-operations]].
 
-Stay serial when the next command needs the previous result (install before test, build before run). Do not overlap `npm install` with edits to `package.json`. See [[parallel-operations]].
+Stay serial when the next command needs the previous result (install before test, build before run). Do not overlap `npm install` with edits to `package.json`.
 
 ## Lint / format
 

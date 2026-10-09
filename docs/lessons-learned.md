@@ -2,6 +2,13 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-10-09 — Large features end with QA; parallel by default; hardcoded values warned
+
+- Context: agents finished large features without the pre-review checklist, walked independent work serially, and left inline copy and lookup maps unremarked
+- Mistake: "review when asked" let large work skip [[pre-review-qa]]; sub-agents stayed unused; hardcoded strings had no WARNING variant
+- What to do next time: run pre-review QA before reporting a large change done; launch sub-agents and parallel tool calls unless steps depend or share mutable state ([[parallel-operations]]); report new inline strings and mappings with the [[report-hardcoded-strings]] block
+- Files involved: `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/agent-knowledge-base.mdc`, `docs/processes/pre-review-qa.md`, `docs/rules/parallel-operations.md`, `docs/rules/report-hardcoded-strings.md`
+
 ### 2026-10-05 — Unsigned macOS bundles show as damaged on Apple Silicon
 
 - Context: GitHub release DMGs built by `publish.yml` with no Apple signing identity

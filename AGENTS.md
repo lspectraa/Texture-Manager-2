@@ -7,13 +7,14 @@ Primary guide for every agent in this repo. Skills load from `skills/<name>/SKIL
 1. No PR open, merge, or approve.
 2. No fake tests. No secrets in files or chat.
 3. Stop every server, watcher, or app this session started before finishing (`npm run dev`, `npm run tauri dev`, and anything else you started).
-4. Reviews only after a major change or when asked. Do not print QA or DoD tables on routine work.
+4. After a large change, run pre-review QA before reporting done (`docs/processes/pre-review-qa.md`). Do not wait to be asked. Also run it when asked. A large change adds a subsystem, public API, or schema, or implements a feature past a one- or two-file fix. Do not print the QA table on a small edit.
 5. No default git checks. Use `git status` / `diff` / `log` only when comparing to an earlier version.
 6. No pre-flight reading loops. For targeted work, go straight to code.
 7. Docs are just-in-time. Read one specific note only when a subsystem is unfamiliar.
-8. Independent tool calls run in parallel: searches, reads, edits, shell commands, and sub-agents, when files do not conflict.
+8. Default to parallel work. Independent reads, searches, edits, shell commands, and sub-agents run in the same turn. Launch sub-agents for independent workstreams instead of doing those streams serially inline. See `docs/rules/parallel-operations.md`.
 9. An ADR is incomplete until every affected site has a short comment pointing at `docs/adrs/NNN-slug.md`.
 10. If you delete application logic, report it before you finish as `## WARNING` plus a `---` rule. Do not silently remove branches, handlers, or helpers. See `docs/rules/report-deleted-logic.md`.
+11. If you add a hardcoded user-facing string, magic string or number, or an inline mapping, report it before you finish as `## WARNING` plus a `---` rule. See `docs/rules/report-hardcoded-strings.md`.
 
 ## Technology stack
 
@@ -43,11 +44,12 @@ Also: `npm run fetch:upscaler-binaries`, `npm run check:env`.
 4. Update docs only if contracts or behavior changed.
 5. Verify runtime or tests when the change needs it (`docs/app/verify.md`). Independent verify commands may run together.
 6. Clean up processes you started.
-7. Finish concisely. Major-change review only (`docs/processes/pre-review-qa.md`).
+7. If the change is large, run pre-review QA (`docs/processes/pre-review-qa.md`), then report done. Skip the table on a small edit.
+8. Finish concisely.
 
 ## Concurrency
 
-Console commands may run with each other and with reads, searches, edits, and sub-agents when they do not share a file or depend on each other's artifacts. Example: `npm test` with `cargo test`. See `docs/rules/parallel-operations.md`.
+Default is parallel. Follow `docs/rules/parallel-operations.md`. Independent commands may run together (example: `npm test` with `cargo test`). Stay serial when a later step needs an earlier result, when state is shared and mutable, or when two edits would hit the same file.
 
 ## Skills
 
