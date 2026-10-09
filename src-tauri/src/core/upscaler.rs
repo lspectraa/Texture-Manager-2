@@ -210,6 +210,7 @@ fn remember_icon_primaries(
     }
 }
 
+// ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md
 fn ai_model_for_sprite(
     relative_dir: &Path,
     frame_name: &str,

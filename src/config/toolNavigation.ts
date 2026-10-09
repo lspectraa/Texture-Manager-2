@@ -183,6 +183,7 @@ export function isUpcomingTool(toolId: AppToolId): boolean {
   return getToolMeta(toolId)?.upcoming === true;
 }
 
+// ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md
 /**
  * Tools omitted from the mobile shell.
  * - `upscaler`: desktop Vulkan sidecars

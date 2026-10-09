@@ -19,10 +19,10 @@ We chose option 2. `DESKTOP_ONLY_TOOLS` is `upscaler` and `convertToNewVersion`;
 
 ## Code anchors
 
-Source comments are not in the tree yet. Sites that should carry `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`:
-
-- `src/config/toolNavigation.ts` — `DESKTOP_ONLY_TOOLS`
-- App mobile gates that block those two tools
+- `src/config/toolNavigation.ts` (`DESKTOP_ONLY_TOOLS`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+- `src/App.tsx` (`navigateTool`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+- `src/App.tsx` (case `upscaler`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+- `src/App.tsx` (case `convertToNewVersion`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
 
 ## Consequences
 

@@ -53,6 +53,7 @@ export const requestOperationCancel = async (): Promise<void> => {
   await invoke<void>("cancel_operation");
 };
 
+// ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md
 export const runOperation = async (
   request: OperationRequest,
   onProgress?: (progress: OperationProgress) => void,

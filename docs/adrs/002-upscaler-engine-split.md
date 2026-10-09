@@ -21,11 +21,9 @@ We chose option 2.
 
 ## Code anchors
 
-Source comments are not in the tree yet. Sites that should carry `ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md`:
-
-- `src/domain/operations.ts` — `UpscalerModel`
-- `src-tauri/src/core/upscaler.rs` — icon vs gamesheet routing
-- `src-tauri/src/core/upscaler_sidecar.rs` — sidecar binary names
+- `src/domain/operations.ts` (`UpscalerModel`) — `ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md`
+- `src-tauri/src/core/upscaler.rs` (`ai_model_for_sprite`) — `ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md`
+- `src-tauri/src/core/upscaler_sidecar.rs` (`binary_base_name`) — `ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md`
 
 ## Consequences
 
