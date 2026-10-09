@@ -9,5 +9,6 @@ Follow `AGENTS.md`. The vault is `docs/`. Skills are `skills/<name>/SKILL.md`.
 
 - Do not pre-read the vault. For targeted work, go straight to code. Open one note only when a subsystem is unfamiliar.
 - No PR open, merge, or approve. No fake tests. No secrets. Stop processes you started.
-- Reviews and DoD lists only after a major change or when asked. No default git.
-- An ADR needs a code comment pointing at `docs/adrs/NNN-slug.md`. Deleted application logic is reported as `## WARNING` plus a `---` rule (`docs/rules/report-deleted-logic.md`).
+- After a large change, run pre-review QA before reporting done (`docs/processes/pre-review-qa.md`). Skip the table on a small edit. No default git.
+- Default to parallel work (`docs/rules/parallel-operations.md`).
+- An ADR needs a code comment pointing at `docs/adrs/NNN-slug.md`. Deleted application logic and hardcoded strings or mappings are each reported as `## WARNING` plus a `---` rule (`docs/rules/report-deleted-logic.md`, `docs/rules/report-hardcoded-strings.md`).

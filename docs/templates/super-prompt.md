@@ -7,4 +7,4 @@ Constraints
 - do not open or merge a pull request
 - docs are just-in-time
 - no default git
-- no review table unless this is a major change
+- after a large change, run pre-review QA before reporting done; no review table on a small edit
