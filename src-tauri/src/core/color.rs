@@ -17,6 +17,8 @@ pub const GOLD_CENTER_DEG: f32 = 42.0;
 pub const GOLD_RADIUS_DEG: f32 = 22.0;
 /// Overlaps neighboring Lightroom-style bands so every hue has a weight.
 pub const CHROMATIC_RADIUS_DEG: f32 = 40.0;
+/// Green sits in a wider gap between yellow (60°) and aqua (180°), so its falloff is wider.
+pub const GREEN_RADIUS_DEG: f32 = 56.0;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[serde(rename_all = "camelCase")]
@@ -33,15 +35,16 @@ pub enum BandId {
     Gold,
 }
 
+/// Lightroom Color Mixer hue centers (degrees). Keep in sync with `menuRecolorColor.ts`.
 pub const CHROMATIC_BANDS: [(BandId, f32); 8] = [
     (BandId::Red, 0.0),
     (BandId::Orange, 30.0),
     (BandId::Yellow, 60.0),
     (BandId::Green, 120.0),
     (BandId::Aqua, 180.0),
-    (BandId::Blue, 240.0),
-    (BandId::Purple, 275.0),
-    (BandId::Magenta, 315.0),
+    (BandId::Blue, 225.0),
+    (BandId::Purple, 285.0),
+    (BandId::Magenta, 330.0),
 ];
 
 pub const ALL_BANDS: [BandId; 10] = [
@@ -63,6 +66,15 @@ pub struct BandDelta {
     pub hue_deg: f32,
     pub sat_delta: f32,
     pub val_delta: f32,
+    /// Symmetric falloff used when a side is unset. `0` uses the built-in width.
+    #[serde(default)]
+    pub radius_deg: f32,
+    /// Falloff toward lower hues. `0` uses `radius_deg`.
+    #[serde(default)]
+    pub radius_low_deg: f32,
+    /// Falloff toward higher hues. `0` uses `radius_deg`.
+    #[serde(default)]
+    pub radius_high_deg: f32,
 }
 
 impl BandDelta {
@@ -70,6 +82,9 @@ impl BandDelta {
         hue_deg: 0.0,
         sat_delta: 0.0,
         val_delta: 0.0,
+        radius_deg: 0.0,
+        radius_low_deg: 0.0,
+        radius_high_deg: 0.0,
     };
 
     fn is_noop(self) -> bool {
@@ -132,7 +147,11 @@ impl ColorRecipe {
         let existing = std::mem::take(&mut self.bands);
         let mut bands = BTreeMap::new();
         for band in ALL_BANDS {
-            bands.insert(band, existing.get(&band).copied().unwrap_or(BandDelta::ZERO));
+            let mut delta = existing.get(&band).copied().unwrap_or(BandDelta::ZERO);
+            delta.radius_low_deg = effective_radius_side(band, delta, delta.radius_low_deg);
+            delta.radius_high_deg = effective_radius_side(band, delta, delta.radius_high_deg);
+            delta.radius_deg = effective_radius_deg(band, delta);
+            bands.insert(band, delta);
         }
         self.bands = bands;
         self.points.clear();
@@ -235,11 +254,19 @@ fn circular_dist(a: f32, b: f32) -> f32 {
     d.min(1.0 - d)
 }
 
-fn hue_weight(hue: f32, center: f32, radius: f32) -> f32 {
+fn signed_hue_delta(hue: f32, center: f32) -> f32 {
+    let mut delta = hue - center;
+    delta -= delta.round();
+    delta
+}
+
+fn hue_weight(hue: f32, center: f32, radius_low: f32, radius_high: f32) -> f32 {
+    let delta = signed_hue_delta(hue, center);
+    let radius = if delta < 0.0 { radius_low } else { radius_high };
     if radius <= 1e-6 {
         return 0.0;
     }
-    let dist = circular_dist(hue, center);
+    let dist = delta.abs();
     if dist >= radius {
         return 0.0;
     }
@@ -250,18 +277,43 @@ fn band_delta(recipe: &ColorRecipe, id: BandId) -> BandDelta {
     recipe.bands.get(&id).copied().unwrap_or(BandDelta::ZERO)
 }
 
+fn chromatic_radius_deg(id: BandId) -> f32 {
+    if id == BandId::Green {
+        GREEN_RADIUS_DEG
+    } else {
+        CHROMATIC_RADIUS_DEG
+    }
+}
+
+fn effective_radius_deg(id: BandId, delta: BandDelta) -> f32 {
+    if delta.radius_deg.is_finite() && delta.radius_deg >= 8.0 {
+        delta.radius_deg.clamp(8.0, 90.0)
+    } else {
+        chromatic_radius_deg(id)
+    }
+}
+
+fn effective_radius_side(id: BandId, delta: BandDelta, side: f32) -> f32 {
+    if side.is_finite() && side >= 8.0 {
+        side.clamp(8.0, 90.0)
+    } else {
+        effective_radius_deg(id, delta)
+    }
+}
+
 fn weighted_chromatic(hue: f32, recipe: &ColorRecipe) -> (f32, f32, f32) {
-    let radius = CHROMATIC_RADIUS_DEG / 360.0;
     let mut hue_deg = 0.0;
     let mut sat_delta = 0.0;
     let mut val_delta = 0.0;
     let mut sum = 0.0;
     for (id, center_deg) in CHROMATIC_BANDS {
-        let weight = hue_weight(hue, center_deg / 360.0, radius);
+        let delta = band_delta(recipe, id);
+        let low = effective_radius_side(id, delta, delta.radius_low_deg) / 360.0;
+        let high = effective_radius_side(id, delta, delta.radius_high_deg) / 360.0;
+        let weight = hue_weight(hue, center_deg / 360.0, low, high);
         if weight <= 0.0 {
             continue;
         }
-        let delta = band_delta(recipe, id);
         hue_deg += weight * delta.hue_deg;
         sat_delta += weight * delta.sat_delta;
         val_delta += weight * delta.val_delta;
@@ -285,7 +337,12 @@ fn mixed_deltas(r: f32, g: f32, b: f32, recipe: &ColorRecipe, strength: f32) -> 
     } else {
         let (ch, cs, cv) = weighted_chromatic(h, recipe);
         let gold_m = if s >= GOLD_SAT_MIN {
-            hue_weight(h, GOLD_CENTER_DEG / 360.0, GOLD_RADIUS_DEG / 360.0)
+            hue_weight(
+                h,
+                GOLD_CENTER_DEG / 360.0,
+                GOLD_RADIUS_DEG / 360.0,
+                GOLD_RADIUS_DEG / 360.0,
+            )
         } else {
             0.0
         };
@@ -349,6 +406,9 @@ fn set_all_chromatic(recipe: &mut ColorRecipe, hue_deg: f32, sat_delta: f32, val
                 hue_deg,
                 sat_delta,
                 val_delta,
+                radius_deg: 0.0,
+                radius_low_deg: 0.0,
+                radius_high_deg: 0.0,
             },
         );
     }
@@ -375,6 +435,117 @@ mod tests {
             (clamp01(b) * 255.0).round() as u8,
             255,
         ]
+    }
+
+    #[test]
+    fn lightroom_chromatic_band_centers() {
+        assert_eq!(
+            CHROMATIC_BANDS.map(|(_, deg)| deg),
+            [0.0, 30.0, 60.0, 120.0, 180.0, 225.0, 285.0, 330.0]
+        );
+    }
+
+    #[test]
+    fn green_band_reaches_hues_outside_the_shared_radius() {
+        let (r, g, b) = hsv_to_rgb(165.0 / 360.0, 1.0, 1.0);
+        let rgba = [
+            (clamp01(r) * 255.0).round() as u8,
+            (clamp01(g) * 255.0).round() as u8,
+            (clamp01(b) * 255.0).round() as u8,
+            255,
+        ];
+        let mut img = pixel(rgba[0], rgba[1], rgba[2], 255);
+        let mut recipe = ColorRecipe::identity();
+        recipe.bands.insert(
+            BandId::Green,
+            BandDelta {
+                hue_deg: 40.0,
+                sat_delta: 0.0,
+                val_delta: 0.0,
+                radius_deg: 0.0,
+                radius_low_deg: 0.0,
+                radius_high_deg: 0.0,
+            },
+        );
+        recipe.locks.gold = true;
+        apply_color_recipe(&mut img, &recipe, 1.0);
+        assert_ne!(channels(&img), rgba);
+
+        let (yr, yg, yb) = hsv_to_rgb(60.0 / 360.0, 1.0, 1.0);
+        let yellow = [
+            (clamp01(yr) * 255.0).round() as u8,
+            (clamp01(yg) * 255.0).round() as u8,
+            (clamp01(yb) * 255.0).round() as u8,
+            255,
+        ];
+        let mut yellow_img = pixel(yellow[0], yellow[1], yellow[2], 255);
+        apply_color_recipe(&mut yellow_img, &recipe, 1.0);
+        assert_eq!(channels(&yellow_img), yellow);
+    }
+
+    #[test]
+    fn narrower_green_radius_stops_before_hue_165() {
+        let (r, g, b) = hsv_to_rgb(165.0 / 360.0, 1.0, 1.0);
+        let rgba = [
+            (clamp01(r) * 255.0).round() as u8,
+            (clamp01(g) * 255.0).round() as u8,
+            (clamp01(b) * 255.0).round() as u8,
+            255,
+        ];
+        let mut img = pixel(rgba[0], rgba[1], rgba[2], 255);
+        let mut recipe = ColorRecipe::identity();
+        recipe.bands.insert(
+            BandId::Green,
+            BandDelta {
+                hue_deg: 40.0,
+                sat_delta: 0.0,
+                val_delta: 0.0,
+                radius_deg: 20.0,
+                radius_low_deg: 0.0,
+                radius_high_deg: 0.0,
+            },
+        );
+        recipe.locks.gold = true;
+        apply_color_recipe(&mut img, &recipe, 1.0);
+        assert_eq!(channels(&img), rgba);
+    }
+
+    #[test]
+    fn high_side_radius_does_not_shrink_the_low_side() {
+        let mut recipe = ColorRecipe::identity();
+        recipe.locks.gold = true;
+        recipe.bands.insert(
+            BandId::Green,
+            BandDelta {
+                hue_deg: 40.0,
+                sat_delta: 0.0,
+                val_delta: 0.0,
+                radius_deg: 0.0,
+                radius_low_deg: 56.0,
+                radius_high_deg: 20.0,
+            },
+        );
+        let (r, g, b) = hsv_to_rgb(165.0 / 360.0, 1.0, 1.0);
+        let high = [
+            (clamp01(r) * 255.0).round() as u8,
+            (clamp01(g) * 255.0).round() as u8,
+            (clamp01(b) * 255.0).round() as u8,
+            255,
+        ];
+        let mut high_img = pixel(high[0], high[1], high[2], 255);
+        apply_color_recipe(&mut high_img, &recipe, 1.0);
+        assert_eq!(channels(&high_img), high);
+
+        let (lr, lg, lb) = hsv_to_rgb(80.0 / 360.0, 1.0, 1.0);
+        let low = [
+            (clamp01(lr) * 255.0).round() as u8,
+            (clamp01(lg) * 255.0).round() as u8,
+            (clamp01(lb) * 255.0).round() as u8,
+            255,
+        ];
+        let mut low_img = pixel(low[0], low[1], low[2], 255);
+        apply_color_recipe(&mut low_img, &recipe, 1.0);
+        assert_ne!(channels(&low_img), low);
     }
 
     #[test]
@@ -410,6 +581,9 @@ mod tests {
                 hue_deg: 30.0,
                 sat_delta: 0.0,
                 val_delta: 0.0,
+                radius_deg: 0.0,
+                radius_low_deg: 0.0,
+                radius_high_deg: 0.0,
             },
         );
         apply_color_recipe(&mut img, &recipe, 1.0);

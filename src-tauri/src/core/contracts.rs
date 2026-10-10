@@ -228,8 +228,18 @@ pub enum OperationOptions {
 pub enum MenuRecolorRuleSet {
     #[default]
     MenuChrome,
-    ExceptIcons,
+    Symbols,
     FacesOnly,
+    Fonts,
+    Editor,
+    Shop,
+    Gauntlets,
+    Objects,
+    Effects,
+    Icons,
+    Geode,
+    Logos,
+    ExceptIcons,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

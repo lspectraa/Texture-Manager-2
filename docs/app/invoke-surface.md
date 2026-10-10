@@ -17,7 +17,7 @@ Used by: Splitter, Merger, Porter (`porterSplitter`), Randomizer, Convert, Upsca
 | `tauriIconEditor.ts` | Icon sheet edit | [[architecture]] |
 | `tauriIconGlow.ts` / `tauriGlowMaker.ts` | Glow previews | [[architecture]] |
 | `tauriGeodeButtons.ts` | Template index/preview + `get_game_files_layout` | [[architecture]] |
-| `tauriMenuRecolor.ts` | `menu_recolor_discover_cmd`, thumbs, recipe read/write. Run uses `run_operation` | [[architecture]] |
+| `tauriMenuRecolor.ts` | `menu_recolor_default_input_cmd` (cached menu sheets and standalone PNGs; reuses that cache on open, including when Geometry Dash is not detected), discover, thumbs. Run uses `run_operation` | [[architecture]] |
 | `tauriParticleEditor.ts` | Particle open/save/texture/preview | [[architecture]] |
 | `tauriPicker.ts` | Android SAF / desktop dialogs | [[architecture]] |
 | `tauriMobileFs.ts` | Import, allocate output, zip export | [[architecture]] |

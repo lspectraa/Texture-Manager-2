@@ -70,7 +70,7 @@ These rules are non-negotiable across all sessions:
 
 ## 5. Agent Workflow Sequence
 
-1. **Align on Intent**: Confirm the task scope if there are ambiguities. If an IDE plan exists, wait for plan approval. Do not invent an unrequested secondary planning mode.
+1. **Align on Intent**: Confirm the task scope if there are ambiguities.
 2. **Consult Docs On-Demand Only**:
    - Skip reading documentation for targeted, well-defined tasks (e.g., editing known files, fixing a bug, updating config, running tests). Proceed directly to the task.
    - Consult specific docs (e.g. `docs/app/architecture.md`, `docs/app/invoke-surface.md`) strictly just-in-time when working on an unfamiliar subsystem.

@@ -8,6 +8,8 @@ export const GOLD_SAT_MIN = 0.28;
 export const GOLD_CENTER_DEG = 42;
 export const GOLD_RADIUS_DEG = 22;
 export const CHROMATIC_RADIUS_DEG = 40;
+/** Green sits between yellow and aqua, so its falloff is wider than the other bands. */
+export const GREEN_RADIUS_DEG = 56;
 
 export type BandId =
   | "red"
@@ -21,15 +23,16 @@ export type BandId =
   | "neutral"
   | "gold";
 
+/** Lightroom Color Mixer hue centers (degrees). Keep in sync with `color.rs`. */
 export const CHROMATIC_BANDS: ReadonlyArray<readonly [BandId, number]> = [
   ["red", 0],
   ["orange", 30],
   ["yellow", 60],
   ["green", 120],
   ["aqua", 180],
-  ["blue", 240],
-  ["purple", 275],
-  ["magenta", 315],
+  ["blue", 225],
+  ["purple", 285],
+  ["magenta", 330],
 ];
 
 export const ALL_BANDS: readonly BandId[] = [
@@ -49,7 +52,42 @@ export type BandDelta = {
   hueDeg: number;
   satDelta: number;
   valDelta: number;
+  /**
+   * Symmetric falloff used when a side is unset.
+   * Missing or below 8 uses the built-in width.
+   */
+  radiusDeg?: number;
+  /** Falloff toward lower hues. Missing or below 8 uses `radiusDeg`. */
+  radiusLowDeg?: number;
+  /** Falloff toward higher hues. Missing or below 8 uses `radiusDeg`. */
+  radiusHighDeg?: number;
 };
+
+export function defaultBandRadiusDeg(id: BandId): number {
+  if (id === "green") {
+    return GREEN_RADIUS_DEG;
+  }
+  return CHROMATIC_RADIUS_DEG;
+}
+
+export function clampBandRadiusDeg(id: BandId, value: number | undefined): number {
+  if (value == null || !Number.isFinite(value) || value < 8) {
+    return defaultBandRadiusDeg(id);
+  }
+  return Math.min(90, Math.max(8, value));
+}
+
+/** One side of a band. An unset side keeps the symmetric `radiusDeg` width. */
+export function clampBandRadiusSide(
+  id: BandId,
+  side: number | undefined,
+  radiusDeg: number | undefined,
+): number {
+  if (side != null && Number.isFinite(side) && side >= 8) {
+    return Math.min(90, Math.max(8, side));
+  }
+  return clampBandRadiusDeg(id, radiusDeg);
+}
 
 export type ColorRecipe = {
   bands: Record<BandId, BandDelta>;
@@ -59,13 +97,21 @@ export type ColorRecipe = {
 };
 
 export function zeroBand(): BandDelta {
-  return { hueDeg: 0, satDelta: 0, valDelta: 0 };
+  return {
+    hueDeg: 0,
+    satDelta: 0,
+    valDelta: 0,
+    radiusDeg: CHROMATIC_RADIUS_DEG,
+    radiusLowDeg: CHROMATIC_RADIUS_DEG,
+    radiusHighDeg: CHROMATIC_RADIUS_DEG,
+  };
 }
 
 export function identityRecipe(): ColorRecipe {
   const bands = {} as Record<BandId, BandDelta>;
   for (const band of ALL_BANDS) {
-    bands[band] = zeroBand();
+    const radius = defaultBandRadiusDeg(band);
+    bands[band] = { ...zeroBand(), radiusDeg: radius, radiusLowDeg: radius, radiusHighDeg: radius };
   }
   return {
     bands,
@@ -143,16 +189,19 @@ function smoothstep01(t: number): number {
   return clamped * clamped * (3 - 2 * clamped);
 }
 
-function circularDist(a: number, b: number): number {
-  const d = Math.abs(a - b);
-  return Math.min(d, 1 - d);
+function signedHueDelta(hue: number, center: number): number {
+  let delta = hue - center;
+  delta -= Math.round(delta);
+  return delta;
 }
 
-function hueWeight(hue: number, center: number, radius: number): number {
+function hueWeight(hue: number, center: number, radiusLow: number, radiusHigh: number): number {
+  const delta = signedHueDelta(hue, center);
+  const radius = delta < 0 ? radiusLow : radiusHigh;
   if (radius <= 1e-6) {
     return 0;
   }
-  const dist = circularDist(hue, center);
+  const dist = Math.abs(delta);
   if (dist >= radius) {
     return 0;
   }
@@ -160,13 +209,15 @@ function hueWeight(hue: number, center: number, radius: number): number {
 }
 
 function weightedChromatic(hue: number, recipe: ColorRecipe): [number, number, number] {
-  const radius = CHROMATIC_RADIUS_DEG / 360;
   let hueDeg = 0;
   let satDelta = 0;
   let valDelta = 0;
   let sum = 0;
   for (const [id, centerDeg] of CHROMATIC_BANDS) {
-    const weight = hueWeight(hue, centerDeg / 360, radius);
+    const bandDelta = recipe.bands[id];
+    const low = clampBandRadiusSide(id, bandDelta.radiusLowDeg, bandDelta.radiusDeg) / 360;
+    const high = clampBandRadiusSide(id, bandDelta.radiusHighDeg, bandDelta.radiusDeg) / 360;
+    const weight = hueWeight(hue, centerDeg / 360, low, high);
     if (weight <= 0) {
       continue;
     }
@@ -207,7 +258,9 @@ function mixedDeltas(
   } else {
     const [ch, cs, cv] = weightedChromatic(h, recipe);
     const goldM =
-      s >= GOLD_SAT_MIN ? hueWeight(h, GOLD_CENTER_DEG / 360, GOLD_RADIUS_DEG / 360) : 0;
+      s >= GOLD_SAT_MIN
+        ? hueWeight(h, GOLD_CENTER_DEG / 360, GOLD_RADIUS_DEG / 360, GOLD_RADIUS_DEG / 360)
+        : 0;
     if (recipe.locks.gold) {
       const scale = 1 - goldM;
       hueDeg = ch * scale;

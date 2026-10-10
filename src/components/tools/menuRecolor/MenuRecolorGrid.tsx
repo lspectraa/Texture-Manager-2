@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ALL_BANDS,
   applyColorRecipeToBytes,
   type ColorRecipe,
 } from "../../../domain/menuRecolorColor";
 import type { DiscoveredSprite, SpriteOverride } from "../../../domain/menuRecolor";
 import { effectiveRecolor } from "../../../domain/menuRecolor";
+import { ToolCheckboxField } from "../layout";
 
-const CELL_WIDTH = 156;
-const ROW_HEIGHT = 188;
+const PREVIEW_BOX = 112;
+const CELL_WIDTH = 128;
+const ROW_HEIGHT = 168;
 const GRID_GAP = 8;
 const ROW_STRIDE = ROW_HEIGHT + GRID_GAP;
-const VIEW_HEIGHT = 440;
+const VIEW_HEIGHT = 520;
+/** Extra rows above/below the viewport to prefetch thumbs. */
+const OVERSCAN_ROWS = 3;
 
 type MenuRecolorGridProps = {
   sprites: DiscoveredSprite[];
@@ -43,6 +48,7 @@ export function MenuRecolorGrid({
   const [scrollTop, setScrollTop] = useState(0);
   const [width, setWidth] = useState(640);
   const sourcesRef = useRef(new Map<string, ImageData>());
+  const decodeInFlight = useRef(new Set<string>());
   const [sourceVersion, setSourceVersion] = useState(0);
 
   useEffect(() => {
@@ -60,8 +66,11 @@ export function MenuRecolorGrid({
 
   const columns = Math.max(1, Math.floor((width + GRID_GAP) / (CELL_WIDTH + GRID_GAP)));
   const rowCount = Math.ceil(sprites.length / columns);
-  const startRow = Math.max(0, Math.floor(scrollTop / ROW_STRIDE) - 1);
-  const endRow = Math.min(rowCount, Math.ceil((scrollTop + VIEW_HEIGHT) / ROW_STRIDE) + 2);
+  const startRow = Math.max(0, Math.floor(scrollTop / ROW_STRIDE) - OVERSCAN_ROWS);
+  const endRow = Math.min(
+    rowCount,
+    Math.ceil((scrollTop + VIEW_HEIGHT) / ROW_STRIDE) + OVERSCAN_ROWS,
+  );
   const startIndex = startRow * columns;
   const endIndex = Math.min(sprites.length, endRow * columns);
   const visible = sprites.slice(startIndex, endIndex);
@@ -78,28 +87,38 @@ export function MenuRecolorGrid({
   useEffect(() => {
     let cancelled = false;
     const ids = visibleKey.length === 0 ? [] : visibleKey.split("\n");
+    let pendingBump = false;
+    const bump = () => {
+      if (cancelled || pendingBump) {
+        return;
+      }
+      pendingBump = true;
+      requestAnimationFrame(() => {
+        pendingBump = false;
+        if (!cancelled) {
+          setSourceVersion((version) => version + 1);
+        }
+      });
+    };
+
     for (const id of ids) {
       const url = thumbs[id];
-      if (!url || sourcesRef.current.has(id)) {
+      if (!url || sourcesRef.current.has(id) || decodeInFlight.current.has(id)) {
         continue;
       }
-      const image = new Image();
-      image.onload = () => {
-        if (cancelled) {
-          return;
-        }
-        const canvas = document.createElement("canvas");
-        canvas.width = image.width;
-        canvas.height = image.height;
-        const context = canvas.getContext("2d");
-        if (!context) {
-          return;
-        }
-        context.drawImage(image, 0, 0);
-        sourcesRef.current.set(id, context.getImageData(0, 0, canvas.width, canvas.height));
-        setSourceVersion((version) => version + 1);
-      };
-      image.src = url;
+      decodeInFlight.current.add(id);
+      void decodeThumbToImageData(url)
+        .then((imageData) => {
+          decodeInFlight.current.delete(id);
+          if (cancelled || !imageData) {
+            return;
+          }
+          sourcesRef.current.set(id, imageData);
+          bump();
+        })
+        .catch(() => {
+          decodeInFlight.current.delete(id);
+        });
     }
     return () => {
       cancelled = true;
@@ -127,6 +146,7 @@ export function MenuRecolorGrid({
             <MenuRecolorTile
               key={sprite.id}
               sprite={sprite}
+              thumbUrl={thumbs[sprite.id] ?? null}
               source={sourcesRef.current.get(sprite.id) ?? null}
               sourceVersion={sourceVersion}
               included={includes[sprite.id] ?? false}
@@ -145,8 +165,63 @@ export function MenuRecolorGrid({
   );
 }
 
+function isNoopRecolor(applied: { recipe: ColorRecipe; strength: number }): boolean {
+  if (applied.strength <= 1e-6) {
+    return true;
+  }
+  for (const band of ALL_BANDS) {
+    const delta = applied.recipe.bands[band];
+    if (
+      Math.abs(delta.hueDeg) > 1e-6 ||
+      Math.abs(delta.satDelta) > 1e-6 ||
+      Math.abs(delta.valDelta) > 1e-6
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+async function decodeThumbToImageData(url: string): Promise<ImageData | null> {
+  if (typeof createImageBitmap === "function" && url.startsWith("data:")) {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      bitmap.close();
+      return null;
+    }
+    context.drawImage(bitmap, 0, 0);
+    const data = context.getImageData(0, 0, canvas.width, canvas.height);
+    bitmap.close();
+    return data;
+  }
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = image.width;
+      canvas.height = image.height;
+      const context = canvas.getContext("2d");
+      if (!context) {
+        resolve(null);
+        return;
+      }
+      context.drawImage(image, 0, 0);
+      resolve(context.getImageData(0, 0, canvas.width, canvas.height));
+    };
+    image.onerror = () => resolve(null);
+    image.src = url;
+  });
+}
+
 type MenuRecolorTileProps = {
   sprite: DiscoveredSprite;
+  thumbUrl: string | null;
   source: ImageData | null;
   sourceVersion: number;
   included: boolean;
@@ -161,6 +236,7 @@ type MenuRecolorTileProps = {
 
 function MenuRecolorTile({
   sprite,
+  thumbUrl,
   source,
   sourceVersion,
   included,
@@ -173,12 +249,17 @@ function MenuRecolorTile({
   badge,
 }: MenuRecolorTileProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const scratchRef = useRef<HTMLCanvasElement | null>(null);
   const applied = useMemo(
     () => effectiveRecolor(included, globalRecipe, override),
     [globalRecipe, included, override],
   );
+  const needsRecolor = applied !== null && !isNoopRecolor(applied);
 
   useEffect(() => {
+    if (!applied) {
+      return;
+    }
     const canvas = canvasRef.current;
     if (!canvas || !source) {
       return;
@@ -187,19 +268,37 @@ function MenuRecolorTile({
     if (!context) {
       return;
     }
-    canvas.width = source.width;
-    canvas.height = source.height;
+    canvas.width = PREVIEW_BOX;
+    canvas.height = PREVIEW_BOX;
     const image = new ImageData(new Uint8ClampedArray(source.data), source.width, source.height);
-    if (applied) {
-      applyColorRecipeToBytes(image.data, applied.recipe, applied.strength);
+    applyColorRecipeToBytes(image.data, applied.recipe, applied.strength);
+    let scratch = scratchRef.current;
+    if (!scratch) {
+      scratch = document.createElement("canvas");
+      scratchRef.current = scratch;
     }
-    context.putImageData(image, 0, 0);
+    scratch.width = source.width;
+    scratch.height = source.height;
+    const sourceContext = scratch.getContext("2d");
+    if (!sourceContext) {
+      return;
+    }
+    sourceContext.putImageData(image, 0, 0);
+    const scale = Math.min(PREVIEW_BOX / source.width, PREVIEW_BOX / source.height);
+    const width = Math.max(1, Math.round(source.width * scale));
+    const height = Math.max(1, Math.round(source.height * scale));
+    const x = Math.floor((PREVIEW_BOX - width) / 2);
+    const y = Math.floor((PREVIEW_BOX - height) / 2);
+    context.imageSmoothingEnabled = false;
+    context.clearRect(0, 0, PREVIEW_BOX, PREVIEW_BOX);
+    context.drawImage(scratch, x, y, width, height);
   }, [applied, source, sourceVersion]);
 
   return (
     <div
       role="button"
       tabIndex={0}
+      aria-label={sprite.name}
       className={`tm-menu-recolor-tile${selected ? " is-selected" : ""}`}
       onClick={(event) =>
         onSelect(sprite.id, {
@@ -215,23 +314,24 @@ function MenuRecolorTile({
         }
       }}
     >
-      <canvas ref={canvasRef} className="tm-menu-recolor-thumb" />
-      <span className="tm-menu-recolor-name" title={sprite.name}>
-        {sprite.name}
-      </span>
-      <span className="tm-menu-recolor-tags">{sprite.tags.join(" · ")}</span>
+      {needsRecolor ? (
+        <canvas ref={canvasRef} className="tm-menu-recolor-thumb" />
+      ) : thumbUrl ? (
+        <img src={thumbUrl} alt="" className="tm-menu-recolor-thumb" draggable={false} />
+      ) : (
+        <canvas ref={canvasRef} className="tm-menu-recolor-thumb" />
+      )}
       <span className="tm-menu-recolor-badge">{badge}</span>
-      <label
+      <div
         className="tm-menu-recolor-include"
         onClick={(event) => event.stopPropagation()}
       >
-        <input
-          type="checkbox"
+        <ToolCheckboxField
+          label={includeLabel}
           checked={included}
-          onChange={(event) => onToggleInclude(sprite.id, event.target.checked)}
+          onChange={(next) => onToggleInclude(sprite.id, next)}
         />
-        <span>{includeLabel}</span>
-      </label>
+      </div>
     </div>
   );
 }

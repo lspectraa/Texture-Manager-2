@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { ChevronDown, ChevronUp, FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
+import { FileImage, FolderInput, Grid3x3, SlidersHorizontal } from "lucide-react";
 import { pickUserFile } from "../../services/tauriPicker";
 import { useTranslation } from "react-i18next";
 import type {
@@ -31,7 +30,17 @@ import {
 } from "./layout";
 import { MobileEdgeTab } from "../mobile/MobileEdgeTab";
 import { MobileSheet } from "../mobile/MobileSheet";
-import { useRangeDoubleReset } from "../../hooks/useRangeDoubleReset";
+import {
+  applyHsvDeltaToRgb,
+  applyValueDeltaRgb,
+  buildHsvTrackGradient,
+  clamp01,
+  HsvSliderRow,
+  hsvToRgb,
+  rgbToHsv,
+  sliderTrackStyle,
+  type RgbColor,
+} from "./hsvSlider";
 
 type GeodeButtonsToolPanelProps = {
   inputDir: string;
@@ -136,102 +145,7 @@ function groupLabelKey(groupId: FamilyGroupId): string {
   }
 }
 
-function clamp01(v: number): number {
-  return Math.min(1, Math.max(0, v));
-}
-
-function applyValueDeltaRgb(r: number, g: number, b: number, valDelta: number): [number, number, number] {
-  const d = clamp01(Math.abs(valDelta));
-  if (valDelta >= 0) {
-    // Photoshop-like brightness: +1.0 pushes every channel to white.
-    return [r + (1 - r) * d, g + (1 - g) * d, b + (1 - b) * d];
-  }
-  // -1.0 pushes every channel to black.
-  return [r * (1 - d), g * (1 - d), b * (1 - d)];
-}
-
-function rgbToHsv(r: number, g: number, b: number): [number, number, number] {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-  const v = max;
-  const s = max <= 1e-6 ? 0 : delta / max;
-  let h = 0;
-  if (delta > 1e-6) {
-    if (max === r) h = ((g - b) / delta) % 6;
-    else if (max === g) h = (b - r) / delta + 2;
-    else h = (r - g) / delta + 4;
-    h /= 6;
-    if (h < 0) h += 1;
-  }
-  return [h, s, v];
-}
-
-function hsvToRgb(h: number, s: number, v: number): [number, number, number] {
-  const h6 = ((h % 1) + 1) % 1 * 6;
-  const i = Math.floor(h6);
-  const f = h6 - i;
-  const p = v * (1 - s);
-  const q = v * (1 - f * s);
-  const t = v * (1 - (1 - f) * s);
-  switch (i) {
-    case 0:
-      return [v, t, p];
-    case 1:
-      return [q, v, p];
-    case 2:
-      return [p, v, t];
-    case 3:
-      return [p, q, v];
-    case 4:
-      return [t, p, v];
-    default:
-      return [v, p, q];
-  }
-}
-
-type RgbColor = [number, number, number];
-type HsvChannel = keyof HsvDelta;
-
 const DEFAULT_TRACK_COLOR: RgbColor = [0.18, 0.72, 0.64];
-const TRACK_STOP_COUNT = 13;
-
-function applyHsvDeltaToRgb(color: RgbColor, hsv: HsvDelta): RgbColor {
-  let [h, s, v] = rgbToHsv(...color);
-  h = ((h + hsv.hueDeg / 360) % 1 + 1) % 1;
-  s = clamp01(s + hsv.satDelta);
-  v = clamp01(v);
-  return applyValueDeltaRgb(...hsvToRgb(h, s, v), hsv.valDelta);
-}
-
-function rgbCss(color: RgbColor): string {
-  return `rgb(${color.map((channel) => Math.round(clamp01(channel) * 255)).join(" ")})`;
-}
-
-function buildHsvTrackGradient(
-  baseColor: RgbColor,
-  selectedHsv: HsvDelta,
-  channel: HsvChannel,
-  min: number,
-  max: number,
-): string {
-  const stops = Array.from({ length: TRACK_STOP_COUNT }, (_, index) => {
-    const position = index / (TRACK_STOP_COUNT - 1);
-    const hsv = { ...selectedHsv, [channel]: min + (max - min) * position };
-    return `${rgbCss(applyHsvDeltaToRgb(baseColor, hsv))} ${Math.round(position * 100)}%`;
-  });
-  return `linear-gradient(90deg, ${stops.join(", ")})`;
-}
-
-function sliderTrackStyle(
-  gradient: string,
-  thumbColor: RgbColor,
-): CSSProperties & Record<"--tm-geode-track" | "--tm-geode-thumb", string> {
-  return {
-    "--tm-geode-track": gradient,
-    "--tm-geode-thumb": rgbCss(thumbColor),
-  };
-}
 
 async function sampleRepresentativeColor(src: string): Promise<RgbColor | null> {
   if (!src.trim()) return null;
@@ -429,55 +343,6 @@ async function previewForGroupSource(
     return generatePreviewDataUrl(basePreview, hsv);
   }
   return null;
-}
-
-type FloatStepperProps = {
-  value: number;
-  step: number;
-  min: number;
-  max: number;
-  onChange: (value: number) => void;
-};
-
-function FloatStepper({ value, step, min, max, onChange }: FloatStepperProps) {
-  const clamp = (v: number): number => Math.min(max, Math.max(min, v));
-  const decimals = Math.max(0, (String(step).split(".")[1] ?? "").length);
-  const roundToStep = (v: number): number => Number(v.toFixed(decimals));
-  return (
-    <div className="tm-number-input-wrap tm-geode-number-wrap">
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => {
-          const next = Number.parseFloat(event.target.value);
-          if (Number.isFinite(next)) {
-            onChange(clamp(roundToStep(next)));
-          }
-        }}
-      />
-      <div className="tm-number-stepper" aria-hidden="true">
-        <button
-          type="button"
-          className="tm-number-step-btn"
-          tabIndex={-1}
-          onClick={() => onChange(clamp(roundToStep(value + step)))}
-        >
-          <ChevronUp size={11} />
-        </button>
-        <button
-          type="button"
-          className="tm-number-step-btn"
-          tabIndex={-1}
-          onClick={() => onChange(clamp(roundToStep(value - step)))}
-        >
-          <ChevronDown size={11} />
-        </button>
-      </div>
-    </div>
-  );
 }
 
 function stemAndParentFromPlistPath(plist: string): { stem: string; parent: string } {
@@ -925,9 +790,6 @@ export function GeodeButtonsToolPanel({
   const resetHue = useCallback(() => setHsvField({ hueDeg: 0 }), [setHsvField]);
   const resetSat = useCallback(() => setHsvField({ satDelta: 0 }), [setHsvField]);
   const resetVal = useCallback(() => setHsvField({ valDelta: 0 }), [setHsvField]);
-  const hueDoubleReset = useRangeDoubleReset(resetHue);
-  const satDoubleReset = useRangeDoubleReset(resetSat);
-  const valDoubleReset = useRangeDoubleReset(resetVal);
 
   const currentTemplatePath = useMemo(() => {
     if (!selectedFamilyId) return "";
@@ -984,92 +846,39 @@ export function GeodeButtonsToolPanel({
       <div className="tm-geode-hsv-block">
         <div className="tm-geode-block-title">{t("geodeButtons.hsvDelta")}</div>
 
-        <div className="tm-geode-hsv-row">
-          <label className="tm-geode-hsv-label">
-            {t("geodeButtons.hueDegrees")}
-            <input
-              className="tm-geode-slider tm-geode-slider--hue"
-              type="range"
-              min={-180}
-              max={180}
-              step={1}
-              value={selectedHsv.hueDeg}
-              style={sliderStyles.hue}
-              onChange={(e) => setHsvField({ hueDeg: Number(e.target.value) })}
-              onInput={(e) =>
-                setHsvField({ hueDeg: Number((e.target as HTMLInputElement).value) })
-              }
-              {...hueDoubleReset}
-            />
-          </label>
-          <div className="tm-geode-hsv-input">
-            <FloatStepper
-              value={selectedHsv.hueDeg}
-              step={1}
-              min={-180}
-              max={180}
-              onChange={(value) => setHsvField({ hueDeg: value })}
-            />
-          </div>
-        </div>
-
-        <div className="tm-geode-hsv-row">
-          <label className="tm-geode-hsv-label">
-            {t("geodeButtons.saturation")}
-            <input
-              className="tm-geode-slider tm-geode-slider--sat"
-              type="range"
-              min={-1}
-              max={1}
-              step={0.01}
-              value={selectedHsv.satDelta}
-              style={sliderStyles.saturation}
-              onChange={(e) => setHsvField({ satDelta: Number(e.target.value) })}
-              onInput={(e) =>
-                setHsvField({ satDelta: Number((e.target as HTMLInputElement).value) })
-              }
-              {...satDoubleReset}
-            />
-          </label>
-          <div className="tm-geode-hsv-input">
-            <FloatStepper
-              value={selectedHsv.satDelta}
-              step={0.01}
-              min={-1}
-              max={1}
-              onChange={(value) => setHsvField({ satDelta: value })}
-            />
-          </div>
-        </div>
-
-        <div className="tm-geode-hsv-row">
-          <label className="tm-geode-hsv-label">
-            {t("geodeButtons.value")}
-            <input
-              className="tm-geode-slider tm-geode-slider--val"
-              type="range"
-              min={-1}
-              max={1}
-              step={0.01}
-              value={selectedHsv.valDelta}
-              style={sliderStyles.value}
-              onChange={(e) => setHsvField({ valDelta: Number(e.target.value) })}
-              onInput={(e) =>
-                setHsvField({ valDelta: Number((e.target as HTMLInputElement).value) })
-              }
-              {...valDoubleReset}
-            />
-          </label>
-          <div className="tm-geode-hsv-input">
-            <FloatStepper
-              value={selectedHsv.valDelta}
-              step={0.01}
-              min={-1}
-              max={1}
-              onChange={(value) => setHsvField({ valDelta: value })}
-            />
-          </div>
-        </div>
+        <HsvSliderRow
+          label={t("geodeButtons.hueDegrees")}
+          channel="hueDeg"
+          min={-180}
+          max={180}
+          step={1}
+          value={selectedHsv.hueDeg}
+          trackStyle={sliderStyles.hue}
+          onChange={(hueDeg) => setHsvField({ hueDeg })}
+          onReset={resetHue}
+        />
+        <HsvSliderRow
+          label={t("geodeButtons.saturation")}
+          channel="satDelta"
+          min={-1}
+          max={1}
+          step={0.01}
+          value={selectedHsv.satDelta}
+          trackStyle={sliderStyles.saturation}
+          onChange={(satDelta) => setHsvField({ satDelta })}
+          onReset={resetSat}
+        />
+        <HsvSliderRow
+          label={t("geodeButtons.value")}
+          channel="valDelta"
+          min={-1}
+          max={1}
+          step={0.01}
+          value={selectedHsv.valDelta}
+          trackStyle={sliderStyles.value}
+          onChange={(valDelta) => setHsvField({ valDelta })}
+          onReset={resetVal}
+        />
 
         <p className="tm-tool-section-note">{t("geodeButtons.hsvHelp")}</p>
       </div>

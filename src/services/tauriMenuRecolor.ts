@@ -1,11 +1,24 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { DiscoveredSprite, MenuRecolorRecipeFile } from "../domain/menuRecolor";
+import type { DiscoveredSprite } from "../domain/menuRecolor";
 import { isTauriRuntime } from "./tauriOperations";
 
 export type MenuRecolorThumb = {
   id: string;
   dataUrl: string;
 };
+
+export type MenuRecolorDefaultInput = {
+  inputDir: string;
+  sheetStem: string;
+};
+
+export async function getMenuRecolorDefaultInput(): Promise<MenuRecolorDefaultInput | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+  const result = await invoke<MenuRecolorDefaultInput | null>("menu_recolor_default_input_cmd");
+  return result ?? null;
+}
 
 export async function discoverMenuRecolorSprites(inputDir: string): Promise<DiscoveredSprite[]> {
   if (!isTauriRuntime()) {
@@ -22,15 +35,4 @@ export async function loadMenuRecolorThumbs(
     return [];
   }
   return invoke<MenuRecolorThumb[]>("menu_recolor_thumbs_cmd", { inputDir, spriteIds });
-}
-
-export async function readMenuRecolorRecipe(path: string): Promise<MenuRecolorRecipeFile> {
-  return invoke<MenuRecolorRecipeFile>("menu_recolor_read_recipe_cmd", { path });
-}
-
-export async function writeMenuRecolorRecipe(
-  path: string,
-  recipe: MenuRecolorRecipeFile,
-): Promise<void> {
-  await invoke<void>("menu_recolor_write_recipe_cmd", { path, recipe });
 }
