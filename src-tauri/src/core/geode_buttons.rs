@@ -25,6 +25,7 @@ use crate::core::{
     contracts::GeodeButtonsOptions,
     discovery::{discover_sheet_pairs, SheetCandidate},
 };
+use crate::core::color::apply_hsv_delta;
 use image::imageops::resize;
 use image::{imageops::FilterType, ImageFormat, RgbaImage};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -518,90 +519,6 @@ fn check_cancel(cancel: &AtomicBool) -> Result<(), AppError> {
         return Err(AppError::Cancelled);
     }
     Ok(())
-}
-
-fn rgb_to_hsv(r: f32, g: f32, b: f32) -> (f32, f32, f32) {
-    let max = r.max(g.max(b));
-    let min = r.min(g.min(b));
-    let delta = max - min;
-    let v = max;
-    let s = if max <= 1e-6 { 0.0 } else { delta / max };
-    let mut h = if delta <= 1e-6 {
-        0.0
-    } else if max == r {
-        ((g - b) / delta) % 6.0
-    } else if max == g {
-        ((b - r) / delta) + 2.0
-    } else {
-        ((r - g) / delta) + 4.0
-    };
-    h /= 6.0;
-    if h < 0.0 {
-        h += 1.0;
-    }
-    (h, s, v)
-}
-
-fn hsv_to_rgb(h: f32, s: f32, v: f32) -> (f32, f32, f32) {
-    let h6 = (h.fract() * 6.0).max(0.0);
-    let i = h6.floor();
-    let f = h6 - i;
-    let p = v * (1.0 - s);
-    let q = v * (1.0 - f * s);
-    let t = v * (1.0 - (1.0 - f) * s);
-    match i as i32 {
-        0 => (v, t, p),
-        1 => (q, v, p),
-        2 => (p, v, t),
-        3 => (p, q, v),
-        4 => (t, p, v),
-        _ => (v, p, q),
-    }
-}
-
-fn clamp01(v: f32) -> f32 {
-    v.max(0.0).min(1.0)
-}
-
-fn apply_value_delta_rgb(r: f32, g: f32, b: f32, val_delta: f32) -> (f32, f32, f32) {
-    let d = clamp01(val_delta.abs());
-    if val_delta >= 0.0 {
-        // Photoshop-like brightness: +1.0 pushes every channel to white.
-        (r + (1.0 - r) * d, g + (1.0 - g) * d, b + (1.0 - b) * d)
-    } else {
-        // -1.0 pushes every channel to black.
-        (r * (1.0 - d), g * (1.0 - d), b * (1.0 - d))
-    }
-}
-
-fn apply_hsv_delta(img: &mut RgbaImage, hue_deg: f32, sat_delta: f32, val_delta: f32) {
-    if hue_deg.abs() < 1e-6 && sat_delta.abs() < 1e-6 && val_delta.abs() < 1e-6 {
-        return;
-    }
-    let hue_delta = hue_deg / 360.0;
-    for pixel in img.pixels_mut() {
-        let a = pixel[3];
-        if a == 0 {
-            continue;
-        }
-        let r = pixel[0] as f32 / 255.0;
-        let g = pixel[1] as f32 / 255.0;
-        let b = pixel[2] as f32 / 255.0;
-        let (mut h, mut s, mut v) = rgb_to_hsv(r, g, b);
-        h = (h + hue_delta).rem_euclid(1.0);
-        // Do not introduce saturation into fully desaturated pixels (white/black/gray).
-        if s <= 1e-6 && sat_delta > 0.0 {
-            s = 0.0;
-        } else {
-            s = clamp01(s + sat_delta);
-        }
-        v = clamp01(v);
-        let (nr, ng, nb) = hsv_to_rgb(h, s, v);
-        let (vr, vg, vb) = apply_value_delta_rgb(clamp01(nr), clamp01(ng), clamp01(nb), val_delta);
-        pixel[0] = (clamp01(vr) * 255.0).round() as u8;
-        pixel[1] = (clamp01(vg) * 255.0).round() as u8;
-        pixel[2] = (clamp01(vb) * 255.0).round() as u8;
-    }
 }
 
 /// Pixels must be strictly above this opacity fraction to count toward BlankSheet size ratios.

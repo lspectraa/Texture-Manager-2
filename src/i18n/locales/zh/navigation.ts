@@ -75,6 +75,11 @@ const navigation = {
       shortLabel: "Geode 按钮",
       description: "创建 Geode 菜单按钮图集",
     },
+    menuRecolor: {
+      label: "Menu Recolor",
+      shortLabel: "Recolor",
+      description: "Recolor menu sprites with hue bands.",
+    },
     particleEditor: {
       label: "粒子编辑器",
       description: "制作并调整粒子特效。",

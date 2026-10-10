@@ -4,6 +4,7 @@ import {
   Sparkles,
   Activity,
   AlertCircle,
+  Palette,
   AlertTriangle,
   CheckCircle2,
   ChevronRight,
@@ -29,6 +30,10 @@ import type {
   UpscalerTargetGraphics,
 } from "./domain/operations";
 import {
+  defaultMenuRecolorOptions,
+  type MenuRecolorOptions,
+} from "./domain/menuRecolor";
+import {
   DEFAULT_PACK_INSTALLER_BRIDGE,
   type PackInstallerBridge,
 } from "./domain/packInstaller";
@@ -47,6 +52,7 @@ import { ConvertToNewVersionToolPanel } from "./components/tools/ConvertToNewVer
 import { IconEditorToolPanel } from "./components/tools/IconEditorToolPanel";
 import { RandomizerToolPanel } from "./components/tools/RandomizerToolPanel";
 import { GeodeButtonsToolPanel } from "./components/tools/GeodeButtonsToolPanel";
+import { MenuRecolorToolPanel } from "./components/tools/MenuRecolorToolPanel";
 import { ParticleEditorToolPanel } from "./components/tools/ParticleEditorToolPanel";
 import { SettingsToolPanel } from "./components/tools/SettingsToolPanel";
 import {
@@ -138,6 +144,7 @@ type PrimaryTool =
   | "convertToNewVersion"
   | "glowMaker"
   | "geodeButtons"
+  | "menuRecolor"
   | "texturePackInstaller"
   | "particleEditor"
   | "upscaler";
@@ -255,6 +262,7 @@ function App() {
   const [isReportCollapsed, setIsReportCollapsed] = useState(() =>
     readStoredCollapsed(REPORT_COLLAPSED_STORAGE_KEY),
   );
+  const [menuRecolorRailTab, setMenuRecolorRailTab] = useState<"channels" | "output">("channels");
   const [isCopyrightOpen, setIsCopyrightOpen] = useState(false);
   const mobileShell = isMobileShell();
   const [mobileGridOpen, setMobileGridOpen] = useState(false);
@@ -307,6 +315,26 @@ function App() {
   > | null>(null);
   const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
   const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
+  const menuRecolorWasActive = useRef(false);
+
+  useEffect(() => {
+    const active = selectedTool === "menuRecolor";
+    if (active && !menuRecolorWasActive.current) {
+      setMenuRecolorRailTab("channels");
+      if (mobileShell) {
+        openMobileSideRail();
+      } else if (isReportCollapsed) {
+        reportPanelTransition.expand();
+      }
+    }
+    menuRecolorWasActive.current = active;
+  }, [
+    isReportCollapsed,
+    mobileShell,
+    openMobileSideRail,
+    reportPanelTransition.expand,
+    selectedTool,
+  ]);
 
   useEffect(() => {
     try {
@@ -384,6 +412,11 @@ function App() {
 
   const [geodeButtonsInputDir, setGeodeButtonsInputDir] = useState("");
   const [geodeButtonsOutputDir, setGeodeButtonsOutputDir] = useState("");
+  const [menuRecolorInputDir, setMenuRecolorInputDir] = useState("");
+  const [menuRecolorOutputDir, setMenuRecolorOutputDir] = useState("");
+  const [menuRecolorOptions, setMenuRecolorOptions] = useState<MenuRecolorOptions>(
+    defaultMenuRecolorOptions,
+  );
   const [geodeButtonsOptions, setGeodeButtonsOptions] = useState<GeodeButtonsOptions>(() => ({
     sheetStem: "BlankSheet-uhd",
     templates: {
@@ -898,6 +931,22 @@ function App() {
       };
     }
 
+    if (selectedTool === "menuRecolor") {
+      if (!menuRecolorInputDir.trim() || !menuRecolorOutputDir.trim()) {
+        setRunError(t("errors:validation.menuRecolorPathsRequired"));
+        return;
+      }
+      request = {
+        kind: "menuRecolor",
+        inputDir: menuRecolorInputDir,
+        outputDir: menuRecolorOutputDir,
+        options: {
+          type: "menuRecolor",
+          ...menuRecolorOptions,
+        },
+      };
+    }
+
     if (!request) {
       setRunError(t("errors:validation.operationRequestMissing"));
       return;
@@ -1184,6 +1233,37 @@ function App() {
     !isPackInstaller;
   const showPackMetadataRail = isPackInstaller;
   const showRightRail = showOperationAndReport || showPackMetadataRail;
+  const showMenuRecolorChannels =
+    selectedTool === "menuRecolor" && menuRecolorRailTab === "channels";
+  const packRailTitle =
+    packInstallerBridge.mode === "library" && packInstallerBridge.libraryRailTab === "applied"
+      ? t("tools:packInstaller.appliedPanelTitle")
+      : t("tools:packInstaller.libraryPanelButtonLabel");
+  const railPanelTitle = showPackMetadataRail
+    ? packRailTitle
+    : showMenuRecolorChannels
+      ? t("tools:menuRecolor.channelsTitle")
+      : t("reports:panelTitle");
+  const railExpandAria = showPackMetadataRail
+    ? t("tools:packInstaller.expandPanelAria")
+    : showMenuRecolorChannels
+      ? t("tools:menuRecolor.expandChannelsAria")
+      : t("reports:expandPanelAria");
+  const railCollapseAria = showPackMetadataRail
+    ? t("tools:packInstaller.collapsePanelAria")
+    : showMenuRecolorChannels
+      ? t("tools:menuRecolor.collapseChannelsAria")
+      : t("reports:collapsePanelAria");
+  const railShowTitle = showPackMetadataRail
+    ? t("tools:packInstaller.showPanel")
+    : showMenuRecolorChannels
+      ? t("tools:menuRecolor.showChannels")
+      : t("reports:showPanel");
+  const railHideTitle = showPackMetadataRail
+    ? t("tools:packInstaller.hidePanel")
+    : showMenuRecolorChannels
+      ? t("tools:menuRecolor.hideChannels")
+      : t("reports:hidePanel");
 
   const shellBackgroundOptions = useMemo(
     () =>
@@ -1523,6 +1603,19 @@ function App() {
             onAppSettingsUpdated={applySettingsView}
           />
         );
+      case "menuRecolor":
+        return (
+          <MenuRecolorToolPanel
+            inputDir={menuRecolorInputDir}
+            outputDir={menuRecolorOutputDir}
+            options={menuRecolorOptions}
+            onInputDirChange={setMenuRecolorInputDir}
+            onOutputDirChange={setMenuRecolorOutputDir}
+            onOptionsChange={setMenuRecolorOptions}
+            pickFolder={pickFolder}
+            geometryDashFound={appSettings.geometryDashFound}
+          />
+        );
       case "particleEditor":
         return <ParticleEditorToolPanel />;
       case "texturePackInstaller":
@@ -1835,8 +1928,14 @@ function App() {
                     className="tm-tool-rail-btn tm-tool-rail-btn--output"
                     onClick={openMobileSideRail}
                   >
-                    <Activity size={16} strokeWidth={1.85} />
-                    {t("reports:panelTitle")}
+                    {selectedTool === "menuRecolor" && menuRecolorRailTab === "channels" ? (
+                      <Palette size={16} strokeWidth={1.85} />
+                    ) : (
+                      <Activity size={16} strokeWidth={1.85} />
+                    )}
+                    {selectedTool === "menuRecolor" && menuRecolorRailTab === "channels"
+                      ? t("tools:menuRecolor.channelsTitle")
+                      : t("reports:panelTitle")}
                   </ToolGlassActionButton>
                 ) : null}
               </ToolActionBar>
@@ -1867,19 +1966,14 @@ function App() {
                 <span className="tm-nav-btn-icon" aria-hidden>
                   {showPackMetadataRail ? (
                     <Package size={16} strokeWidth={1.85} />
+                  ) : showMenuRecolorChannels ? (
+                    <Palette size={16} strokeWidth={1.85} />
                   ) : (
                     <Activity size={16} strokeWidth={1.85} />
                   )}
                 </span>
                 <span className="tm-nav-btn-copy">
-                  <span className="tm-nav-btn-label">
-                    {showPackMetadataRail
-                      ? packInstallerBridge.mode === "library" &&
-                        packInstallerBridge.libraryRailTab === "applied"
-                        ? t("tools:packInstaller.appliedPanelTitle")
-                        : t("tools:packInstaller.libraryPanelButtonLabel")
-                      : t("reports:panelTitle")}
-                  </span>
+                  <span className="tm-nav-btn-label">{railPanelTitle}</span>
                 </span>
                 <button
                   type="button"
@@ -1908,42 +2002,21 @@ function App() {
                       : reportPanelTransition.collapse
                 }
                 aria-expanded={!isReportCollapsed}
-                aria-label={
-                  isReportCollapsed
-                    ? showPackMetadataRail
-                      ? t("tools:packInstaller.expandPanelAria")
-                      : t("reports:expandPanelAria")
-                    : showPackMetadataRail
-                      ? t("tools:packInstaller.collapsePanelAria")
-                      : t("reports:collapsePanelAria")
-                }
-                title={
-                  isReportCollapsed
-                    ? showPackMetadataRail
-                      ? t("tools:packInstaller.showPanel")
-                      : t("reports:showPanel")
-                    : showPackMetadataRail
-                      ? t("tools:packInstaller.hidePanel")
-                      : t("reports:hidePanel")
-                }
+                aria-label={isReportCollapsed ? railExpandAria : railCollapseAria}
+                title={isReportCollapsed ? railShowTitle : railHideTitle}
                 disabled={reportPanelTransition.animating}
               >
                 <span className="tm-nav-btn-icon" aria-hidden>
                   {showPackMetadataRail ? (
                     <Package size={16} strokeWidth={1.85} />
+                  ) : showMenuRecolorChannels ? (
+                    <Palette size={16} strokeWidth={1.85} />
                   ) : (
                     <Activity size={16} strokeWidth={1.85} />
                   )}
                 </span>
                 <span className="tm-nav-btn-copy">
-                  <span className="tm-nav-btn-label">
-                    {showPackMetadataRail
-                      ? packInstallerBridge.mode === "library" &&
-                        packInstallerBridge.libraryRailTab === "applied"
-                        ? t("tools:packInstaller.appliedPanelTitle")
-                        : t("tools:packInstaller.libraryPanelButtonLabel")
-                      : t("reports:panelTitle")}
-                  </span>
+                  <span className="tm-nav-btn-label">{railPanelTitle}</span>
                 </span>
                 <span className="tm-shell-panel-title-chevron" aria-hidden>
                   <ChevronRight size={15} />
@@ -1952,6 +2025,35 @@ function App() {
             )}
             <div className="tm-report-body" aria-hidden={isReportCollapsed && !mobileShell}>
             <div className="tm-report-body-inner">
+            {selectedTool === "menuRecolor" ? (
+              <div className="tm-menu-recolor-rail-tabs" role="tablist">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={menuRecolorRailTab === "channels"}
+                  className={`tm-menu-recolor-rail-tab${
+                    menuRecolorRailTab === "channels" ? " is-active" : ""
+                  }`}
+                  onClick={() => setMenuRecolorRailTab("channels")}
+                >
+                  <Palette size={14} strokeWidth={1.85} aria-hidden />
+                  {t("tools:menuRecolor.channelsTab")}
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={menuRecolorRailTab === "output"}
+                  className={`tm-menu-recolor-rail-tab${
+                    menuRecolorRailTab === "output" ? " is-active" : ""
+                  }`}
+                  onClick={() => setMenuRecolorRailTab("output")}
+                >
+                  <Activity size={14} strokeWidth={1.85} aria-hidden />
+                  {t("reports:panelTitle")}
+                </button>
+              </div>
+            ) : null}
+            <div id="tm-menu-recolor-channels" hidden={!showMenuRecolorChannels} />
             {showPackMetadataRail ? (
               <PackInstallerMetadataSidebar
                 bridge={packInstallerBridge}
@@ -1971,7 +2073,7 @@ function App() {
                 onCommitAppliedEntries={packInstallerSidebarActions?.commitAppliedEntries}
               />
             ) : null}
-            {!showPackMetadataRail && loadError ? (
+            {!showPackMetadataRail && !showMenuRecolorChannels && loadError ? (
               <div className="tm-report-alert tm-report-alert-error" role="alert">
                 <AlertCircle size={15} strokeWidth={2} />
                 <div className="tm-report-alert-copy">
@@ -1982,7 +2084,7 @@ function App() {
                 </div>
               </div>
             ) : null}
-            {!showPackMetadataRail && runError ? (
+            {!showPackMetadataRail && !showMenuRecolorChannels && runError ? (
               <div className="tm-report-alert tm-report-alert-error" role="alert">
                 <AlertCircle size={15} strokeWidth={2} />
                 <div className="tm-report-alert-copy">
@@ -1993,7 +2095,7 @@ function App() {
                 </div>
               </div>
             ) : null}
-            {!showPackMetadataRail && !report ? (
+            {!showPackMetadataRail && !showMenuRecolorChannels && !report ? (
               <div className="tm-report-empty">
                 <span className="tm-report-empty-icon" aria-hidden>
                   <Activity size={22} strokeWidth={1.75} />
@@ -2006,7 +2108,7 @@ function App() {
                 </p>
               </div>
             ) : null}
-            {!showPackMetadataRail && report ? (
+            {!showPackMetadataRail && !showMenuRecolorChannels && report ? (
               <>
                 <div className={`tm-report-summary tm-report-summary-${reportState}`}>
                   <div className="tm-report-summary-head">

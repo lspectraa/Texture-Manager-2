@@ -6,7 +6,7 @@ Frontend wrappers: `src/services/`. Commands: `src-tauri/src/lib.rs`. Architectu
 
 `tauriOperations.ts` → `get_phase_defaults` / `run_operation` / `cancel_operation` (see [[architecture]] section 3).
 
-Used by: Splitter, Merger, Porter (`porterSplitter`), Randomizer, Convert, Upscaler, Glow Maker (run), Geode Buttons (run).
+Used by: Splitter, Merger, Porter (`porterSplitter`), Randomizer, Convert, Upscaler, Glow Maker (run), Geode Buttons (run), Menu Recolor (run).
 
 ## Dedicated paths
 
@@ -17,6 +17,7 @@ Used by: Splitter, Merger, Porter (`porterSplitter`), Randomizer, Convert, Upsca
 | `tauriIconEditor.ts` | Icon sheet edit | [[architecture]] |
 | `tauriIconGlow.ts` / `tauriGlowMaker.ts` | Glow previews | [[architecture]] |
 | `tauriGeodeButtons.ts` | Template index/preview + `get_game_files_layout` | [[architecture]] |
+| `tauriMenuRecolor.ts` | `menu_recolor_default_input_cmd` (cached menu sheets and standalone PNGs; reuses that cache on open, including when Geometry Dash is not detected), discover, thumbs. Run uses `run_operation` | [[architecture]] |
 | `tauriParticleEditor.ts` | Particle open/save/texture/preview | [[architecture]] |
 | `tauriPicker.ts` | Android SAF / desktop dialogs | [[architecture]] |
 | `tauriMobileFs.ts` | Import, allocate output, zip export | [[architecture]] |

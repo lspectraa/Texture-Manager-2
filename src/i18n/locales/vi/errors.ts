@@ -24,6 +24,7 @@ const errors: AppLocaleResources["errors"] = {
     convertVersionRequired: "Chuyển sang phiên bản mới cần phiên bản game trước đó.",
     randomizerPathsRequired: "Xáo trộn cần cả thư mục đầu vào và đầu ra.",
     geodeButtonsPathsRequired: "Tạo nút Geode cần cả thư mục đầu vào và đầu ra.",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Chưa tạo yêu cầu thao tác.",
   },
   operation: {

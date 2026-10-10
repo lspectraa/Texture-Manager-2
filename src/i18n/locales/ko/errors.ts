@@ -22,6 +22,7 @@ const errors = {
     randomizerPathsRequired: "랜덤라이저에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",
     geodeButtonsPathsRequired:
       "Geode 버튼 만들기에는 입력 디렉터리와 출력 디렉터리가 모두 필요합니다.",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "생성된 작업 요청이 없습니다.",
   },
   operation: {

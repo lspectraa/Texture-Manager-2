@@ -127,6 +127,7 @@ flowchart LR
 | `randomizer` | `randomizer` | Seeded icon sheet shuffle | `Randomized/` |
 | `glowMaker` | `glowMaker` | Batch generates missing `_glow_*` frames | `GeneratedGlow/` |
 | `geodeButtons` | `geodeButtons` | Recolor Geode button sprite families with HSV adjustments | Tool output dir |
+| `menuRecolor` | `menuRecolor` | Hue-band recolor of discovered menu sprites, with per-sprite overrides | Tool output dir |
 | `upscaler` | `upscaler` | AI upscale pipeline with sidecars (desktop only) | `Upscaled/` |
 
 - **Concurrency**: Upscaler concurrency is strictly clamped to `1`. Other operations clamp sheet concurrency between 1 and 64 (default `5` from settings).
@@ -147,6 +148,26 @@ flowchart LR
 ### Geode Buttons (Hybrid)
 - **Files**: `src/components/tools/GeodeButtonsToolPanel.tsx`, `src/services/tauriGeodeButtons.ts`, `src-tauri/src/core/geode_buttons.rs`.
 - Resolves BlankSheet templates from GD `Resources` or Android Geode media. Generates HSV family variations. On Android, prefers Geode media over split-cache.
+- Whole-sprite HSV lives in `src-tauri/src/core/color.rs` (`apply_hsv_delta`). Geode Buttons behavior is unchanged.
+
+### Menu Recolor
+- **Files**: `src/components/tools/MenuRecolorToolPanel.tsx`, `src/services/tauriMenuRecolor.ts`, `src-tauri/src/core/menu_recolor.rs`, `src-tauri/src/core/color.rs`.
+- Opening the tool applies the cached default menu folder the same way Geode Buttons applies its default input directory (`menu_recolor_default_input_cmd`). Sheets are resolved with `find_current_sheet_for_input` (Resources, then `geode.loader`) and split with `ensure_sheet_split_cached`. That cache holds only the default gamesheets (GJ_GameSheet03 and 04, Launch Sheet, Gauntlet, shop sheets, and Geode loader sheets when present). The unnumbered `GJ_GameSheet` and `GJ_GameSheet02` are exempt and are not discovered or recolored. Matching standalone PNGs are included (`GJ_button_*`, squares including `GJ_squareB_01`, fonts, sliders, `edit_barBG_001`, `loadingCircle`, `smallDot`, Geode buttons). The Menus rule set also covers the menu labels, ropes, corners, completion banners, and mode buttons that menu packs recolor; stars, coins, and the other symbol sprites stay in their own set. High (`-uhd`) is preferred, then medium (`-hd`), then low. A manifest skips the rebuild when those vanilla files are unchanged, and an existing cache is reused even when Geometry Dash is not detected on that open. A custom folder replaces that default for the visit and is not copied into the cache. Split-cache folders keep an orphan plist so loose frames still get a `sheet:<stem>` tag.
+- Discovers plist frames and loose PNGs, tags them (`chrome`, `symbols`, `faces`, `font`, `editor`, `shop`, `gauntlet`, `objects`, `fx`, `icons`, `geode`, `logos`, `sheet:<stem>`), and applies a rule set plus per-sprite overrides. Menus is structural buttons, panels, squares, sliders, labels, ropes, corners, completion banners, the green/cyan/pink menu arrows, the info icon, the pause-menu Build/Delete/Edit buttons, the Geometry Dash wordmark, the Lost Gauntlets label, Geode's Blank Sheet, and the API sheet mod-list frames and update circles. GameSheet03 controller buttons, shard title plates, the name prompt, the ad rope, the white achievement glow, and the video, NCS, paint, clean-pause, folder, checkpoint, remove-checkpoint, and level-leaderboard buttons stay out of that set. Stars, coins, locks, and other symbol sprites stay in their own set.
+- Grid filters: search, sheet (including Standalone PNGs), graphics level (low / medium `-hd` / high `-uhd`; default high), included-only.
+- Color is a weighted HSV band mixer with Lightroom hue centers (Neutral and Gold locks on by default). Each band has separate lower-hue and higher-hue falloff. Green starts at 56° on both sides; the other bands start at 40°. Value uses `apply_value_delta_rgb`. `points` stays empty. TS (`menuRecolorColor.ts`) and Rust (`color.rs`) stay aligned.
+- An excluded sprite is left unchanged, including any custom override. Unchecking include, switching rule sets, and loading a recipe drop overrides for sprites that are not included.
+- The right-rail Color Mixer edits the eight Lightroom bands (red through magenta). Each band's falloff is two widths, lower hues and higher hues (8°–90°, green starting at 56° and the others at 40°), drawn on a hue-colored track. Neutral and gold stay in the recipe as locks, not as mixer channels. Channels is the tab shown when the tool opens. Clicking a sprite writes a custom override seeded from its existing custom recipe, or from the global recipe, and the mixer edits that override. With no sprite selected the mixer edits the global recipe. Clicking outside the grid and mixer clears the selection.
+- Thumb batches reuse a per-input discover/decode session and prefer direct PNG reads from the split cache. Writes split PNGs that are in the apply set and differ from the source.
+
+```mermaid
+flowchart LR
+  Input[input dir] --> Discover[menu_recolor discover]
+  Discover --> Tags[tag and rule set]
+  Tags --> Recipe[ColorRecipe plus overrides]
+  Recipe --> Apply[apply_color_recipe]
+  Apply --> Write[changed PNGs]
+```
 
 ---
 

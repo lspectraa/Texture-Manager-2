@@ -1,10 +1,13 @@
 use std::path::Path;
 
+use crate::core::color::ColorRecipe;
 use crate::core::contracts::{
     phase_defaults, ConvertToNewVersionOptions, GeodeButtonsOptions, GlowMakerOptions,
-    MergerOptions, OperationKind, OperationOptions, OperationPlan, OperationRequest, PorterOptions,
-    RandomizerOptions, SplitterOptions, UpscalerModel, UpscalerOptions,
+    MenuRecolorOptions, MenuRecolorRuleSet, MergerOptions, OperationKind, OperationOptions,
+    OperationPlan, OperationRequest, PorterOptions, RandomizerOptions, SplitterOptions,
+    UpscalerModel, UpscalerOptions,
 };
+use crate::core::menu_recolor::normalize_menu_recolor_options;
 use crate::core::errors::AppError;
 use crate::core::safe_fs::{ensure_user_directory_path, parse_user_absolute_path};
 
@@ -100,6 +103,18 @@ pub fn build_operation_plan(request: OperationRequest) -> Result<OperationPlan, 
             }
             None => OperationOptions::Upscaler(defaults.upscaler),
             Some(_) => return Err(AppError::InvalidOperation("upscaler options mismatch")),
+        },
+        OperationKind::MenuRecolor => match request.options {
+            Some(OperationOptions::MenuRecolor(existing)) => {
+                OperationOptions::MenuRecolor(normalize_menu_recolor_options(existing))
+            }
+            None => OperationOptions::MenuRecolor(MenuRecolorOptions {
+                rule_set: MenuRecolorRuleSet::MenuChrome,
+                recipe: ColorRecipe::identity(),
+                overrides: std::collections::BTreeMap::new(),
+                includes: std::collections::BTreeMap::new(),
+            }),
+            Some(_) => return Err(AppError::InvalidOperation("menu recolor options mismatch")),
         },
     };
 

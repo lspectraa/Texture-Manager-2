@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Scissors,
   Shuffle,
+  Palette,
   Sparkles,
   Wand2,
   WandSparkles,
@@ -24,6 +25,7 @@ export type AppToolId =
   | "glowMaker"
   | "convertToNewVersion"
   | "geodeButtons"
+  | "menuRecolor"
   | "texturePackInstaller"
   | "particleEditor"
   | "upscaler";
@@ -76,6 +78,13 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         shortLabel: "tools.geodeButtons.shortLabel",
         description: "tools.geodeButtons.description",
         icon: Sparkles,
+      },
+      {
+        id: "menuRecolor",
+        label: "tools.menuRecolor.label",
+        shortLabel: "tools.menuRecolor.shortLabel",
+        description: "tools.menuRecolor.description",
+        icon: Palette,
       },
       {
         id: "particleEditor",

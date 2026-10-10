@@ -5,13 +5,23 @@ type ToolFieldProps = {
   hint?: string;
   htmlFor?: string;
   compact?: boolean;
+  className?: string;
   children: ReactNode;
 };
 
-export function ToolField({ label, hint, htmlFor, compact = false, children }: ToolFieldProps) {
+export function ToolField({
+  label,
+  hint,
+  htmlFor,
+  compact = false,
+  className,
+  children,
+}: ToolFieldProps) {
   return (
     <label
-      className={`tm-tool-field${compact ? " tm-tool-field-compact" : ""}`}
+      className={`tm-tool-field${compact ? " tm-tool-field-compact" : ""}${
+        className ? ` ${className}` : ""
+      }`}
       htmlFor={htmlFor}
     >
       <span className="tm-tool-field-label">

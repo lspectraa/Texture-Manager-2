@@ -23,6 +23,7 @@ const errors = {
     randomizerPathsRequired: "Randomizer benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     geodeButtonsPathsRequired:
       "„Geode-Buttons erstellen“ benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
+    menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Es wurde keine Vorgangsanfrage erstellt.",
   },
   operation: {

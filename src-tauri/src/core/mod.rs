@@ -1,3 +1,4 @@
+pub mod color;
 pub mod contracts;
 pub mod convert_to_new_version;
 pub mod discovery;
@@ -13,6 +14,7 @@ pub mod icon_editor;
 pub mod image_alpha;
 pub mod image_finish;
 pub mod image_io;
+pub mod menu_recolor;
 pub mod merger;
 pub mod mobile_fs;
 pub mod operations;

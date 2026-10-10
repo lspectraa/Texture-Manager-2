@@ -77,6 +77,11 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Botones de Geode",
       description: "Crear el gamesheet de botones de menú de Geode",
     },
+    menuRecolor: {
+      label: "Menu Recolor",
+      shortLabel: "Recolor",
+      description: "Recolor menu sprites with hue bands.",
+    },
     particleEditor: {
       label: "Editor de partículas",
       description: "Crea y ajusta efectos de partículas.",
