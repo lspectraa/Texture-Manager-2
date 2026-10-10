@@ -1763,9 +1763,9 @@ mod tests {
             Arc::new(AtomicBool::new(false)),
         )
         .expect("run");
-        assert!(report.files_processed >= 2, "processed {}", report.files_processed);
+        assert_eq!(report.files_processed, 1, "processed {}", report.files_processed);
         assert!(output.join("GJ_GameSheet03").join("GJ_button_01.png").is_file());
-        assert!(output.join("chatFont_01.png").is_file());
+        assert!(!output.join("chatFont_01.png").exists());
         assert!(!output.join("diffIcon_05_btn_001-uhd.png").exists());
         assert!(!output.join("icons").join("player_01.png").exists());
         assert!(!output.join("whiteShine.png").exists());

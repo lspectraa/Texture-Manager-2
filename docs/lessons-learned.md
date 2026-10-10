@@ -20,7 +20,7 @@ Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
 - Context: first-pass Menu Recolor (hue-band mixer, grid preview, batch write)
 - Mistake or surprise: the write path lives in `src-tauri/src/core/color.rs` and the tile preview lives in `src/domain/menuRecolorColor.ts`. They are two copies of the same mixer. Create Geode Buttons now calls `apply_hsv_delta` from `color.rs`; that function has to stay behavior-identical to the old in-file version.
-- What to do next time: change band centers, neutral/gold thresholds, and Value application in both files together and keep the gray-lock, gold-lock, hue-wrap, and alpha tests. Menu chrome does not exclude `font`. `points` stays `[]`. Do not add a sprite catalog or HD/UHD grouping.
+- What to do next time: change band centers, neutral/gold thresholds, and Value application in both files together and keep the gray-lock, gold-lock, hue-wrap, and alpha tests. Menu chrome excludes `font` (Fonts is its own rule set). `points` stays `[]`. Do not add a sprite catalog or HD/UHD grouping.
 - Files involved: `src-tauri/src/core/color.rs`, `src-tauri/src/core/menu_recolor.rs`, `src/domain/menuRecolorColor.ts`, `src/components/tools/MenuRecolorToolPanel.tsx`
 
 ### 2026-09-06 — Declare vendor-prefixed CSS before standard properties to avoid minifier stripping
