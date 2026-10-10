@@ -1073,6 +1073,7 @@ pub fn run() {
             Ok(())
         })
         .manage(OperationCancel::default())
+        // ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md
         .invoke_handler(tauri::generate_handler![
             get_phase_defaults,
             get_app_settings,

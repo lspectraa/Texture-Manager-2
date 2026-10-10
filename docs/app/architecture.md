@@ -1,6 +1,8 @@
 # Architecture and Systems
 
-Comprehensive guide to Texture Manager 2 internal systems, pipelines, and architecture.
+Single systems guide for Texture Manager 2. Keep new subsystem detail in this file. Do not add `docs/app/systems/*.md`.
+
+Product shape, screen layout, and the tool catalog stay in [[purpose-and-flows]], [[layout]], and [[tools]] until a human asks to fold them here. IPC: [[invoke-surface]]. Env names: [[config-env]]. Release: [[publish]].
 
 ```mermaid
 flowchart TB

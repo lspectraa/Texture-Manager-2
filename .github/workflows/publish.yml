@@ -50,6 +50,12 @@ jobs:
       - name: Fetch upscaler ncnn sidecars and models
         run: node ./scripts/fetch-upscaler-binaries.mjs
 
+      # Ad-hoc identity only. Real Developer ID certs stay unset until the
+      # owner enrolls; do not add APPLE_CERTIFICATE or notarization secrets here.
+      - name: Use ad-hoc macOS code signing
+        if: matrix.platform == 'macos-latest'
+        run: echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+
       - name: Build installer and draft GitHub release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -69,11 +75,77 @@ jobs:
             - **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
             - **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
             - **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+            ### macOS
+            These DMGs are ad-hoc signed and are not notarized. After copying the app to Applications, macOS usually shows an unidentified-developer warning: right-click **Texture Manager 2** and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**.
+
+            macOS: If the app says it's damaged or won't open after installing from the DMG, Gatekeeper is blocking the download because the build isn't notarized. Open Terminal and run `xattr -cr "/Applications/Texture Manager 2.app"`, then open Texture Manager 2 again.
           releaseDraft: true
           prerelease: false
           includeUpdaterJson: true
           updaterJsonPreferNsis: false
           args: ${{ matrix.args }}
+
+      # macOS runners ship bash 3.2. Windows skips this step.
+      # Tauri removes the loose macos/*.app after DMG creation, so verify the
+      # .app inside each DMG (and any loose .app that is still present).
+      - name: Verify macOS code signature
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          verify_app() {
+            local app="$1"
+            local details
+            echo "Verifying ${app}"
+            codesign --verify --deep --strict --verbose=2 "$app"
+            # codesign -dv writes details to stderr
+            details="$(codesign -dv --verbose=2 "$app" 2>&1)"
+            printf '%s\n' "$details"
+            if ! printf '%s\n' "$details" | grep -q '^Signature='; then
+              echo "codesign -dv did not report Signature= for ${app}"
+              return 1
+            fi
+            printf '%s\n' "$details" | grep '^Signature='
+          }
+
+          # Loose .app is optional: tauri cleans it after DMG creation.
+          while IFS= read -r -d '' app; do
+            verify_app "$app"
+          done < <(find src-tauri/target -type d -name '*.app' -path '*bundle/macos*' -print0)
+
+          dmg_count=0
+          while IFS= read -r -d '' dmg; do
+            dmg_count=$((dmg_count + 1))
+            mount="$(mktemp -d)"
+            # Capture mount path into the trap so EXIT always detaches, even on set -e failure.
+            # shellcheck disable=SC2064
+            trap 'hdiutil detach "'"$mount"'" >/dev/null 2>&1 || true; rmdir "'"$mount"'" 2>/dev/null || true' EXIT
+            echo "Attaching ${dmg} at ${mount}"
+            hdiutil attach -nobrowse -readonly -mountpoint "$mount" "$dmg"
+            found=0
+            for app in "$mount"/*.app; do
+              if [ ! -d "$app" ]; then
+                continue
+              fi
+              found=1
+              verify_app "$app"
+            done
+            if [ "$found" -eq 0 ]; then
+              echo "DMG contains no .app: ${dmg}"
+              exit 1
+            fi
+            hdiutil detach "$mount"
+            rmdir "$mount" || true
+            trap - EXIT
+          done < <(find src-tauri/target -type f -name '*.dmg' -path '*bundle/dmg*' -print0)
+
+          if [ "$dmg_count" -eq 0 ]; then
+            echo "No DMG found under src-tauri/target"
+            find src-tauri/target -type f -name '*.dmg' -print || true
+            exit 1
+          fi
 
   publish-android:
     runs-on: ubuntu-latest
@@ -86,6 +158,11 @@ jobs:
         - **macOS (Apple Silicon - M1/M2/M3/M4):** Download `Texture-Manager-2_..._aarch64.dmg`.
         - **macOS (Intel):** Download `Texture-Manager-2_..._x64.dmg`.
         - **Android:** Download `Texture-Manager-2-...-android-aarch64.apk`.
+
+        ### macOS
+        These DMGs are ad-hoc signed and are not notarized. After copying the app to Applications, macOS usually shows an unidentified-developer warning: right-click **Texture Manager 2** and choose **Open**, or use **System Settings → Privacy & Security → Open Anyway**.
+
+        macOS: If the app says it's damaged or won't open after installing from the DMG, Gatekeeper is blocking the download because the build isn't notarized. Open Terminal and run `xattr -cr "/Applications/Texture Manager 2.app"`, then open Texture Manager 2 again.
     steps:
       - uses: actions/checkout@v5
 

@@ -1,16 +1,13 @@
 # Definition of Done
 
-Do not claim the task is done until every applicable item is checked. The human confirms the list.
+Use this list on a large change or when the human asks. Large and major are the same bar ([[pre-review-qa]]). Do not paste it into routine replies. No default git.
 
-- [ ] IDE plan was approved, or the human explicitly skipped planning
-- [ ] Change is scoped to the requested task — no drive-by refactors
-- [ ] No hardcoded secrets, tokens, or environment-specific credentials
-- [ ] Magic numbers and unexplained constants are named or documented
-- [ ] Existing tests still pass (`npm test`; `cargo test` in `src-tauri/` when Rust changed); new behavior has coverage if this area is already tested
-- [ ] Docs this change made wrong were updated
-- [ ] All servers, background processes, and application runs started by the agent have been stopped
-- [ ] Human has seen the diff and will open the PR themselves
+- Change is scoped to the requested task
+- No secrets or environment-specific credentials in source
+- Tests still pass where this area is already tested (`npm test`; `cargo test` in `src-tauri/` when Rust changed — [[run-test-lint]])
+- Docs updated only if contracts or behavior changed
+- High-impact unspecified changes reported as `## WARNING` plus a `---` rule ([[report-major-changes]])
+- Hardcoded user-facing strings, magic values, and inline mappings reported as the `## WARNING` variant ([[report-hardcoded-strings]])
+- Processes this session started have been stopped ([[stop-what-you-start]])
 
-If the UI changed, verify the user-visible path against the running app ([[verify]]) — Vitest for logic that already has unit tests. If this vault was touched, notes stay human-readable and [[playbook]] still points at the right files.
-
-Opening, merging, and deploying stay human. Formal reviews (such as [[pre-review-qa]]) are conducted only at the end of major changes, not on minor tasks or routine updates. Git checks are only done if it needs to review earlier versions, not by default.
+The human opens the PR. After a large change, run [[pre-review-qa]] before reporting done. Do not wait to be asked. Also run it when asked. Skip it on a small edit. If the UI changed, check the running app once ([[verify]]).

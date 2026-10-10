@@ -772,6 +772,7 @@ function App() {
     };
   }, [settingsHydrated, needsOnboarding, runUpdateCheck]);
 
+  // ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md
   const executeSelectedOperation = async (): Promise<void> => {
     setRunError(null);
     setReport(null);
@@ -1142,6 +1143,7 @@ function App() {
 
   const navigateTool = (tool: PrimaryTool): void => {
     if (tool !== "home" && tool !== "settings" && tool !== "about") {
+      // ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md
       if (isUpcomingTool(tool) || (mobileShell && isDesktopOnlyTool(tool))) {
         return;
       }
@@ -1219,6 +1221,7 @@ function App() {
   const isPackInstaller = selectedTool === "texturePackInstaller";
   const isToolPanel =
     !isIconEditor && !isParticleEditor && !isHome && !isSettings && !isAbout;
+  // ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md
   const showRunAction = isToolPanel && !isPackInstaller;
   const showOperationAndReport =
     !isIconEditor &&
@@ -1487,6 +1490,7 @@ function App() {
           />
         );
       case "upscaler":
+        // ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md
         if (mobileShell) {
           return (
             <div className="tm-tool-page tm-tool-page-sky">
@@ -1549,6 +1553,7 @@ function App() {
           />
         );
       case "convertToNewVersion":
+        // ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md
         if (mobileShell) {
           return (
             <div className="tm-tool-page tm-tool-page-sky">

@@ -6,7 +6,7 @@
 
 ## Context
 
-What problem or constraint forced a choice?
+What problem forced a choice?
 
 ## Options
 
@@ -15,10 +15,15 @@ What problem or constraint forced a choice?
 
 ## Decision
 
-We chose option because one or two sentences.
+We chose option because …
+
+## Code anchors
+
+Comments that point here, one per decision site:
+
+- `path/to/file` — `ADR-NNN: … See docs/adrs/NNN-short-slug.md`
 
 ## Consequences
 
 - Good
 - Bad / follow-up
-- What the next agent should not redo

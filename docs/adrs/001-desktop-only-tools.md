@@ -17,6 +17,13 @@ Android shares most tools but cannot host Vulkan AI sidecars or reliably reach t
 
 We chose option 2. `DESKTOP_ONLY_TOOLS` is `upscaler` and `convertToNewVersion`; mobile listing helpers omit them; App shows a desktop-only status string if reached.
 
+## Code anchors
+
+- `src/config/toolNavigation.ts` (`DESKTOP_ONLY_TOOLS`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+- `src/App.tsx` (`navigateTool`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+- `src/App.tsx` (case `upscaler`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+- `src/App.tsx` (case `convertToNewVersion`) — `ADR-001: desktop-only Upscaler and Convert. See docs/adrs/001-desktop-only-tools.md`
+
 ## Consequences
 
 - Good: honest capability surface (9 mobile tools).

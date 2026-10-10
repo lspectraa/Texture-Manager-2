@@ -344,6 +344,7 @@ fn exe_suffix() -> &'static str {
     }
 }
 
+// ADR-002: Waifu2x for gamesheets, Real-ESRGAN for icons. See docs/adrs/002-upscaler-engine-split.md
 fn binary_base_name(model: UpscalerModel) -> &'static str {
     match model {
         UpscalerModel::RealesrganAnime => "realesrgan-ncnn-vulkan",

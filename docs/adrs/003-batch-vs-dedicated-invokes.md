@@ -1,4 +1,6 @@
-# ADR 006 — Batch `run_operation` vs dedicated invokes
+# ADR 003 — Batch `run_operation` vs dedicated invokes
+
+An earlier draft index called this ADR 006. The filename number is the id.
 
 - Status: accepted
 - Date: 2026-09-04
@@ -16,6 +18,13 @@ Some tools are folder-in/folder-out batch jobs with a shared progress/report rai
 ## Decision
 
 We chose option 2. Batch tools go through `tauriOperations` / `executor`. Interactive tools use dedicated wrappers. Geode Buttons is hybrid (preview dedicated; generate via batch Run).
+
+## Code anchors
+
+- `src/services/tauriOperations.ts` (`runOperation`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
+- `src/App.tsx` (`executeSelectedOperation`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
+- `src/App.tsx` (`showOperationAndReport`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
+- `src-tauri/src/lib.rs` (`invoke_handler`) — `ADR-003: batch run_operation vs dedicated invokes. See docs/adrs/003-batch-vs-dedicated-invokes.md`
 
 ## Consequences
 

@@ -3,6 +3,7 @@
   "hooks": {
     "sessionStart": [
       {
+        "command": "node .cursor/hooks/session-start.cjs"
       }
     ]
   }

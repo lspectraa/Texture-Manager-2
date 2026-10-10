@@ -2,6 +2,20 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-10-09 — Large features end with QA; parallel by default; hardcoded values warned
+
+- Context: agents finished large features without the pre-review checklist, walked independent work serially, and left inline copy and lookup maps unremarked
+- Mistake: "review when asked" let large work skip [[pre-review-qa]]; sub-agents stayed unused; hardcoded strings had no WARNING variant
+- What to do next time: run pre-review QA before reporting a large change done; launch sub-agents and parallel tool calls unless steps depend or share mutable state ([[parallel-operations]]); report new inline strings and mappings with the [[report-hardcoded-strings]] block
+- Files involved: `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/agent-knowledge-base.mdc`, `docs/processes/pre-review-qa.md`, `docs/rules/parallel-operations.md`, `docs/rules/report-hardcoded-strings.md`
+
+### 2026-10-05 — Unsigned macOS bundles show as damaged on Apple Silicon
+
+- Context: GitHub release DMGs built by `publish.yml` with no Apple signing identity
+- Mistake or surprise: Tauri 2 skips `.app` signing when neither `bundle.macOS.signingIdentity` nor `APPLE_SIGNING_IDENTITY` is set. The binary stays linker-signed only, with no sealed `CodeResources`. Quarantined Apple Silicon installs then fail with "damaged" until `xattr -cr`.
+- What to do next time: keep `signingIdentity` set to `-` for ad-hoc signing, and keep the macOS `codesign --verify --deep --strict` step. Ad-hoc is not notarization; document the unidentified-developer prompt and the `xattr` fallback. Do not treat updater `TAURI_SIGNING_PRIVATE_KEY` as macOS code signing.
+- Files involved: `src-tauri/tauri.conf.json`, `.github/workflows/publish.yml`, `README.md`, `docs/app/publish.md`
+
 ### 2026-10-05 — Menu Recolor color math is duplicated on purpose
 
 - Context: first-pass Menu Recolor (hue-band mixer, grid preview, batch write)
@@ -27,8 +41,8 @@ Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
 - Context: agent latency, token bloat, and file read loops caused by vault fragmentation and mandatory pre-flight checklists
 - Mistake or surprise: prompting agents to pre-read multiple vault files before starting work added 15k–25k tokens of context and 15–30s of turn latency on every task; redundant alwaysApply rules and duplicate skill trees compounded the problem
-- What to do next time: enforce strict just-in-time doc lookups; keep rules concise and non-redundant; scope browser/node rules to UI globs; consolidate micro-notes into unified architecture guides; maintain skills directly in `.cursor/skills/`
-- Files involved: `AGENTS.md`, `.cursor/rules/agent-knowledge-base.mdc`, `.cursor/rules/ironbee-devtools-use.mdc`, `.cursor/hooks/session-start.cjs`, `docs/app/architecture.md`, `.cursor/skills/`
+- What to do next time: enforce strict just-in-time doc lookups; keep rules concise and non-redundant; scope browser/node rules to UI globs; consolidate micro-notes into unified architecture guides; keep one skill tree at `skills/` (do not copy bodies under `.cursor/skills/`)
+- Files involved: `AGENTS.md`, `.cursor/rules/agent-knowledge-base.mdc`, `.cursor/rules/ironbee-devtools-use.mdc`, `.cursor/hooks/session-start.cjs`, `docs/app/architecture.md`, `skills/`
 
 ### 2026-09-06 — Reviews only on major changes; no git checks by default
 
