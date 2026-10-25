@@ -564,6 +564,8 @@ fn ensure_sidecar_executable(_binary: &Path) {}
 
 /// waifu2x-ncnn-vulkan 2025 links OpenMP (`vcomp140.dll`). Copy it next to the sidecar.
 fn ensure_sidecar_runtime_dlls(binary: &Path) {
+    #[cfg(not(windows))]
+    let _ = binary;
     #[cfg(windows)]
     {
         const DLL: &str = "vcomp140.dll";

@@ -718,8 +718,19 @@ mod tests {
 
     const SUNIX_PLIST: &str = r"C:\Program Files (x86)\Steam\steamapps\common\Geometry Dash\geode\config\geode.texture-loader\packs\Sunix Arrow Particles\dragEffect.plist";
 
+    fn sample_plist_present(path: &str) -> bool {
+        if Path::new(path).is_file() {
+            return true;
+        }
+        eprintln!("skipping sample test; plist is not on this machine: {path}");
+        false
+    }
+
     #[test]
     fn verify_samples_knobbelboy_sibling_png() {
+        if !sample_plist_present(KNOBBELBOY_PLIST) {
+            return;
+        }
         let result = particle_editor_open(KNOBBELBOY_PLIST)
             .expect("particle_editor_open should succeed for Knobbelboy dragEffect.plist");
 
@@ -770,6 +781,9 @@ mod tests {
 
     #[test]
     fn verify_samples_sunix_texture_loads() {
+        if !sample_plist_present(SUNIX_PLIST) {
+            return;
+        }
         let result = particle_editor_open(SUNIX_PLIST)
             .expect("particle_editor_open should succeed for Sunix dragEffect.plist");
 
