@@ -402,7 +402,10 @@ mod tests {
 
     #[test]
     fn ensure_safe_relative_rejects_absolute_and_dotdot() {
-        assert!(ensure_safe_relative_path("..\\secret.png").is_err());
+        assert!(ensure_safe_relative_path("../secret.png").is_err());
+        // Backslash is a separator only on Windows; on Unix it is a literal character.
+        #[cfg(windows)]
+        assert!(ensure_safe_relative_path(r"..\secret.png").is_err());
         assert!(ensure_safe_relative_path("ok.png").is_ok());
     }
 

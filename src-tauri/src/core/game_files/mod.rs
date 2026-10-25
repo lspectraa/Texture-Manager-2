@@ -773,11 +773,6 @@ fn is_fixed_drive_letter(letter: char) -> bool {
 }
 
 #[cfg(not(windows))]
-fn is_fixed_drive_letter(_letter: char) -> bool {
-    true
-}
-
-#[cfg(not(windows))]
 fn steam_install_from_registry() -> Vec<PathBuf> {
     Vec::new()
 }
