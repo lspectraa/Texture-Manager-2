@@ -1,5 +1,6 @@
 //! Android native APK update check, download, and install.
 
+#[cfg(target_os = "android")]
 use serde::{Deserialize, Serialize};
 use tauri::{
   plugin::{Builder as PluginBuilder, TauriPlugin},
@@ -22,12 +23,14 @@ const PLATFORM_KEY: &str = "aarch64-linux-android";
 #[cfg(target_os = "android")]
 const DOWNLOAD_PROGRESS_EVENT: &str = "android-update-download-progress";
 
+#[cfg(target_os = "android")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CanInstallPackagesResponse {
   allowed: bool,
 }
 
+#[cfg(target_os = "android")]
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InstallApkRequest {

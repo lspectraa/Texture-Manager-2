@@ -1,5 +1,6 @@
 //! Android all-files access + SAF folder/file pickers.
 
+#[cfg(target_os = "android")]
 use serde::Deserialize;
 use tauri::{
   plugin::{Builder as PluginBuilder, TauriPlugin},
@@ -14,6 +15,7 @@ const ANDROID_PLUGIN_PACKAGE: &str = "com.spectra.texturemanager2";
 #[cfg(target_os = "android")]
 const ANDROID_PLUGIN_CLASS: &str = "StorageAccessPlugin";
 
+#[cfg(target_os = "android")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct CheckAllFilesAccessResponse {
@@ -36,18 +38,14 @@ pub struct AndroidStorageStatus {
   pub geode_path: Option<String>,
 }
 
-impl AndroidStorageStatus {
-  pub fn ready(&self) -> bool {
-    self.all_files_granted && self.geode_readable
-  }
-}
-
+#[cfg(target_os = "android")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PickPathResponse {
   path: Option<String>,
 }
 
+#[cfg(target_os = "android")]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct SavePickResponse {
@@ -56,18 +54,21 @@ struct SavePickResponse {
   needs_commit: bool,
 }
 
+#[cfg(target_os = "android")]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PickFolderRequest {
   import_to_sandbox: bool,
 }
 
+#[cfg(target_os = "android")]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PickFileRequest {
   extensions: Option<Vec<String>>,
 }
 
+#[cfg(target_os = "android")]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct SaveFileRequest {
@@ -75,6 +76,7 @@ struct SaveFileRequest {
   extensions: Option<Vec<String>>,
 }
 
+#[cfg(target_os = "android")]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct CommitSaveRequest {

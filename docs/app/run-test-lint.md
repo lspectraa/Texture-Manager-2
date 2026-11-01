@@ -2,7 +2,7 @@
 
 Node **>= 24** (`.nvmrc` / `package.json` engines). Package manager: **npm**. Check: `npm run check:env`.
 
-Rust **>= 1.88** (`src-tauri/Cargo.toml` `rust-version`; `zip` 9). CI uses stable via `dtolnay/rust-toolchain`.
+Rust **>= 1.90** (`src-tauri/Cargo.toml` `rust-version`; `tauri-plugin-updater` 2.14.1 / `zip` 9). CI uses stable via `dtolnay/rust-toolchain`.
 
 ## Day-to-day
 
