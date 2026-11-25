@@ -9,7 +9,7 @@ Source of truth: `.github/workflows/publish.yml`. Triggers: push tag `v*`, or `w
 | `publish-tauri` | Windows + macOS matrix | MSI; DMG arm64; DMG x64; draft GitHub release; desktop updater JSON |
 | `publish-android` | Ubuntu | arm64 APK + `android-latest.json` |
 
-Desktop job runs `npm ci` → `sync:version` → `fetch-upscaler-binaries` → `tauri-apps/tauri-action` with `includeUpdaterJson: true`.
+Desktop job runs `npm ci` → `sync:version` → `fetch-upscaler-binaries` → `tauri-apps/tauri-action` with `includeUpdaterJson: true`. The matrix `args` end with `-- --locked`.
 
 On macOS only, CI sets `APPLE_SIGNING_IDENTITY=-` before that action. `bundle.macOS.signingIdentity` in `src-tauri/tauri.conf.json` is also `"-"`, so local `tauri build` on a Mac ad-hoc signs the same way. `APPLE_SIGNING_IDENTITY` overrides the config value when a real Developer ID is supplied later. Windows and Android jobs do not set it.
 
@@ -23,7 +23,7 @@ flowchart LR
   dmg --> verify
 ```
 
-Android job builds with `npx tauri android build` (skips the npm `tauri` wrapper that auto-fetches upscaler binaries — intentional; Android has no upscaler sidecars).
+Android job builds with `npx tauri android build --apk --target aarch64 --ci -- --locked` (skips the npm `tauri` wrapper that auto-fetches upscaler binaries — intentional; Android has no upscaler sidecars). `--locked` is forwarded to Cargo so a release build cannot quietly re-resolve `Cargo.lock`.
 
 ## Version bump local sequence
 

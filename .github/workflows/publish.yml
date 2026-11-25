@@ -25,11 +25,11 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            args: "--bundles msi"
+            args: "--bundles msi -- --locked"
           - platform: macos-latest
-            args: "--target aarch64-apple-darwin --bundles dmg"
+            args: "--target aarch64-apple-darwin --bundles dmg -- --locked"
           - platform: macos-latest
-            args: "--target x86_64-apple-darwin --bundles dmg"
+            args: "--target x86_64-apple-darwin --bundles dmg -- --locked"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v5
@@ -261,7 +261,7 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dkotlin.compiler.execution.strategy=in-process"
         # Use `npx tauri` (not `npm run tauri`) to skip the desktop upscaler fetch wrapper.
         # `@v0` of tauri-action does not support `mobile: android`, so build here directly.
-        run: npx tauri android build --apk --target aarch64 --ci
+        run: npx tauri android build --apk --target aarch64 --ci -- --locked
 
       - name: Stop Gradle daemons
         if: always()

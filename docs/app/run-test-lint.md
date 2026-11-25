@@ -2,7 +2,7 @@
 
 Node **>= 24** (`.nvmrc` / `package.json` engines). Package manager: **npm**. Check: `npm run check:env`.
 
-Rust **>= 1.88** (`src-tauri/Cargo.toml` `rust-version`; `zip` 9). CI uses stable via `dtolnay/rust-toolchain`.
+Rust **>= 1.90** (`src-tauri/Cargo.toml` `rust-version`). Tauri 2.12.7 and its plugins declare 1.90, and `zip` 9.8.1 declares 1.89, so 1.88 cannot build this lockfile. `[package] resolver = "3"` makes `cargo update` skip crates that need a newer compiler. `npm run check:deps` fails when `rustc` is older than that floor. There is no `rust-toolchain.toml`: publish still installs stable with `dtolnay/rust-toolchain@stable`, including the Android and macOS targets that step adds.
 
 ## Day-to-day
 
@@ -18,11 +18,12 @@ Rust **>= 1.88** (`src-tauri/Cargo.toml` `rust-version`; `zip` 9). CI uses stabl
 | `npm run sync:version` | `package.json` → Cargo / Tauri |
 | `npm run tauri build` | Desktop installers (+ updater artifacts if signing env set) |
 | `npm run phase0:verify` | `check:env` + `build` |
+| `npm run check:deps` | MSRV, Tauri version floors, duplicate crates, `cargo audit`, `npm audit` (local; no Actions trigger) |
 | `npm run setup:updater-signing` | Local updater key helper |
 
 Also: `npm run dev` / `preview` (Vite only). VS Code / Cursor: **Tauri: Dev (Desktop)** in `.vscode/launch.json`.
 
-Rust unit tests: `cargo test` from `src-tauri/` (many `#[cfg(test)]` modules). Not wired into npm or CI.
+Rust unit tests: `cargo test --locked` from `src-tauri/` (many `#[cfg(test)]` modules). Not wired into npm or CI. `cargo audit` must be installed (`cargo install cargo-audit`) before `npm run check:deps`.
 
 ## Concurrent execution
 

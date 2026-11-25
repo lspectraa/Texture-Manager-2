@@ -6,7 +6,10 @@ description = "Geometry Dash texture tooling remake"
 authors = ["Spectra"]
 license = "GPL-3.0-or-later"
 edition = "2021"
-rust-version = "1.88"
+# Tauri 2.12.7 (and zip 9.8.1) declare a higher rust-version than 1.88.
+# resolver 3 makes `cargo update` skip crates that need a newer compiler.
+rust-version = "1.90"
+resolver = "3"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -31,13 +34,17 @@ name = "texture_manager_2_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
-tauri-build = { version = "2", features = [] }
+tauri-build = { version = "2.7.6", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2.12.7", features = [] }
 tauri-plugin-opener = "2.7.3"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# serde_with 3.25 locks a second jiff 1.0 tree (jiff-core, jiff-static, jiff-tzdb)
+# even though tauri-utils never enables the jiff features. Keep 3.24, which has
+# only the unused jiff 0.2 optional dependency, until upstream settles on one jiff.
+serde_with = "=3.24.0"
 image = { version = "0.25", features = ["tiff"] }
 plist = "1"
 flate2 = "1"

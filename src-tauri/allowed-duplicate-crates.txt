@@ -1,0 +1,57 @@
+# Activated crates that resolve to more than one version.
+# Generated from `cargo tree -d --locked --target all` (host plus every
+# target in the lockfile). `npm run check:deps` fails when this set changes.
+# jiff is not listed: serde_with is pinned to 3.24 so only unused jiff 0.2
+# remains, and tauri-utils does not enable that feature.
+base64 0.21.7 0.23.1
+bit-set 0.8.0 0.11.1
+bit-vec 0.8.0 0.10.2
+bitflags 1.3.2 2.13.2
+block-buffer 0.10.4 0.12.1
+core-foundation 0.9.4 0.10.1
+cpufeatures 0.2.17 0.3.1
+crypto-common 0.1.7 0.2.2
+cssparser 0.37.0 0.38.0
+digest 0.10.7 0.11.3
+dom_query 0.28.0 0.29.0
+getrandom 0.2.17 0.3.4 0.4.3
+hashbrown 0.12.3 0.17.2
+heck 0.4.1 0.5.0
+html5ever 0.39.0 0.40.1
+indexmap 1.9.3 2.14.2
+jni 0.21.1 0.22.4
+jni-sys 0.3.1 0.4.1
+markup5ever 0.39.0 0.40.0
+miniz_oxide 0.8.9 0.9.1
+phf 0.13.1 0.14.0
+phf_codegen 0.13.1 0.14.0
+phf_generator 0.13.1 0.14.0
+phf_macros 0.13.1 0.14.0
+phf_shared 0.13.1 0.14.0
+proc-macro-crate 1.3.1 2.0.2 3.5.0
+r-efi 5.3.0 6.0.0
+rand 0.9.5 0.10.4
+rand_core 0.9.5 0.10.1
+selectors 0.38.0 0.41.0
+serde_spanned 0.6.9 1.1.3
+servo_arc 0.4.3 0.5.0
+sha2 0.10.9 0.11.1
+string_cache 0.9.0 0.11.0
+string_cache_codegen 0.6.1 0.11.2
+syn 1.0.109 2.0.119 3.0.10
+thiserror 1.0.69 2.0.21
+thiserror-impl 1.0.69 2.0.21
+toml 0.8.2 1.2.2+spec-1.1.0
+toml_datetime 0.6.3 1.1.3+spec-1.1.0
+toml_edit 0.19.15 0.20.2 0.25.20+spec-1.1.0
+web_atoms 0.2.6 0.3.0
+windows-sys 0.45.0 0.52.0 0.61.2
+windows-targets 0.42.2 0.52.6
+windows_aarch64_gnullvm 0.42.2 0.52.6
+windows_aarch64_msvc 0.42.2 0.52.6
+windows_i686_gnu 0.42.2 0.52.6
+windows_i686_msvc 0.42.2 0.52.6
+windows_x86_64_gnu 0.42.2 0.52.6
+windows_x86_64_gnullvm 0.42.2 0.52.6
+windows_x86_64_msvc 0.42.2 0.52.6
+winnow 0.5.40 1.0.5
