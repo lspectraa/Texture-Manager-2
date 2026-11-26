@@ -2,6 +2,13 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-11-25 — MSRV is 1.90; dependency checks stay off Actions
+
+- Context: audit of the 2026-11-22 lockfile bump (zip 9.8, Tauri 2.12.7)
+- Mistake or surprise: `rust-version = "1.88"` was already false — `tauri` 2.12.7 declares 1.90. `serde_with` 3.25 records both `jiff` 0.2 and `jiff` 1.0 even though tauri-utils enables neither jiff feature. The only Actions trigger is the `v*` tag publish.
+- What to do next time: keep `resolver = "3"` and raise `rust-version` when a locked crate's rust-version rises. Do not add `rust-toolchain.toml` or a `pull_request` / `push` workflow; a toolchain file would override the stable toolchain (and its Android/macOS targets) that `publish.yml` installs. Run `npm run check:deps` by hand. Keep the `serde_with = "=3.24.0"` pin until one jiff major is enough. Pass `-- --locked` on publish Cargo builds. Name every ignored RustSec ID in `src-tauri/.cargo/audit.toml`.
+- Files involved: `src-tauri/Cargo.toml`, `src-tauri/.cargo/audit.toml`, `.github/workflows/publish.yml`, `scripts/check-deps.mjs`, `src-tauri/src/core/pack_installer.rs`
+
 ### 2026-10-09 — Large features end with QA; parallel by default; hardcoded values warned
 
 - Context: agents finished large features without the pre-review checklist, walked independent work serially, and left inline copy and lookup maps unremarked

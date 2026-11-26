@@ -2,7 +2,7 @@
 //! and scaffold new texture-loader packs.
 
 use std::fs::{self, File};
-use std::io;
+use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
@@ -29,6 +29,86 @@ const PACK_INSTALL_TEMP_DIR: &str = "pack-install-temp";
 const MAX_TREE_ENTRIES: usize = 400;
 /// How deep to search for a texture-loader `packs/` directory under a source root.
 const MAX_PACKS_DIR_SEARCH_DEPTH: usize = 6;
+/// Discovery extracts a zip before the user confirms the install, so these caps
+/// bound a hostile archive. 2 GiB of uncompressed bytes, 50k central-directory
+/// entries, and a ratio just under single-pass deflate's ~1032:1 ceiling.
+const MAX_ZIP_UNCOMPRESSED_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+const MAX_ZIP_ENTRIES: usize = 50_000;
+const MAX_ZIP_COMPRESSION_RATIO: u64 = 1024;
+
+#[derive(Clone, Copy, Debug)]
+struct ZipExtractLimits {
+    max_uncompressed_bytes: u64,
+    max_entries: usize,
+    max_compression_ratio: u64,
+}
+
+const DEFAULT_ZIP_EXTRACT_LIMITS: ZipExtractLimits = ZipExtractLimits {
+    max_uncompressed_bytes: MAX_ZIP_UNCOMPRESSED_BYTES,
+    max_entries: MAX_ZIP_ENTRIES,
+    max_compression_ratio: MAX_ZIP_COMPRESSION_RATIO,
+};
+
+#[cfg(test)]
+thread_local! {
+    static ZIP_EXTRACT_LIMITS_OVERRIDE: std::cell::Cell<Option<ZipExtractLimits>> =
+        const { std::cell::Cell::new(None) };
+}
+
+fn zip_extract_limits() -> ZipExtractLimits {
+    #[cfg(test)]
+    {
+        if let Some(limits) = ZIP_EXTRACT_LIMITS_OVERRIDE.with(|cell| cell.get()) {
+            return limits;
+        }
+    }
+    DEFAULT_ZIP_EXTRACT_LIMITS
+}
+
+#[cfg(test)]
+struct ZipLimitOverride;
+
+#[cfg(test)]
+impl ZipLimitOverride {
+    fn set(limits: ZipExtractLimits) -> Self {
+        ZIP_EXTRACT_LIMITS_OVERRIDE.with(|cell| cell.set(Some(limits)));
+        Self
+    }
+}
+
+#[cfg(test)]
+impl Drop for ZipLimitOverride {
+    fn drop(&mut self) {
+        ZIP_EXTRACT_LIMITS_OVERRIDE.with(|cell| cell.set(None));
+    }
+}
+
+/// Removes the discovery temp directory unless disarmed after the plan is built.
+struct PackInstallTempGuard {
+    path: Option<PathBuf>,
+    root: PathBuf,
+}
+
+impl PackInstallTempGuard {
+    fn new(path: PathBuf, root: PathBuf) -> Self {
+        Self {
+            path: Some(path),
+            root,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.path.take();
+    }
+}
+
+impl Drop for PackInstallTempGuard {
+    fn drop(&mut self) {
+        if let Some(path) = self.path.take() {
+            let _ = remove_dir_all_under_root(&path, &self.root);
+        }
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -248,11 +328,14 @@ pub fn discover_pack_install(
             .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"));
 
+    let mut temp_guard = None;
     let (work_root, temp_dir) = if is_zip {
         ensure_existing_user_file(&source)?;
         let temp = create_pack_install_temp_dir(layout)?;
+        let guard = PackInstallTempGuard::new(temp.clone(), pack_install_temp_root(layout));
         extract_zip_to_dir(&source, &temp)?;
         let discovered = resolve_discovery_root(&temp);
+        temp_guard = Some(guard);
         (discovered, Some(temp))
     } else {
         if !source.is_dir() {
@@ -265,6 +348,9 @@ pub fn discover_pack_install(
     };
 
     let units = discover_units(&work_root, layout)?;
+    if let Some(guard) = temp_guard.as_mut() {
+        guard.disarm();
+    }
     Ok(InstallPlan {
         source_path: source.to_string_lossy().into_owned(),
         work_root: work_root.to_string_lossy().into_owned(),
@@ -1151,32 +1237,101 @@ fn create_pack_install_temp_dir(layout: &GameFilesLayout) -> Result<PathBuf, App
     Ok(dir)
 }
 
+fn zip_open_error(zip_path: &Path, err: impl std::fmt::Display) -> AppError {
+    AppError::IoError(format!(
+        "failed to read zip `{}`: {err}",
+        shorten_path_for_display(zip_path)
+    ))
+}
+
+/// Keep `enclosed` lexical-relative to `dest`. `enclosed_name()` is the first
+/// filter; this rejects a future zip crate that hands back a prefix, root,
+/// `.`, or `..`, and rejects a join that leaves `dest`.
+fn safe_zip_entry_path(dest: &Path, enclosed: &Path) -> Result<PathBuf, AppError> {
+    for component in enclosed.components() {
+        match component {
+            Component::Normal(part) if !part.is_empty() && part != "." && part != ".." => {}
+            Component::Normal(_)
+            | Component::CurDir
+            | Component::ParentDir
+            | Component::RootDir
+            | Component::Prefix(_) => {
+                return Err(AppError::InvalidPath(
+                    "zip entry path is not a safe relative path",
+                ));
+            }
+        }
+    }
+    let out_path = dest.join(enclosed);
+    if !out_path.starts_with(dest) {
+        return Err(AppError::InvalidPath(
+            "zip entry path escapes the extract directory",
+        ));
+    }
+    Ok(out_path)
+}
+
 fn extract_zip_to_dir(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
+    let limits = zip_extract_limits();
     let file = File::open(zip_path).map_err(|err| {
         AppError::IoError(format!(
             "failed to open zip `{}`: {err}",
             shorten_path_for_display(zip_path)
         ))
     })?;
-    let mut archive = zip::ZipArchive::new(file).map_err(|err| {
-        AppError::IoError(format!(
-            "failed to read zip `{}`: {err}",
-            shorten_path_for_display(zip_path)
-        ))
-    })?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|err| zip_open_error(zip_path, err))?;
 
+    if archive.len() > limits.max_entries {
+        return Err(AppError::InvalidOperation(
+            "zip archive has too many entries",
+        ));
+    }
+
+    let mut declared_total = 0u64;
+    for i in 0..archive.len() {
+        let entry = archive
+            .by_index(i)
+            .map_err(|err| AppError::IoError(format!("failed to read zip entry {i}: {err}")))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let size = entry.size();
+        declared_total = declared_total.saturating_add(size);
+        if declared_total > limits.max_uncompressed_bytes {
+            return Err(AppError::InvalidOperation(
+                "zip archive exceeds the uncompressed size limit",
+            ));
+        }
+        let compressed = entry.compressed_size();
+        let ratio = if compressed == 0 {
+            if size == 0 {
+                0
+            } else {
+                u64::MAX
+            }
+        } else {
+            size / compressed
+        };
+        if ratio > limits.max_compression_ratio {
+            return Err(AppError::InvalidOperation(
+                "zip archive exceeds the compression ratio limit",
+            ));
+        }
+    }
+
+    let mut remaining = limits.max_uncompressed_bytes;
     for i in 0..archive.len() {
         let mut entry = archive
             .by_index(i)
             .map_err(|err| AppError::IoError(format!("failed to read zip entry {i}: {err}")))?;
-        let Some(enclosed) = entry.enclosed_name().map(|p| p.to_path_buf()) else {
+        let Some(enclosed) = entry.enclosed_name() else {
+            // enclosed_name() refused this name (absolute, `..`, or NUL).
             continue;
         };
         if enclosed.as_os_str().is_empty() {
             continue;
         }
-        ensure_no_parent_dir_components(&enclosed)?;
-        let out_path = dest.join(&enclosed);
+        let out_path = safe_zip_entry_path(dest, &enclosed)?;
 
         if entry.is_dir() {
             fs::create_dir_all(&out_path)?;
@@ -1185,6 +1340,10 @@ fn extract_zip_to_dir(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
 
         // Nested archives inside a package are ignored after extract; discovery
         // does not treat them as sources. Still extract non-zip content normally.
+        //
+        // Symlink entries are written as regular files that contain the link
+        // target text. This never creates a filesystem symlink, so a later
+        // entry cannot follow a link outside `dest`.
         if let Some(parent) = out_path.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -1194,7 +1353,18 @@ fn extract_zip_to_dir(zip_path: &Path, dest: &Path) -> Result<(), AppError> {
                 shorten_path_for_display(&out_path)
             ))
         })?;
-        io::copy(&mut entry, &mut outfile)?;
+        let copied = io::copy(
+            &mut (&mut entry).take(remaining.saturating_add(1)),
+            &mut outfile,
+        )?;
+        if copied > remaining {
+            drop(outfile);
+            let _ = fs::remove_file(&out_path);
+            return Err(AppError::InvalidOperation(
+                "zip archive exceeds the uncompressed size limit",
+            ));
+        }
+        remaining -= copied;
     }
     Ok(())
 }
@@ -2749,5 +2919,223 @@ mod tests {
         )
         .expect_err("invalid metadata");
         assert!(err.to_string().contains("invalid pack.json metadata"));
+    }
+
+    fn temp_child_count(layout: &GameFilesLayout) -> usize {
+        let root = pack_install_temp_root(layout);
+        if !root.exists() {
+            return 0;
+        }
+        fs::read_dir(root).expect("temp root").count()
+    }
+
+    fn assert_no_file_named(start: &Path, name: &str) {
+        let mut dir = start.to_path_buf();
+        loop {
+            let candidate = dir.join(name);
+            assert!(
+                !candidate.exists(),
+                "found {name} at {}",
+                candidate.display()
+            );
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+
+    fn stored_zip_options() -> zip::write::SimpleFileOptions {
+        zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored)
+    }
+
+    #[test]
+    fn extract_rejects_oversized_archive() {
+        let _limits = ZipLimitOverride::set(ZipExtractLimits {
+            max_uncompressed_bytes: 32 * 1024 * 1024,
+            max_entries: MAX_ZIP_ENTRIES,
+            max_compression_ratio: u64::MAX,
+        });
+        let root = unique_temp("root-zip-oversize");
+        let gd = unique_temp("gd-zip-oversize");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+        let zip_path = unique_temp("zip-oversize").join("bomb.zip");
+        {
+            let file = File::create(&zip_path).expect("zip");
+            let mut zip = zip::ZipWriter::new(file);
+            let options = zip::write::SimpleFileOptions::default()
+                .compression_method(zip::CompressionMethod::Deflated);
+            zip.start_file("zeros.bin", options).expect("start");
+            let chunk = vec![0u8; 1024 * 1024];
+            for _ in 0..64 {
+                zip.write_all(&chunk).expect("zeros");
+            }
+            zip.finish().expect("finish");
+        }
+
+        let err =
+            discover_pack_install(&zip_path.to_string_lossy(), &layout).expect_err("oversized zip");
+        assert!(err.to_string().contains("uncompressed size limit"), "{err}");
+        assert_eq!(temp_child_count(&layout), 0);
+    }
+
+    #[test]
+    fn extract_rejects_too_many_entries() {
+        let _limits = ZipLimitOverride::set(ZipExtractLimits {
+            max_uncompressed_bytes: MAX_ZIP_UNCOMPRESSED_BYTES,
+            max_entries: 2,
+            max_compression_ratio: MAX_ZIP_COMPRESSION_RATIO,
+        });
+        let root = unique_temp("root-zip-count");
+        let gd = unique_temp("gd-zip-count");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+        let zip_path = unique_temp("zip-count").join("many.zip");
+        {
+            let file = File::create(&zip_path).expect("zip");
+            let mut zip = zip::ZipWriter::new(file);
+            let options = stored_zip_options();
+            for name in ["a.txt", "b.txt", "c.txt"] {
+                zip.start_file(name, options).expect("start");
+                zip.write_all(b"x").expect("write");
+            }
+            zip.finish().expect("finish");
+        }
+
+        let err = discover_pack_install(&zip_path.to_string_lossy(), &layout)
+            .expect_err("too many entries");
+        assert!(err.to_string().contains("too many entries"), "{err}");
+        assert_eq!(temp_child_count(&layout), 0);
+    }
+
+    #[test]
+    fn extract_never_writes_outside_dest() {
+        let parent = unique_temp("zip-slip-parent");
+        let dest = parent.join("dest");
+        fs::create_dir_all(&dest).expect("dest");
+        let zip_path = parent.join("slip.zip");
+        {
+            let file = File::create(&zip_path).expect("zip");
+            let mut zip = zip::ZipWriter::new(file);
+            let options = stored_zip_options();
+            zip.start_file("ok.txt", options).expect("ok");
+            zip.write_all(b"ok").expect("ok bytes");
+            zip.start_file("../evil.txt", options).expect("dotdot");
+            zip.write_all(b"nope").expect("dotdot bytes");
+            zip.start_file("a/../../evil.txt", options).expect("nested");
+            zip.write_all(b"nope").expect("nested bytes");
+            zip.start_file("/abs.txt", options).expect("abs");
+            zip.write_all(b"abs").expect("abs bytes");
+            #[cfg(windows)]
+            {
+                zip.start_file("C:\\evil.txt", options).expect("drive");
+                zip.write_all(b"nope").expect("drive bytes");
+                zip.start_file("\\\\server\\share\\x", options)
+                    .expect("unc");
+                zip.write_all(b"nope").expect("unc bytes");
+            }
+            zip.finish().expect("finish");
+        }
+
+        let before: Vec<_> = fs::read_dir(&parent)
+            .expect("parent")
+            .map(|entry| entry.expect("entry").file_name())
+            .collect();
+        let result = extract_zip_to_dir(&zip_path, &dest);
+        let after: Vec<_> = fs::read_dir(&parent)
+            .expect("parent")
+            .map(|entry| entry.expect("entry").file_name())
+            .collect();
+        assert_eq!(before, after, "extract created a sibling of dest");
+        assert_no_file_named(&dest, "evil.txt");
+        if let Err(err) = result {
+            let message = err.to_string();
+            assert!(
+                message.contains("zip entry") || message.contains("path"),
+                "{message}"
+            );
+        } else {
+            assert!(dest.join("ok.txt").is_file());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_symlink_entry_is_not_a_symlink() {
+        let parent = unique_temp("zip-symlink-parent");
+        let dest = parent.join("dest");
+        fs::create_dir_all(&dest).expect("dest");
+        let zip_path = parent.join("link.zip");
+        {
+            let file = File::create(&zip_path).expect("zip");
+            let mut zip = zip::ZipWriter::new(file);
+            // unix_permissions keeps only 0o777; add_symlink puts the symlink
+            // type bit back so the entry really is a symlink in the archive.
+            let options = stored_zip_options().unix_permissions(0o120777);
+            zip.add_symlink("link.txt", "outside-target", options)
+                .expect("symlink entry");
+            zip.finish().expect("finish");
+        }
+        {
+            let file = File::open(&zip_path).expect("reopen");
+            let mut archive = zip::ZipArchive::new(file).expect("archive");
+            let entry = archive.by_index(0).expect("entry");
+            assert!(entry.is_symlink(), "fixture must be a symlink entry");
+        }
+
+        extract_zip_to_dir(&zip_path, &dest).expect("extract");
+        let link = dest.join("link.txt");
+        let meta = fs::symlink_metadata(&link).expect("metadata");
+        assert!(!meta.file_type().is_symlink());
+        assert!(meta.is_file());
+        assert_eq!(fs::read(&link).expect("bytes"), b"outside-target");
+    }
+
+    #[test]
+    fn discover_zip_failure_removes_temp() {
+        let root = unique_temp("root-zip-fail");
+        let gd = unique_temp("gd-zip-fail");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+        let zip_path = unique_temp("zip-fail").join("bad.zip");
+        {
+            let file = File::create(&zip_path).expect("zip");
+            let mut zip = zip::ZipWriter::new(file);
+            let options = stored_zip_options();
+            zip.start_file("a", options).expect("file");
+            zip.write_all(b"file").expect("file bytes");
+            zip.add_directory("a/b/", options).expect("dir");
+            zip.finish().expect("finish");
+        }
+
+        let err = discover_pack_install(&zip_path.to_string_lossy(), &layout)
+            .expect_err("file then directory");
+        assert!(!err.to_string().is_empty());
+        assert_eq!(temp_child_count(&layout), 0);
+    }
+
+    #[test]
+    fn discover_truncated_zip_removes_temp() {
+        let root = unique_temp("root-zip-trunc");
+        let gd = unique_temp("gd-zip-trunc");
+        make_gd_found(&gd);
+        let layout = test_layout(&root, &gd);
+        let zip_path = unique_temp("zip-trunc").join("cut.zip");
+        {
+            let file = File::create(&zip_path).expect("zip");
+            let mut zip = zip::ZipWriter::new(file);
+            let options = stored_zip_options();
+            zip.start_file("ok.txt", options).expect("start");
+            zip.write_all(b"hello zip").expect("write");
+            zip.finish().expect("finish");
+        }
+        let bytes = fs::read(&zip_path).expect("read zip");
+        assert!(bytes.len() > 4, "zip too small to truncate");
+        fs::write(&zip_path, &bytes[..bytes.len() / 2]).expect("truncate");
+
+        let err =
+            discover_pack_install(&zip_path.to_string_lossy(), &layout).expect_err("truncated zip");
+        assert!(!err.to_string().is_empty());
+        assert_eq!(temp_child_count(&layout), 0);
     }
 }

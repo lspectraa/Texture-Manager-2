@@ -1,0 +1,32 @@
+# Open RustSec advisories for src-tauri/Cargo.lock.
+# `npm run check:deps` runs `cargo audit --deny warnings`, so an ID that is
+# not listed here fails the check. Keep a reason on every entry. Do not ignore
+# an advisory that has a compatible fix (cookie 0.18.2 was bumped to 0.18.3
+# instead of being ignored).
+
+[advisories]
+ignore = [
+    # chrono 0.4.45 is unmaintained and no fixed upgrade exists. It is an
+    # optional serde_with dependency (the chrono feature is off) that Cargo.lock
+    # still records, so cargo audit reports it.
+    "RUSTSEC-2026-0543",
+    # paste 1.0.15 is unmaintained with no fixed upgrade. Build-dependency of
+    # rav1e, pulled in by the image crate's AVIF encoder.
+    "RUSTSEC-2024-0436",
+    # proc-macro-error 1.0.4 is unmaintained with no fixed upgrade. It is a
+    # build-dependency of glib-macros / gtk3-macros on the gtk 0.18 stack that
+    # Tauri 2.12 uses.
+    "RUSTSEC-2024-0370",
+    # zbus_names 4.3.5 is unmaintained with no fixed upgrade. tauri-plugin-opener
+    # depends on zbus 5, which depends on this crate.
+    "RUSTSEC-2026-0371",
+    # zvariant 5.15.1 is unmaintained with no fixed upgrade. Same zbus 5 stack
+    # as tauri-plugin-opener; glib/gtk cannot replace it.
+    "RUSTSEC-2026-0370",
+    # zvariant_derive 5.15.1 is unmaintained with no fixed upgrade. Companion
+    # proc-macro of zvariant on that same zbus stack.
+    "RUSTSEC-2026-0372",
+    # glib 0.18.5 Iterator impl is unsound. The patched release is glib >= 0.20,
+    # which does not build with gtk 0.18 / the Tauri 2.12 gtk3 stack.
+    "RUSTSEC-2024-0429",
+]
