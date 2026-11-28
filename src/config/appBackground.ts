@@ -70,3 +70,28 @@ export function resolveAppBackgroundOption(
   }
   return options.find((option) => option.id === setting) ?? null;
 }
+
+/**
+ * Shell backdrop layers (TM2 Path redesign, SPEC §7.6):
+ * - `art`: the user's `game_bg_*` image composited over the blue/purple atmosphere.
+ * - `procedural`: original procedural Path landscape — the fallback when game art is missing.
+ * - `placeholder`: the quiet moon placeholder scene, shown only as a review backdrop (`?bg=placeholder`).
+ */
+export type ShellBackdropMode = "art" | "procedural" | "placeholder";
+
+/** Dev/review override from the `?bg=` query (no effect in a packaged window, which has no query). */
+export type ShellBackdropOverride = "placeholder" | "procedural" | null;
+
+export function parseShellBackdropOverride(value: string | null | undefined): ShellBackdropOverride {
+  return value === "placeholder" || value === "procedural" ? value : null;
+}
+
+export function resolveShellBackdropMode(
+  hasGameArt: boolean,
+  override: ShellBackdropOverride,
+): ShellBackdropMode {
+  if (override) {
+    return override;
+  }
+  return hasGameArt ? "art" : "procedural";
+}

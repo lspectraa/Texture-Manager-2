@@ -66,7 +66,7 @@ import { HomeScreen } from "./components/HomeScreen";
 import { AppSidebar } from "./components/AppSidebar";
 import { MobileBottomDock } from "./components/mobile/MobileBottomDock";
 import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
-import { AppGameBackground } from "./components/AppGameBackground";
+import { ShellBackdrop } from "./components/ShellBackdrop";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { AboutToolPanel } from "./components/tools/AboutToolPanel";
 import { ToolActionBar, ToolGlassActionButton } from "./components/tools/layout";
@@ -1277,6 +1277,15 @@ function App() {
     ],
   );
 
+  const shellBackdropGame = useMemo(
+    () => ({
+      setting: appSettings.appBackground,
+      options: shellBackgroundOptions,
+      opacity: appSettings.appBackgroundOpacity,
+    }),
+    [appSettings.appBackground, appSettings.appBackgroundOpacity, shellBackgroundOptions],
+  );
+
   const toolPanel = (() => {
     switch (selectedTool) {
       case "home":
@@ -1639,12 +1648,7 @@ function App() {
   if (!settingsHydrated) {
     return (
       <main className="tm-shell tm-shell--boot">
-        <div className="tm-bg" aria-hidden="true">
-          <span className="tm-bg-orb tm-bg-orb-a" />
-          <span className="tm-bg-orb tm-bg-orb-b" />
-          <span className="tm-bg-orb tm-bg-orb-c" />
-          <span className="tm-bg-orb tm-bg-orb-d" />
-        </div>
+        <ShellBackdrop />
       </main>
     );
   }
@@ -1652,17 +1656,7 @@ function App() {
   if (needsOnboarding) {
     return (
       <main className="tm-shell tm-shell--onboarding">
-        <div className="tm-bg" aria-hidden="true">
-          <span className="tm-bg-orb tm-bg-orb-a" />
-          <span className="tm-bg-orb tm-bg-orb-b" />
-          <span className="tm-bg-orb tm-bg-orb-c" />
-          <span className="tm-bg-orb tm-bg-orb-d" />
-          <AppGameBackground
-            setting={appSettings.appBackground}
-            options={shellBackgroundOptions}
-            opacity={appSettings.appBackgroundOpacity}
-          />
-        </div>
+        <ShellBackdrop game={shellBackdropGame} />
         <OnboardingFlow
           settings={appSettings}
           busy={onboardingBusy}
@@ -1703,17 +1697,7 @@ function App() {
 
   return (
     <main className={`tm-shell${mobileShell ? " tm-shell--mobile" : ""}`}>
-      <div className="tm-bg" aria-hidden="true">
-        <span className="tm-bg-orb tm-bg-orb-a" />
-        <span className="tm-bg-orb tm-bg-orb-b" />
-        <span className="tm-bg-orb tm-bg-orb-c" />
-        <span className="tm-bg-orb tm-bg-orb-d" />
-        <AppGameBackground
-          setting={appSettings.appBackground}
-          options={shellBackgroundOptions}
-          opacity={appSettings.appBackgroundOpacity}
-        />
-      </div>
+      <ShellBackdrop game={shellBackdropGame} />
       {isRunning ? (
         <div
           className={`tm-progress-overlay tm-progress-state-${overlayState}`}

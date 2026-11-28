@@ -12,6 +12,8 @@ type AppGameBackgroundProps = {
   setting: AppBackgroundSetting;
   options: readonly AppBackgroundOption[];
   opacity: number;
+  /** Reports whether a game background image is currently shown (drives the procedural fallback). */
+  onImageChange?: (hasImage: boolean) => void;
 };
 
 /**
@@ -22,6 +24,7 @@ export function AppGameBackground({
   setting,
   options,
   opacity,
+  onImageChange,
 }: AppGameBackgroundProps) {
   // Session-stable random pick: keep the same id until reload or the list changes.
   const sessionRandomIdRef = useRef<string | null>(null);
@@ -65,6 +68,10 @@ export function AppGameBackground({
       cancelled = true;
     };
   }, [resolved?.id]);
+
+  useEffect(() => {
+    onImageChange?.(imageUrl !== null);
+  }, [imageUrl, onImageChange]);
 
   if (!imageUrl) {
     return null;
