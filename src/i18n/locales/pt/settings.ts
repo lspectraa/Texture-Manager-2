@@ -55,7 +55,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "Instalação do Steam usada para os Resources originais e caminhos do Geode",
-    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
+    subtitleMobile: "Pasta media do Geode usada para packs e Sprites Geode",
     notFound: "Não encontrado",
     manualOverride: "Substituição manual",
     autoDetected: "Detectado automaticamente",

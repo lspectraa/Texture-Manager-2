@@ -55,7 +55,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "기본 Resources와 Geode 경로에 사용되는 Steam 설치",
-    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
+    subtitleMobile: "팩과 Geode 스프라이트에 사용되는 Geode media 폴더",
     notFound: "찾을 수 없음",
     manualOverride: "수동 지정",
     autoDetected: "자동 감지됨",

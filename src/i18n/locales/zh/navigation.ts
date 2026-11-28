@@ -32,6 +32,9 @@ const navigation = {
       weekend: ["周末项目。", "不着急 — 选点有意思的。"],
     },
     lead: "选一个工具开始。它们按你想做的事情分组。",
+    pathLead: "鼠标悬停在工具上可预览，单击一次即可进入。",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "个工具已就绪",
     toolsAvailableAria: "有 {{count}} 个工具可用",
     comingSoonCount: "还有 {{count}} 个即将推出",
@@ -64,16 +67,16 @@ const navigation = {
   tools: {
     iconEditor: {
       label: "图标编辑器",
-      description: "改图标的部件、颜色和位置。",
+      description: "编辑图标的部件、颜色和位置。",
     },
     glowMaker: {
       label: "光晕生成器",
       description: "给图标加上一圈光晕。",
     },
     geodeButtons: {
-      label: "创建 Geode 按钮",
-      shortLabel: "Geode 按钮",
-      description: "创建 Geode 菜单按钮图集",
+      label: "Geode 精灵图",
+      shortLabel: "Geode 精灵图",
+      description: "制作 Geode 菜单精灵图的图集。",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -82,6 +85,7 @@ const navigation = {
     },
     particleEditor: {
       label: "粒子编辑器",
+      shortLabel: "粒子",
       description: "制作并调整粒子特效。",
     },
     splitter: {
@@ -98,15 +102,15 @@ const navigation = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "让精灵图更大更清晰。也可以更新到最新游戏版本。",
+      description: "让精灵图更大更清晰，或更新到最新游戏版本。",
     },
     randomizer: {
       label: "随机器",
-      description: "打乱图标。想下次得到同样结果就记下代码。",
+      description: "打乱图标。保存代码即可再次得到同样的组合。",
     },
     convertToNewVersion: {
-      label: "转换到新版本",
-      shortLabel: "新版本",
+      label: "转换器",
+      shortLabel: "转换器",
       description: "补上缺少的精灵图，让材质包能在最新游戏里用。",
     },
     texturePackInstaller: {
@@ -114,6 +118,11 @@ const navigation = {
       shortLabel: "包安装器",
       description: "把贴图包加到 Geometry Dash。",
     },
+  },
+  dock: {
+    aria: "工具",
+    scrollPrevAria: "向左滚动工具",
+    scrollNextAria: "向右滚动工具",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",

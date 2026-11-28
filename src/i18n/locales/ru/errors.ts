@@ -27,13 +27,13 @@ const errors: AppLocaleResources["errors"] = {
     glowMakerPathsRequired:
       "Для создания свечения необходимо указать входную и выходную папки.",
     convertPathsRequired:
-      "Для конвертации в новую версию необходимо указать входную и выходную папки.",
+      "Для конвертера необходимо указать входную и выходную папки.",
     convertVersionRequired:
-      "Для конвертации в новую версию необходимо указать предыдущую версию игры.",
+      "Для конвертера необходимо указать предыдущую версию игры.",
     randomizerPathsRequired:
       "Для рандомизации необходимо указать входную и выходную папки.",
     geodeButtonsPathsRequired:
-      "Для создания кнопок Geode необходимо указать входную и выходную папки.",
+      "Для инструмента «Спрайты Geode» необходимо указать входную и выходную папки.",
     menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Запрос на выполнение операции не был создан.",
   },

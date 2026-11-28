@@ -53,7 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "Der Geometry-Dash-Ordner für Spieldateien und Geode",
-    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
+    subtitleMobile: "Geode-Media-Ordner für Packs und Geode-Sprites",
     notFound: "Nicht gefunden",
     manualOverride: "Manuelle Überschreibung",
     autoDetected: "Automatisch erkannt",

@@ -53,7 +53,7 @@ const settings = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "用于游戏文件和 Geode 的 Geometry Dash 文件夹",
-    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
+    subtitleMobile: "用于材质包和 Geode 精灵图的 Geode media 文件夹",
     notFound: "未找到",
     manualOverride: "手动指定",
     autoDetected: "自动检测",

@@ -69,7 +69,7 @@ const tools = {
     previousGameVersion: "以前のゲームバージョン",
     concurrentGamesheets: "同時ゲームシート数",
     desktopOnly:
-      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
+      "コンバーターには Geometry Dash の Resources フォルダーが必要ですが、Android ではアクセスできません。",
   },
   glowMaker: {
     parameters: "グロウのパラメーター",
@@ -356,8 +356,8 @@ const tools = {
     customPlist: "カスタム plist",
     cachedBlankSheet: "キャッシュ済みの BlankSheet",
     resolvingBlankSheet: "BlankSheet を検索中…",
-    buttonFamilies: "ボタンファミリー",
-    buttonFamiliesDescription: "ファミリーを選ぶとテンプレートを確認し、HSV 差分を調整できます",
+    buttonFamilies: "スプライトファミリー",
+    buttonFamiliesDescription: "スプライトファミリーを選んでから、色を調整してください。",
     groups: {
       menus: "メニュー",
       circle: "サークル",
@@ -395,7 +395,7 @@ const tools = {
     saturation: "彩度",
     value: "明度",
     hsvHelp:
-      "この差分は、色のサフィックスが選択したバリアントに対応するフレームを再生成するときに適用されます。スライダーをダブルクリックするとリセットされます。",
+      "この差分は選択したスプライトファミリーに適用されます。スライダーをダブルクリックするとリセットされます。",
     previewAlt: "{{family}} のプレビュー",
   },
   packInstaller: {

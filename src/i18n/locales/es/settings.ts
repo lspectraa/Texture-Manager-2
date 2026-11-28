@@ -56,7 +56,7 @@ const settings: AppLocaleResources["settings"] = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "La carpeta de Geometry Dash usada para archivos del juego y Geode",
-    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
+    subtitleMobile: "Carpeta media de Geode usada para packs y Sprites de Geode",
     notFound: "No encontrado",
     manualOverride: "Configuración manual",
     autoDetected: "Detectado automáticamente",

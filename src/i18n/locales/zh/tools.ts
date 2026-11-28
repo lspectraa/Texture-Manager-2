@@ -68,7 +68,7 @@ const tools = {
     previousGameVersion: "此前的游戏版本",
     concurrentGamesheets: "并发 gamesheet 数",
     desktopOnly:
-      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
+      "转换器需要 Geometry Dash 的 Resources 文件夹，而该文件夹在 Android 上无法访问。",
   },
   glowMaker: {
     parameters: "光晕参数",
@@ -350,8 +350,8 @@ const tools = {
     customPlist: "自定义 plist",
     cachedBlankSheet: "已缓存的 BlankSheet",
     resolvingBlankSheet: "正在定位 BlankSheet…",
-    buttonFamilies: "按钮家族",
-    buttonFamiliesDescription: "选择一个家族以预览模板并调整 HSV 偏移",
+    buttonFamilies: "精灵图家族",
+    buttonFamiliesDescription: "选择一个精灵图家族，然后调整它的颜色。",
     groups: {
       menus: "菜单",
       circle: "圆形",
@@ -389,7 +389,7 @@ const tools = {
     saturation: "饱和度",
     value: "明度",
     hsvHelp:
-      "重新生成颜色后缀对应所选变体的帧时会应用这些偏移。双击滑块可将其重置。",
+      "这些偏移会应用到所选的精灵图家族。双击滑块可将其重置。",
     previewAlt: "{{family}} 预览",
   },
   packInstaller: {

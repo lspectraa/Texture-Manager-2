@@ -19,13 +19,13 @@ const errors = {
     glowMakerPathsRequired:
       "Glow Maker requires both input and output directories.",
     convertPathsRequired:
-      "Convert to New Version requires both input and output directories.",
+      "Converter requires both input and output directories.",
     convertVersionRequired:
-      "Convert to New Version requires a previous game version.",
+      "Converter requires a previous game version.",
     randomizerPathsRequired:
       "Randomizer requires both input and output directories.",
     geodeButtonsPathsRequired:
-      "Create Geode Buttons requires both input and output directories.",
+      "Geode Sprites requires both input and output directories.",
     menuRecolorPathsRequired:
       "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "No operation request was built.",

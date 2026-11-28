@@ -32,6 +32,9 @@ const navigation = {
       weekend: ["주말 프로젝트.", "서두르지 마세요. 재미있는 걸 고르세요."],
     },
     lead: "도구를 골라 시작하세요. 하고 싶은 일별로 묶여 있습니다.",
+    pathLead: "도구에 마우스를 올리면 미리 볼 수 있습니다. 한 번 클릭하면 열립니다.",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "개 도구 준비됨",
     toolsAvailableAria: "{{count}}개의 도구 사용 가능",
     comingSoonCount: "+{{count}}개 곧 제공",
@@ -64,16 +67,16 @@ const navigation = {
   tools: {
     iconEditor: {
       label: "아이콘 편집기",
-      description: "아이콘의 부분, 색, 위치를 바꿉니다.",
+      description: "아이콘의 부분, 색, 위치를 편집합니다.",
     },
     glowMaker: {
       label: "글로우 메이커",
       description: "아이콘 주위에 글로우를 넣습니다.",
     },
     geodeButtons: {
-      label: "Geode 버튼 만들기",
-      shortLabel: "Geode 버튼",
-      description: "Geode 메뉴 버튼 게임시트를 만들기",
+      label: "Geode 스프라이트",
+      shortLabel: "Geode 스프라이트",
+      description: "Geode 메뉴 스프라이트 게임시트를 만듭니다.",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -82,6 +85,7 @@ const navigation = {
     },
     particleEditor: {
       label: "파티클 편집기",
+      shortLabel: "파티클",
       description: "파티클 효과를 만들고 다듬습니다.",
     },
     splitter: {
@@ -98,15 +102,15 @@ const navigation = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "스프라이트를 더 크고 선명하게 만듭니다. 최신 게임에 맞게 업데이트할 수도 있습니다.",
+      description: "스프라이트를 더 크고 선명하게 만들거나 최신 게임에 맞게 업데이트합니다.",
     },
     randomizer: {
       label: "랜덤라이저",
-      description: "아이콘을 섞습니다. 같은 결과를 원하면 코드를 저장하세요.",
+      description: "아이콘을 섞습니다. 코드를 저장하면 같은 조합을 다시 쓸 수 있습니다.",
     },
     convertToNewVersion: {
-      label: "새 버전으로 변환",
-      shortLabel: "새 버전",
+      label: "변환기",
+      shortLabel: "변환기",
       description: "빠진 스프라이트를 넣어 팩이 최신 게임에서 작동하게 합니다.",
     },
     texturePackInstaller: {
@@ -114,6 +118,11 @@ const navigation = {
       shortLabel: "팩 설치기",
       description: "텍스처 팩을 Geometry Dash에 추가합니다.",
     },
+  },
+  dock: {
+    aria: "도구",
+    scrollPrevAria: "도구 왼쪽으로 스크롤",
+    scrollNextAria: "도구 오른쪽으로 스크롤",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",
