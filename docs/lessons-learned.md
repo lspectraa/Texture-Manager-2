@@ -2,6 +2,13 @@
 
 Newest entry at the top. Written after a session via [[compounding-knowledge]].
 
+### 2026-11-27 — Redesign tokens: one palette, bundled fonts, legacy light bridge
+
+- Context: PC Path home + dock redesign (theme token layer in `src/styles/tokens.css`)
+- Mistake or surprise: the mockups load Figtree / Outfit / IBM Plex Mono / Cinzel from Google Fonts, but the Tauri CSP (`default-src 'self' customprotocol:`, `style-src 'unsafe-inline' 'self'`) blocks that stylesheet and font host, so copying the `<link>` would fall back to system fonts in the app. Legacy `--tm-*` rules in `App.css` hardcode navy wells and pale text, and those became unreadable once `[data-theme="light"]` switched to frost + ink tokens.
+- What to do next time: bundle fonts via `@fontsource` imports in `main.tsx`. Add new colors as tokens in `tokens.css` (dark `:root`, light `[data-theme="light"]`) and map legacy `--tm-*` vars onto them rather than adding a second palette. When restyling a tool page, delete its entries from the light bridge block in `App.css` instead of layering over it. New CSS files in `src/styles/` are covered by the backdrop-filter order test.
+- Files involved: `src/styles/tokens.css`, `src/main.tsx`, `src/App.css`, `src/utils/cssBackdropFilter.test.ts`
+
 ### 2026-11-25 — MSRV is 1.90; dependency checks stay off Actions
 
 - Context: audit of the 2026-11-22 lockfile bump (zip 9.8, Tauri 2.12.7)
