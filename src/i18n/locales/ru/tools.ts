@@ -78,7 +78,7 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Предыдущая версия игры",
     concurrentGamesheets: "Одновременно обрабатываемых атласов",
     desktopOnly:
-      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
+      "Конвертеру нужна папка Resources из Geometry Dash, а она недоступна на Android.",
   },
   glowMaker: {
     parameters: "Параметры свечения",
@@ -368,9 +368,9 @@ const tools: AppLocaleResources["tools"] = {
     customPlist: "Пользовательский plist",
     cachedBlankSheet: "Кэшированный BlankSheet",
     resolvingBlankSheet: "Поиск BlankSheet…",
-    buttonFamilies: "Семейства кнопок",
+    buttonFamilies: "Семейства спрайтов",
     buttonFamiliesDescription:
-      "Выберите семейство для просмотра шаблонов и настройки смещений HSV",
+      "Выберите семейство спрайтов, затем настройте его цвета.",
     groups: {
       menus: "Меню",
       circle: "Круглые",
@@ -408,7 +408,7 @@ const tools: AppLocaleResources["tools"] = {
     saturation: "Насыщенность",
     value: "Яркость",
     hsvHelp:
-      "Эти смещения применяются при повторном создании кадров, цветовой суффикс которых соответствует выбранному варианту. Дважды щёлкните ползунок, чтобы сбросить его.",
+      "Эти смещения применяются к выбранному семейству спрайтов. Дважды щёлкните ползунок, чтобы сбросить его.",
     previewAlt: "Предпросмотр {{family}}",
   },
   packInstaller: {

@@ -5,6 +5,8 @@ export const APP_VERSION = packageJson.version;
 
 export const COPYRIGHT_HOLDER = "Spectra";
 export const COPYRIGHT_YEAR = 2026;
+/** Copyright glyph shown before the year in the Path home wordmark (not translated). */
+export const COPYRIGHT_SYMBOL = "©";
 
 export const APP_LINKS = {
   github: "https://github.com/lspectraa/Texture-Manager-2",

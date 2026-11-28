@@ -1,0 +1,99 @@
+/* =============================================================================
+   TM2 theme tokens — locked Path redesign (handoff 2026-11-27, SPEC §4).
+   Dark lives on :root, light on [data-theme="light"] (set on <html> by
+   src/utils/theme.ts applyTheme). App.css maps its legacy --tm-* names onto
+   these so there is one palette, not two.
+   Accents stay neon in both themes; light adds *-ink partners for type that
+   sits on bright marks (AA).
+   ============================================================================= */
+
+:root {
+  /* Section accents (shared) */
+  --cyan: #3eefd0;
+  --sky: #4cbcff;
+  --amber: #ffd24a;
+  --purple: #8f7cff;
+  --accent: var(--sky);
+  --cyan-fill: var(--cyan);
+  --sky-fill: var(--sky);
+  --amber-fill: var(--amber);
+  /* Dark: accent type can use the neon itself. */
+  --cyan-ink: var(--cyan);
+  --sky-ink: var(--sky);
+  --amber-ink: var(--amber);
+  --purple-ink: #a78bff;
+
+  /* Surfaces + type (dark) */
+  --bg0: #070a17;
+  --text: #eef4ff;
+  --head: #f6f9ff;
+  --muted: #c5d4ef;
+  --dim: #9eb4d8;
+  --paper: #eef4ff;
+  --ink: #0c1224;
+  --glass: rgba(10, 16, 36, 0.5);
+  --glass-2: rgba(8, 14, 30, 0.62);
+  --rim: rgba(180, 215, 255, 0.22);
+
+  /* Type */
+  --f-head: "Figtree Variable", "Figtree", "Segoe UI", system-ui, sans-serif;
+  --f-ui: "Outfit Variable", "Outfit", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --f-ser: "Cinzel Variable", "Cinzel", "Times New Roman", serif;
+
+  /* Shape, spacing, motion */
+  --pill: 999px;
+  --radius: 14px;
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --ease: cubic-bezier(0.2, 0.9, 0.1, 1);
+  --snap: cubic-bezier(0.55, 0, 0.15, 1);
+  --over: cubic-bezier(0.18, 1.2, 0.22, 1);
+
+  /* PC dock slot. Mobile has no dock (see html[data-shell="mobile"] below). */
+  --dock-h: 76px;
+}
+
+html[data-shell="mobile"] {
+  --dock-h: 0px;
+}
+
+[data-theme="light"] {
+  /* Locked mid-tone light (pass 6/7 brightness, kept through passes 9–11). */
+  --bg0: #d7e0f0;
+  --text: #1a2744;
+  --ink: #1a2744;
+  --head: #121a30;
+  --muted: #243250;
+  --dim: #243250;
+  --paper: #f0eef4;
+  --glass: rgba(232, 228, 236, 0.46);
+  --glass-2: rgba(232, 228, 236, 0.52);
+  --rim: rgba(255, 255, 255, 0.55);
+  --purple: #6b56c8;
+
+  /* Neon stays neon; ink partners carry AA type on bright marks. */
+  --cyan-fill: #3eefd0;
+  --sky-fill: #4cbcff;
+  --amber-fill: #ffd24a;
+  --cyan-ink: #086258;
+  --sky-ink: #0c5f9e;
+  --amber-ink: #8a5800;
+  --purple-ink: #4f35b0;
+  --accent: var(--sky-ink);
+
+  /* Light glass hierarchy (pass 10): header/dock denser than cards; wells tinted frost. */
+  --glass-head: rgba(236, 232, 244, 0.66);
+  --glass-well: rgba(236, 232, 244, 0.52);
+  --hair: rgba(26, 39, 68, 0.14);
+  --hair-hi: rgba(255, 255, 255, 0.72);
+  --glass-drop:
+    inset 0 1px 0 var(--hair-hi),
+    inset 0 0 0 1px var(--hair),
+    0 14px 32px rgba(70, 90, 140, 0.16),
+    0 0 28px color-mix(in srgb, var(--acc-fill, var(--sky-fill)) 16%, transparent);
+}

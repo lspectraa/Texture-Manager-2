@@ -69,7 +69,7 @@ const tools = {
     previousGameVersion: "이전 게임 버전",
     concurrentGamesheets: "동시 게임시트 수",
     desktopOnly:
-      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
+      "변환기에는 Geometry Dash Resources 폴더가 필요하지만, Android에서는 접근할 수 없습니다.",
   },
   glowMaker: {
     parameters: "글로우 매개변수",
@@ -356,8 +356,8 @@ const tools = {
     customPlist: "사용자 지정 plist",
     cachedBlankSheet: "캐시된 BlankSheet",
     resolvingBlankSheet: "BlankSheet 확인 중…",
-    buttonFamilies: "버튼 패밀리",
-    buttonFamiliesDescription: "패밀리를 선택해 템플릿을 미리 보고 HSV 델타를 조정하세요",
+    buttonFamilies: "스프라이트 패밀리",
+    buttonFamiliesDescription: "스프라이트 패밀리를 고른 뒤 색을 조정하세요.",
     groups: {
       menus: "메뉴",
       circle: "원형",
@@ -395,7 +395,7 @@ const tools = {
     saturation: "채도",
     value: "명도",
     hsvHelp:
-      "이 델타는 색상 접미사가 선택한 변형과 일치하는 프레임을 다시 생성할 때 적용됩니다. 슬라이더를 두 번 클릭하면 초기화됩니다.",
+      "이 델타는 선택한 스프라이트 패밀리에 적용됩니다. 슬라이더를 두 번 클릭하면 초기화됩니다.",
     previewAlt: "{{family}} 미리보기",
   },
   packInstaller: {

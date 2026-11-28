@@ -60,7 +60,7 @@ const settings: AppLocaleResources["settings"] = {
     title: "Geometry Dash",
     subtitle:
       "Установка Steam, используемая для стандартных Resources и путей Geode",
-    subtitleMobile: "Geode media folder used for packs and Geode Buttons",
+    subtitleMobile: "Папка media Geode для паков и «Спрайтов Geode»",
     notFound: "Не найдено",
     manualOverride: "Указано вручную",
     autoDetected: "Обнаружено автоматически",

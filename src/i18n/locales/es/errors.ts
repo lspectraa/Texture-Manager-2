@@ -28,13 +28,13 @@ const errors: AppLocaleResources["errors"] = {
     glowMakerPathsRequired:
       "El Creador de brillo requiere los directorios de entrada y salida.",
     convertPathsRequired:
-      "Convertir a una versión nueva requiere los directorios de entrada y salida.",
+      "El Conversor requiere los directorios de entrada y salida.",
     convertVersionRequired:
-      "Convertir a una versión nueva requiere una versión anterior del juego.",
+      "El Conversor requiere una versión anterior del juego.",
     randomizerPathsRequired:
       "El Aleatorizador requiere los directorios de entrada y salida.",
     geodeButtonsPathsRequired:
-      "Crear botones de Geode requiere los directorios de entrada y salida.",
+      "La herramienta Sprites de Geode requiere los directorios de entrada y salida.",
     menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "No se creó ninguna solicitud de operación.",
   },

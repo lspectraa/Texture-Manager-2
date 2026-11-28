@@ -26,17 +26,17 @@ Open beta started at **v0.1.0** (Windows, with a first macOS build). The app now
 
 | Area | Tools |
 | --- | --- |
-| **Design & Effects** | Icon Editor · Glow Maker · Geode Buttons · Particle Editor |
+| **Design & Effects** | Icon Editor · Glow Maker · Geode Sprites · Particle Editor |
 | **Gamesheets** | Splitter · Merger · Porter · Upscaler *(desktop)* |
-| **Pack tools** | Randomizer · Convert to New Version *(desktop)* · Texture Pack Installer |
+| **Pack tools** | Randomizer · Converter *(desktop)* · Texture Pack Installer |
 
-**11 tools** on desktop. Android includes 9 of them — Upscaler and Convert to New Version stay desktop-only (Vulkan sidecars and the game `Resources` folder).
+**11 tools** on desktop. Android includes 9 of them — Upscaler and Converter stay desktop-only (Vulkan sidecars and the game `Resources` folder).
 
 ### Design & Effects
 
 - **Icon Editor** — Swap parts, colors, and placement on an icon sheet. Start a new sheet from imported sprites, generate glow from a component (instead of the sheet’s glow sprite), save a copy anywhere, and download a PNG preview.
 - **Glow Maker** — Outline glow with thickness and alpha controls, optional rainbow / composite layers, and a live preview (random game icon or a custom sheet).
-- **Create Geode Buttons** — Build the Geode menu-button gamesheet from BlankSheet (or your own), with per-family colors and HSV shifts.
+- **Geode Sprites** — Build the Geode menu-button gamesheet from BlankSheet (or your own), with per-family colors and HSV shifts.
 - **Particle Editor** — Open Geometry Dash `.plist` effects, copy a built-in GD effect, and edit emitter / motion / look / texture with a live preview (play, pause, icon path, custom icon).
 
 ### Gamesheets
@@ -49,7 +49,7 @@ Open beta started at **v0.1.0** (Windows, with a first macOS build). The app now
 ### Pack tools
 
 - **Randomizer** — Shuffle icons. Save the shuffle code to get the same mix later.
-- **Convert to New Version** *(desktop)* — Add missing sprites so a pack works on the newest game. Supports converting from **2.0**, **2.11**, and **2.2**.
+- **Converter** *(desktop)* — Add missing sprites so a pack works on the newest game. Supports converting from **2.0**, **2.11**, and **2.2**.
 - **Texture Pack Installer** — Install packs from a folder or zip (plus Geode configs and `.geode` mods), create a new pack, and manage a **pack library**: edit `pack.json` / `pack.png`, convert / port / split an installed pack, and reorder **applied packs** in-game.
 
 ### App-wide

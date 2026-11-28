@@ -18,11 +18,11 @@ const errors = {
     mergerPathsRequired: "O Combinador exige os diretórios de entrada e de saída.",
     glowMakerPathsRequired: "O Criador de brilho exige os diretórios de entrada e de saída.",
     convertPathsRequired:
-      "Converter para nova versão exige os diretórios de entrada e de saída.",
-    convertVersionRequired: "Converter para nova versão exige uma versão anterior do jogo.",
+      "O Conversor de versão exige os diretórios de entrada e de saída.",
+    convertVersionRequired: "O Conversor de versão exige uma versão anterior do jogo.",
     randomizerPathsRequired: "O Randomizador exige os diretórios de entrada e de saída.",
     geodeButtonsPathsRequired:
-      "Criar botões Geode exige os diretórios de entrada e de saída.",
+      "A ferramenta Sprites Geode exige os diretórios de entrada e de saída.",
     menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Nenhuma solicitação de operação foi construída.",
   },

@@ -36,6 +36,8 @@ export type ToolNavEntry = {
   id: AppToolId;
   label: string;
   shortLabel?: string;
+  /** PC dock label (SPEC §5.1 short names); falls back to `label`. */
+  dockLabel?: string;
   description: string;
   icon: LucideIcon;
   featured?: boolean;
@@ -89,6 +91,7 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
       {
         id: "particleEditor",
         label: "tools.particleEditor.label",
+        dockLabel: "tools.particleEditor.shortLabel",
         description: "tools.particleEditor.description",
         icon: Wind,
       },
@@ -151,6 +154,7 @@ export const TOOL_NAV_SECTIONS: ReadonlyArray<ToolNavSection> = [
         id: "texturePackInstaller",
         label: "tools.texturePackInstaller.label",
         shortLabel: "tools.texturePackInstaller.shortLabel",
+        dockLabel: "tools.texturePackInstaller.shortLabel",
         description: "tools.texturePackInstaller.description",
         icon: PackageOpen,
       },

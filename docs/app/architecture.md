@@ -33,12 +33,12 @@ Texture Manager 2 uses two distinct execution patterns:
 1. **Batch Pipeline (`run_operation`)**:
    - Shared folder-in / folder-out jobs.
    - App builds an `OperationRequest` DTO $\rightarrow$ `run_operation` $\rightarrow$ emits `operation-progress` events $\rightarrow$ returns `OperationReport` displayed in the report rail.
-   - Used by Splitter, Merger, Porter, Upscaler (desktop-only), Randomizer, Convert to New Version (desktop-only), and Glow Maker batch mode.
+   - Used by Splitter, Merger, Porter, Upscaler (desktop-only), Randomizer, Converter (`convertToNewVersion`, desktop-only), and Glow Maker batch mode.
 2. **Dedicated Commands**:
    - Interactive or specialized panels invoke dedicated Tauri commands directly (e.g., Icon Editor, Particle Editor, Pack Installer).
    - Pack Installer emits its own `pack-install-progress` event and manages its own right-rail metadata/library state.
 3. **Hybrid**:
-   - Geode Buttons: panel owns template indexing and preview generation via dedicated commands; final texture generation delegates to the shared batch `run_operation` engine (with `showOperationAndReport` hidden in the UI).
+   - Geode Sprites (`geodeButtons`): panel owns template indexing and preview generation via dedicated commands; final texture generation delegates to the shared batch `run_operation` engine (with `showOperationAndReport` hidden in the UI).
 
 ### Desktop vs. Android Runtime
 
@@ -86,12 +86,12 @@ sequenceDiagram
 - **Render Phases**:
   1. Boot: Background only until `settingsHydrated`.
   2. Onboarding: Full-screen `OnboardingFlow` displayed if stored onboarding version is lower than required (desktop 1, mobile 2).
-  3. Main Shell: Background (`.tm-bg` with `AppGameBackground`), optional update banner, sidebar/dock, and active tool view.
+  3. Main Shell: Background (`ShellBackdrop`: `.tm-bg` with `AppGameBackground`, or the procedural Path scene when no art loads), optional update banner, PC dock or mobile dock, and active tool view (PC Home is `PathHome`).
 
 ### Navigation and History
 
 - Navigation catalog: `src/config/toolNavigation.ts` (`TOOL_NAV_SECTIONS`, `AppToolId`).
-- Surfaces: Desktop `AppSidebar.tsx`, Mobile dock `MobileBottomDock.tsx`, Mobile drawer `MobileSideDrawer.tsx`.
+- Surfaces: Desktop `path/PathHome.tsx` + `path/PathDock.tsx` (section slots and dock order in `src/config/pathHome.ts`), Mobile dock `MobileBottomDock.tsx`, Mobile drawer `MobileSideDrawer.tsx`.
 - Mobile history states: `history.state.tm`: `grid` | `tool` | `drawer` | `shell`. Navigating from an open grid replaces state (`history.replaceState`) so Back does not get stuck in a loop. `src/utils/mobileHistory.ts` suppresses nested `popstate` races.
 
 ### Internationalization (i18n)
@@ -145,7 +145,7 @@ flowchart LR
 - **Files**: `src/components/tools/ParticleEditorToolPanel.tsx`, `src/services/tauriParticleEditor.ts`, `src-tauri/src/core/particle_editor.rs`.
 - **Capabilities**: Opens/saves Cocos particle `.plist` files, canvas simulator in JS, loads GD particle presets (`gdParticleEffects.ts`), in-memory undo/redo (`particleEditorHistory.ts`), and texture previews from Rust.
 
-### Geode Buttons (Hybrid)
+### Geode Sprites (`geodeButtons`, Hybrid)
 - **Files**: `src/components/tools/GeodeButtonsToolPanel.tsx`, `src/services/tauriGeodeButtons.ts`, `src-tauri/src/core/geode_buttons.rs`.
 - Resolves BlankSheet templates from GD `Resources` or Android Geode media. Generates HSV family variations. On Android, prefers Geode media over split-cache.
 - Whole-sprite HSV lives in `src-tauri/src/core/color.rs` (`apply_hsv_delta`). Geode Buttons behavior is unchanged.

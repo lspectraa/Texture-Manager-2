@@ -34,6 +34,9 @@ const navigation: AppLocaleResources["navigation"] = {
       weekend: ["Проект на выходные.", "Без спешки — выберите что-то приятное."],
     },
     lead: "Выберите инструмент, чтобы начать. Они сгруппированы по тому, что вы хотите сделать.",
+    pathLead: "Наведите курсор на инструмент для предпросмотра. Щёлкните один раз, чтобы открыть.",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "инструментов готово",
     toolsAvailableAria: "Доступно инструментов: {{count}}",
     comingSoonCount: "+{{count}} скоро",
@@ -66,16 +69,16 @@ const navigation: AppLocaleResources["navigation"] = {
   tools: {
     iconEditor: {
       label: "Редактор иконок",
-      description: "Меняйте части, цвета и положение иконки.",
+      description: "Редактируйте части, цвета и положение иконки.",
     },
     glowMaker: {
       label: "Создание свечения",
       description: "Добавьте свечение вокруг иконок.",
     },
     geodeButtons: {
-      label: "Создание кнопок Geode",
-      shortLabel: "Кнопки Geode",
-      description: "Создать gamesheet кнопок меню Geode",
+      label: "Спрайты Geode",
+      shortLabel: "Спрайты Geode",
+      description: "Соберите gamesheet спрайтов меню Geode.",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -84,6 +87,7 @@ const navigation: AppLocaleResources["navigation"] = {
     },
     particleEditor: {
       label: "Редактор частиц",
+      shortLabel: "Частицы",
       description: "Создавайте и настраивайте эффекты частиц.",
     },
     splitter: {
@@ -100,15 +104,15 @@ const navigation: AppLocaleResources["navigation"] = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "Сделайте спрайты чётче и больше. Можно также обновить их под новую версию игры.",
+      description: "Сделайте спрайты чётче и больше или обновите их под новую версию игры.",
     },
     randomizer: {
       label: "Рандомизатор",
-      description: "Перемешайте иконки. Сохраните код, если нужна та же смесь позже.",
+      description: "Перемешайте иконки. Сохраните код, чтобы повторить ту же смесь.",
     },
     convertToNewVersion: {
-      label: "Конвертация в новую версию",
-      shortLabel: "Новая версия",
+      label: "Конвертер",
+      shortLabel: "Конвертер",
       description: "Добавьте недостающие спрайты, чтобы пак работал в новой версии игры.",
     },
     texturePackInstaller: {
@@ -116,6 +120,11 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Установщик паков",
       description: "Добавьте текстур-паки в Geometry Dash.",
     },
+  },
+  dock: {
+    aria: "Инструменты",
+    scrollPrevAria: "Прокрутить инструменты влево",
+    scrollNextAria: "Прокрутить инструменты вправо",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",

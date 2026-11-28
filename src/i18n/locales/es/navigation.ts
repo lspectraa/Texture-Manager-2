@@ -34,6 +34,9 @@ const navigation: AppLocaleResources["navigation"] = {
       weekend: ["Proyecto de fin de semana.", "Sin prisa — elige algo divertido."],
     },
     lead: "Elige una herramienta para empezar. Están agrupadas por lo que quieres hacer.",
+    pathLead: "Pasa el cursor sobre una herramienta para ver una vista previa. Haz clic una vez para entrar.",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "herramientas listas",
     toolsAvailableAria: "{{count}} herramientas disponibles",
     comingSoonCount: "+{{count}} próximamente",
@@ -66,16 +69,16 @@ const navigation: AppLocaleResources["navigation"] = {
   tools: {
     iconEditor: {
       label: "Editor de iconos",
-      description: "Cambia las partes, colores y posición de un icono.",
+      description: "Edita las partes, colores y posición de un icono.",
     },
     glowMaker: {
       label: "Creador de brillo",
       description: "Añade un brillo alrededor de tus iconos.",
     },
     geodeButtons: {
-      label: "Crear botones de Geode",
-      shortLabel: "Botones de Geode",
-      description: "Crear el gamesheet de botones de menú de Geode",
+      label: "Sprites de Geode",
+      shortLabel: "Sprites de Geode",
+      description: "Crea el gamesheet de sprites de menú de Geode.",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -84,6 +87,7 @@ const navigation: AppLocaleResources["navigation"] = {
     },
     particleEditor: {
       label: "Editor de partículas",
+      shortLabel: "Partículas",
       description: "Crea y ajusta efectos de partículas.",
     },
     splitter: {
@@ -100,15 +104,15 @@ const navigation: AppLocaleResources["navigation"] = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "Haz los sprites más nítidos y grandes. También puedes actualizarlos al juego más reciente.",
+      description: "Haz los sprites más nítidos y grandes, o actualízalos para el juego más reciente.",
     },
     randomizer: {
       label: "Aleatorizador",
-      description: "Mezcla iconos. Guarda el código si quieres la misma mezcla después.",
+      description: "Mezcla iconos. Guarda el código para reutilizar la misma mezcla.",
     },
     convertToNewVersion: {
-      label: "Convertir a una versión nueva",
-      shortLabel: "Versión nueva",
+      label: "Conversor",
+      shortLabel: "Conversor",
       description: "Añade sprites que faltan para que el pack funcione en el juego más reciente.",
     },
     texturePackInstaller: {
@@ -116,6 +120,11 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Instalador de paquetes",
       description: "Añade paquetes de texturas a Geometry Dash.",
     },
+  },
+  dock: {
+    aria: "Herramientas",
+    scrollPrevAria: "Desplazar herramientas a la izquierda",
+    scrollNextAria: "Desplazar herramientas a la derecha",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",

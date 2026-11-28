@@ -18,11 +18,11 @@ const errors = {
     mergerPathsRequired: "Merger benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     glowMakerPathsRequired: "Glow-Maker benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     convertPathsRequired:
-      "„In neue Version konvertieren“ benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
-    convertVersionRequired: "„In neue Version konvertieren“ benötigt eine frühere Spielversion.",
+      "Konverter benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
+    convertVersionRequired: "Konverter benötigt eine frühere Spielversion.",
     randomizerPathsRequired: "Randomizer benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     geodeButtonsPathsRequired:
-      "„Geode-Buttons erstellen“ benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
+      "„Geode-Sprites“ benötigt ein Eingabe- und ein Ausgabeverzeichnis.",
     menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Es wurde keine Vorgangsanfrage erstellt.",
   },

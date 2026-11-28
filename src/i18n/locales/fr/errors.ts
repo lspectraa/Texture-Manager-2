@@ -20,13 +20,13 @@ const errors = {
     glowMakerPathsRequired:
       "Le Créateur de glow nécessite un dossier d’entrée et un dossier de sortie.",
     convertPathsRequired:
-      "« Convertir vers une nouvelle version » nécessite un dossier d’entrée et un dossier de sortie.",
+      "Le Convertisseur nécessite un dossier d’entrée et un dossier de sortie.",
     convertVersionRequired:
-      "« Convertir vers une nouvelle version » nécessite une version précédente du jeu.",
+      "Le Convertisseur nécessite une version précédente du jeu.",
     randomizerPathsRequired:
       "Le Randomiseur nécessite un dossier d’entrée et un dossier de sortie.",
     geodeButtonsPathsRequired:
-      "« Créer des boutons Geode » nécessite un dossier d’entrée et un dossier de sortie.",
+      "« Sprites Geode » nécessite un dossier d’entrée et un dossier de sortie.",
     menuRecolorPathsRequired: "Menu Recolor requires both input and output directories.",
     operationRequestMissing: "Aucune requête d’opération n’a été construite.",
   },

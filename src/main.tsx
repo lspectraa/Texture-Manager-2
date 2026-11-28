@@ -1,4 +1,12 @@
 import React from "react";
+// Path redesign type (SPEC §4.1), bundled locally — the Tauri CSP blocks font CDNs.
+import "@fontsource-variable/figtree/wght.css";
+import "@fontsource-variable/figtree/wght-italic.css";
+import "@fontsource-variable/outfit/wght.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
+import "@fontsource-variable/cinzel/wght.css";
+import "./styles/tokens.css";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import {

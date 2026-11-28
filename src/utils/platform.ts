@@ -87,6 +87,9 @@ function shellQueryOverride(): "mobile" | "desktop" | null {
   return null;
 }
 
+/** Dev/review: `?bg=placeholder` or `?bg=procedural` forces a shell backdrop (SPEC §3 query params). */
+export const shellBackdropQueryValue = (): string | null => queryParam("bg");
+
 /** Dev/test: `?simulateUpdate=1` or `localStorage.tmSimulateUpdate=1` fakes an available update. */
 export const isSimulateUpdateEnabled = (): boolean => {
   const value = queryParam("simulateUpdate")?.trim().toLowerCase();

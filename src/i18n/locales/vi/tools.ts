@@ -70,7 +70,7 @@ const tools: AppLocaleResources["tools"] = {
     previousGameVersion: "Phiên bản game trước",
     concurrentGamesheets: "Sheet cùng lúc",
     desktopOnly:
-      "Chuyển sang phiên bản mới cần thư mục Resources của Geometry Dash, không truy cập được trên Android.",
+      "Bộ chuyển đổi cần thư mục Resources của Geometry Dash, không truy cập được trên Android.",
   },
   glowMaker: {
     parameters: "Tham số glow",
@@ -356,8 +356,8 @@ const tools: AppLocaleResources["tools"] = {
     customPlist: "Plist tùy chỉnh",
     cachedBlankSheet: "BlankSheet đã đệm",
     resolvingBlankSheet: "Đang tìm BlankSheet…",
-    buttonFamilies: "Nhóm nút",
-    buttonFamiliesDescription: "Chọn kiểu nút, rồi chỉnh màu.",
+    buttonFamilies: "Nhóm sprite",
+    buttonFamiliesDescription: "Chọn nhóm sprite, rồi chỉnh màu.",
     groups: {
       menus: "Menu",
       circle: "Tròn",
@@ -395,7 +395,7 @@ const tools: AppLocaleResources["tools"] = {
     saturation: "Bão hòa",
     value: "Độ sáng",
     hsvHelp:
-      "Các dịch màu này áp dụng cho kiểu nút đã chọn. Nhấp đúp thanh trượt để đặt lại.",
+      "Các dịch màu này áp dụng cho nhóm sprite đã chọn. Nhấp đúp thanh trượt để đặt lại.",
     previewAlt: "Xem trước {{family}}",
   },
   packInstaller: {

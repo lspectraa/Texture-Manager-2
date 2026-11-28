@@ -32,6 +32,9 @@ const navigation = {
       weekend: ["週末プロジェクト。", "急がなくていい。楽しいものを選んで。"],
     },
     lead: "ツールを選んで始めましょう。やりたいことに合わせてグループ分けされています。",
+    pathLead: "ツールにカーソルを合わせるとプレビューできます。1 回クリックすると開きます。",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "個のツールが利用可能",
     toolsAvailableAria: "{{count}} 個のツールが利用可能",
     comingSoonCount: "+{{count}} 個が近日公開",
@@ -64,16 +67,16 @@ const navigation = {
   tools: {
     iconEditor: {
       label: "アイコンエディター",
-      description: "アイコンのパーツ、色、位置を変更します。",
+      description: "アイコンのパーツ、色、位置を編集します。",
     },
     glowMaker: {
       label: "グロウメーカー",
       description: "アイコンの周りにグロウを付けます。",
     },
     geodeButtons: {
-      label: "Geode ボタンを作成",
-      shortLabel: "Geode ボタン",
-      description: "Geode メニューボタンのゲームシートを作成",
+      label: "Geode スプライト",
+      shortLabel: "Geode スプライト",
+      description: "Geode メニュースプライトのゲームシートを作成します。",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -82,6 +85,7 @@ const navigation = {
     },
     particleEditor: {
       label: "パーティクルエディター",
+      shortLabel: "パーティクル",
       description: "パーティクルエフェクトを作って調整します。",
     },
     splitter: {
@@ -98,15 +102,15 @@ const navigation = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "スプライトをより大きくはっきりさせます。最新のゲーム向けに更新することもできます。",
+      description: "スプライトをより大きくはっきりさせるか、最新のゲーム向けに更新します。",
     },
     randomizer: {
       label: "ランダマイザー",
-      description: "アイコンを混ぜます。同じ結果が欲しいときはコードを保存してください。",
+      description: "アイコンを混ぜます。コードを保存すると同じ組み合わせを再利用できます。",
     },
     convertToNewVersion: {
-      label: "新しいバージョンへ変換",
-      shortLabel: "新バージョン",
+      label: "コンバーター",
+      shortLabel: "コンバーター",
       description: "足りないスプライトを足して、パックを最新のゲームで使えるようにします。",
     },
     texturePackInstaller: {
@@ -114,6 +118,11 @@ const navigation = {
       shortLabel: "パックインストーラー",
       description: "テクスチャパックを Geometry Dash に追加します。",
     },
+  },
+  dock: {
+    aria: "ツール",
+    scrollPrevAria: "ツールを左にスクロール",
+    scrollNextAria: "ツールを右にスクロール",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",

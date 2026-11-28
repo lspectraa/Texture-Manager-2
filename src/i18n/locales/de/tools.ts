@@ -70,7 +70,7 @@ const tools = {
     previousGameVersion: "Frühere Spielversion",
     concurrentGamesheets: "Parallele Gamesheets",
     desktopOnly:
-      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
+      "Konverter benötigt den Resources-Ordner von Geometry Dash, der unter Android nicht zugänglich ist.",
   },
   glowMaker: {
     parameters: "Glow-Parameter",
@@ -357,9 +357,9 @@ const tools = {
     customPlist: "Eigene Plist",
     cachedBlankSheet: "Zwischengespeichertes BlankSheet",
     resolvingBlankSheet: "BlankSheet wird aufgelöst…",
-    buttonFamilies: "Button-Familien",
+    buttonFamilies: "Sprite-Familien",
     buttonFamiliesDescription:
-      "Wähle eine Familie, um Vorlagen zu betrachten und HSV-Deltas anzupassen",
+      "Wähle eine Sprite-Familie und passe dann ihre Farben an.",
     groups: {
       menus: "Menüs",
       circle: "Kreis",
@@ -397,7 +397,7 @@ const tools = {
     saturation: "Sättigung",
     value: "Helligkeit",
     hsvHelp:
-      "Diese Deltas gelten beim Neuerzeugen von Frames, deren Farbsuffix zur gewählten Variante passt. Doppelklicke einen Regler, um ihn zurückzusetzen.",
+      "Diese Deltas gelten für die gewählte Sprite-Familie. Doppelklicke einen Regler, um ihn zurückzusetzen.",
     previewAlt: "Vorschau von {{family}}",
   },
   packInstaller: {

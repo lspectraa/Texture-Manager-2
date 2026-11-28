@@ -6,15 +6,15 @@ Nav IDs from `src/config/toolNavigation.ts`. Panels under `src/components/tools/
 | --- | --- | --- | --- |
 | `iconEditor` | `IconEditorToolPanel.tsx` | Dedicated (`tauriIconEditor`, glow via `tauriIconGlow`) | [[architecture]] |
 | `glowMaker` | `GlowMakerToolPanel.tsx` | Preview dedicated; **Run** → `glowMaker` | [[architecture]] |
-| `geodeButtons` | `GeodeButtonsToolPanel.tsx` | Preview dedicated; **Run** → `geodeButtons` | [[architecture]] |
-| `menuRecolor` | `MenuRecolorToolPanel.tsx` | On open, applies the cached default menu sheets and standalone PNGs the same way Geode Buttons applies its default game folder; grid + graphics/sheet filters; Color Mixer in the right rail; **Run** → `menuRecolor` | [[architecture]] |
+| `geodeButtons` | `GeodeButtonsToolPanel.tsx` | Displayed as **Geode Sprites**. Preview dedicated; **Run** → `geodeButtons` | [[architecture]] |
+| `menuRecolor` | `MenuRecolorToolPanel.tsx` | On open, applies the cached default menu sheets and standalone PNGs the same way Geode Sprites applies its default game folder; grid + graphics/sheet filters; Color Mixer in the right rail; **Run** → `menuRecolor` | [[architecture]] |
 | `particleEditor` | `ParticleEditorToolPanel.tsx` | Dedicated (`tauriParticleEditor`) | [[architecture]] |
 | `splitter` | `SplitterToolPanel.tsx` | Batch `splitter` | [[architecture]] |
 | `merger` | `MergerToolPanel.tsx` | Batch `merger` | [[architecture]] |
 | `porter` | `PorterToolPanel.tsx` | Batch **`porterSplitter`** | [[architecture]] |
 | `upscaler` | `UpscalerToolPanel.tsx` | Batch `upscaler` (desktop-only) | [[architecture]] |
 | `randomizer` | `RandomizerToolPanel.tsx` | Batch `randomizer` | [[architecture]] |
-| `convertToNewVersion` | `ConvertToNewVersionToolPanel.tsx` | Batch `convertToNewVersion` (desktop-only) | [[architecture]] |
+| `convertToNewVersion` | `ConvertToNewVersionToolPanel.tsx` | Displayed as **Converter**. Batch `convertToNewVersion` (desktop-only) | [[architecture]] |
 | `texturePackInstaller` | `TexturePackInstallerToolPanel.tsx` | Dedicated + `pack-install-progress` | [[architecture]] |
 
 Non-tool surfaces: `home`, `settings`, `about` (mobile About page; desktop copyright dialog). Shell wiring: [[architecture]].

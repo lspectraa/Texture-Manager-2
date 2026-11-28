@@ -32,6 +32,9 @@ const navigation = {
       weekend: ["Wochenendprojekt.", "Keine Eile — such dir was Schönes aus."],
     },
     lead: "Wähle ein Werkzeug, um zu starten. Sie sind danach gruppiert, was du tun möchtest.",
+    pathLead: "Fahre mit der Maus über ein Werkzeug für eine Vorschau. Klicke einmal, um es zu öffnen.",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "Werkzeuge bereit",
     toolsAvailableAria: "{{count}} Werkzeuge verfügbar",
     comingSoonCount: "+{{count}} demnächst",
@@ -64,16 +67,16 @@ const navigation = {
   tools: {
     iconEditor: {
       label: "Icon-Editor",
-      description: "Teile, Farben und Position eines Icons ändern.",
+      description: "Teile, Farben und Position eines Icons bearbeiten.",
     },
     glowMaker: {
       label: "Glow-Maker",
       description: "Einen Glow um deine Icons legen.",
     },
     geodeButtons: {
-      label: "Geode-Buttons erstellen",
-      shortLabel: "Geode-Buttons",
-      description: "Das Geode-Menübutton-Gamesheet erstellen",
+      label: "Geode-Sprites",
+      shortLabel: "Geode-Sprites",
+      description: "Das Geode-Menüsprite-Gamesheet erstellen.",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -82,6 +85,7 @@ const navigation = {
     },
     particleEditor: {
       label: "Partikel-Editor",
+      shortLabel: "Partikel",
       description: "Partikeleffekte erstellen und anpassen.",
     },
     splitter: {
@@ -98,15 +102,15 @@ const navigation = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "Sprites schärfer und größer machen. Optional für die neueste Spielversion aktualisieren.",
+      description: "Sprites schärfer und größer machen oder für die neueste Spielversion aktualisieren.",
     },
     randomizer: {
       label: "Randomizer",
-      description: "Icons mischen. Den Code merken, wenn du dieselbe Mischung später willst.",
+      description: "Icons mischen. Den Code speichern, um dieselbe Mischung wiederzuverwenden.",
     },
     convertToNewVersion: {
-      label: "In neue Version konvertieren",
-      shortLabel: "Neue Version",
+      label: "Konverter",
+      shortLabel: "Konverter",
       description: "Fehlende Sprites ergänzen, damit ein Pack im neuesten Spiel funktioniert.",
     },
     texturePackInstaller: {
@@ -114,6 +118,11 @@ const navigation = {
       shortLabel: "Pack-Installer",
       description: "Texture Packs in Geometry Dash hinzufügen.",
     },
+  },
+  dock: {
+    aria: "Werkzeuge",
+    scrollPrevAria: "Werkzeuge nach links scrollen",
+    scrollNextAria: "Werkzeuge nach rechts scrollen",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",

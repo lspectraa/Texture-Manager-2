@@ -21,7 +21,8 @@ branding/            Product icon SVG
 | --- | --- |
 | `main.tsx` | Theme, settings hydrate, i18n, shell dataset, mount `App` |
 | `App.tsx` | Shell state: tool selection, batch `runOperation`, progress/report, onboarding, mobile history |
-| `components/` | Home, sidebar, onboarding, About, update banner, tool panels, mobile dock/drawer |
+| `components/` | Home (mobile), `path/` (PC Path home + dock), `ShellBackdrop`, onboarding, About, update banner, tool panels, mobile dock/drawer |
+| `styles/` | `tokens.css` (theme tokens: dark `:root`, light `[data-theme="light"]`), `backdrop.css`, `path-shell.css` |
 | `components/tools/` | One panel per tool + Pack Installer subpanels |
 | `config/` | `toolNavigation`, `appMeta`, backgrounds, convert version map |
 | `domain/` | TS contracts: operations, settings, pack installer, particles |
@@ -38,10 +39,14 @@ branding/            Product icon SVG
 
 ## Shell modes
 
-- **Desktop** — `AppSidebar` + main panel + optional right rail.
-- **Mobile** — `MobileBottomDock` + drawer; `isMobileShell()` from Android UA or `?shell=mobile` (`src/utils/platform.ts`).
+- **Desktop** — `PathHome` on Home (three section cards on a rail), else the tool panel + optional right rail; `PathDock` at the bottom on every page (Home left, scrolling tools, Settings right). No sidebar.
+- **Mobile** — `HomeScreen` + `MobileBottomDock` + drawer, no PC dock; `isMobileShell()` from Android UA or `?shell=mobile` (`src/utils/platform.ts`).
 
-Local UI keys: `texture-manager-2.nav-collapsed`, `texture-manager-2.report-collapsed`.
+Theme: `html[data-theme]` from the `theme` setting (`dark` | `light`); tokens in `src/styles/tokens.css`, legacy `--tm-*` vars in `App.css` map onto them. Fonts are bundled via `@fontsource` (CSP blocks font CDNs).
+
+Backdrop: game art when available, else the procedural Path landscape. Dev-only review override `?bg=placeholder|procedural`.
+
+Local UI keys: `texture-manager-2.report-collapsed`.
 
 Entrypoints: `src/main.tsx` → `src/App.tsx`; tool list `src/config/toolNavigation.ts`; invoke registry `src-tauri/src/lib.rs`; batch dispatch `src-tauri/src/core/executor.rs`.
 

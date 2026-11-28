@@ -55,7 +55,7 @@ const settings: AppLocaleResources["settings"] = {
   geometryDash: {
     title: "Geometry Dash",
     subtitle: "Thư mục Geometry Dash dùng cho tệp game và Geode",
-    subtitleMobile: "Thư mục media Geode dùng cho pack và Nút Geode",
+    subtitleMobile: "Thư mục media Geode dùng cho pack và Sprite Geode",
     notFound: "Không tìm thấy",
     manualOverride: "Ghi đè thủ công",
     autoDetected: "Tự phát hiện",

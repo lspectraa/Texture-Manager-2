@@ -67,7 +67,7 @@ const tools = {
     previousGameVersion: "Previous game version",
     concurrentGamesheets: "Sheets at once",
     desktopOnly:
-      "Convert to New Version needs the Geometry Dash Resources folder, which is not accessible on Android.",
+      "Converter needs the Geometry Dash Resources folder, which is not accessible on Android.",
   },
   glowMaker: {
     parameters: "Glow Parameters",
@@ -353,8 +353,8 @@ const tools = {
     customPlist: "Custom plist",
     cachedBlankSheet: "Cached BlankSheet",
     resolvingBlankSheet: "Resolving BlankSheet…",
-    buttonFamilies: "Button Families",
-    buttonFamiliesDescription: "Pick a button style, then adjust its colors.",
+    buttonFamilies: "Sprite families",
+    buttonFamiliesDescription: "Pick a sprite family, then adjust its colors.",
     groups: {
       menus: "Menus",
       circle: "Circle",
@@ -392,7 +392,7 @@ const tools = {
     saturation: "Saturation",
     value: "Value",
     hsvHelp:
-      "These color shifts apply to the selected button style. Double-click a slider to reset it.",
+      "These color shifts apply to the selected sprite family. Double-click a slider to reset it.",
     previewAlt: "{{family}} preview",
   },
   packInstaller: {

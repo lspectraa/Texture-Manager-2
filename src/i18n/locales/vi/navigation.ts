@@ -71,6 +71,9 @@ const navigation: AppLocaleResources["navigation"] = {
       ],
     },
     lead: "Chọn một công cụ để bắt đầu. Chúng được nhóm theo việc bạn muốn làm.",
+    pathLead: "Rê chuột lên một công cụ để xem trước. Nhấp một lần để vào.",
+    wordmarkCopyright: "{{year}} {{holder}}",
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "công cụ sẵn sàng",
     toolsAvailableAria: "{{count}} công cụ có sẵn",
     comingSoonCount: "+{{count}} sắp ra mắt",
@@ -103,16 +106,16 @@ const navigation: AppLocaleResources["navigation"] = {
   tools: {
     iconEditor: {
       label: "Chỉnh sửa icon",
-      description: "Đổi bộ phận, màu sắc và vị trí của icon.",
+      description: "Chỉnh sửa bộ phận, màu sắc và vị trí của icon.",
     },
     glowMaker: {
       label: "Tạo glow",
       description: "Thêm glow quanh icon của bạn.",
     },
     geodeButtons: {
-      label: "Tạo nút Geode",
-      shortLabel: "Nút Geode",
-      description: "Tạo gamesheet nút menu Geode",
+      label: "Sprite Geode",
+      shortLabel: "Sprite Geode",
+      description: "Tạo gamesheet sprite menu Geode.",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -121,6 +124,7 @@ const navigation: AppLocaleResources["navigation"] = {
     },
     particleEditor: {
       label: "Chỉnh sửa hạt",
+      shortLabel: "Hạt",
       description: "Tạo và tinh chỉnh hiệu ứng hạt.",
     },
     splitter: {
@@ -137,15 +141,15 @@ const navigation: AppLocaleResources["navigation"] = {
     },
     upscaler: {
       label: "Phóng nét",
-      description: "Làm sprite sắc nét và lớn hơn. Bạn cũng có thể cập nhật chúng cho game mới nhất.",
+      description: "Làm sprite sắc nét và lớn hơn, hoặc cập nhật chúng cho game mới nhất.",
     },
     randomizer: {
       label: "Xáo trộn",
-      description: "Xáo icon. Lưu mã nếu muốn dùng lại cùng một mix.",
+      description: "Xáo icon. Lưu mã để dùng lại cùng một mix.",
     },
     convertToNewVersion: {
-      label: "Chuyển sang phiên bản mới",
-      shortLabel: "Phiên bản mới",
+      label: "Bộ chuyển đổi",
+      shortLabel: "Bộ chuyển đổi",
       description: "Thêm sprite còn thiếu để pack chạy trên game mới nhất.",
     },
     texturePackInstaller: {
@@ -153,6 +157,11 @@ const navigation: AppLocaleResources["navigation"] = {
       shortLabel: "Cài pack",
       description: "Thêm texture pack vào Geometry Dash.",
     },
+  },
+  dock: {
+    aria: "Công cụ",
+    scrollPrevAria: "Cuộn công cụ sang trái",
+    scrollNextAria: "Cuộn công cụ sang phải",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, mở công cụ đầu tiên",

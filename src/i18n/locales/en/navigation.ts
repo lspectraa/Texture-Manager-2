@@ -69,6 +69,12 @@ const navigation = {
       ],
     },
     lead: "Choose a tool to get started. They’re grouped by what you want to do.",
+    /** Desktop Path home: one-line hint beside the heading. */
+    pathLead: "Hover a tool to preview it. Click once to enter.",
+    /** Desktop Path home wordmark copyright, rendered after a © glyph. */
+    wordmarkCopyright: "{{year}} {{holder}}",
+    /** Section card index, e.g. "01 · 5" (section number · tool count). */
+    sectionIndex: "{{index}} · {{count}}",
     toolsReady: "tools ready",
     toolsAvailableAria: "{{count}} tools available",
     comingSoonCount: "+{{count}} coming soon",
@@ -101,16 +107,16 @@ const navigation = {
   tools: {
     iconEditor: {
       label: "Icon Editor",
-      description: "Change an icon’s parts, colors, and placement.",
+      description: "Edit an icon’s parts, colors, and placement.",
     },
     glowMaker: {
       label: "Glow Maker",
       description: "Add a glow around your icons.",
     },
     geodeButtons: {
-      label: "Create Geode Buttons",
-      shortLabel: "Geode Buttons",
-      description: "Create the Geode menu buttons gamesheet",
+      label: "Geode Sprites",
+      shortLabel: "Geode Sprites",
+      description: "Build the Geode menu-sprite gamesheet.",
     },
     menuRecolor: {
       label: "Menu Recolor",
@@ -119,6 +125,7 @@ const navigation = {
     },
     particleEditor: {
       label: "Particle Editor",
+      shortLabel: "Particles",
       description: "Make and tweak particle effects.",
     },
     splitter: {
@@ -135,15 +142,15 @@ const navigation = {
     },
     upscaler: {
       label: "Upscaler",
-      description: "Make sprites sharper and larger. You can also update them for the newest game.",
+      description: "Sharpen and enlarge sprites, or update them for the newest game.",
     },
     randomizer: {
       label: "Randomizer",
-      description: "Mix up icons. Save the code if you want the same mix later.",
+      description: "Mix up icons. Save the code to reuse the same mix.",
     },
     convertToNewVersion: {
-      label: "Convert to New Version",
-      shortLabel: "New Version",
+      label: "Converter",
+      shortLabel: "Converter",
       description: "Add missing sprites so a pack works on the newest game.",
     },
     texturePackInstaller: {
@@ -151,6 +158,11 @@ const navigation = {
       shortLabel: "Pack Installer",
       description: "Add texture packs to Geometry Dash.",
     },
+  },
+  dock: {
+    aria: "Tools",
+    scrollPrevAria: "Scroll tools left",
+    scrollNextAria: "Scroll tools right",
   },
   mobile: {
     sectionShortcutAria: "{{section}}, open first tool",
