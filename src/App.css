@@ -2606,6 +2606,11 @@ body {
   background: rgba(8, 18, 32, 0.72);
 }
 
+[data-theme="light"] .tm-android-geode-access--global {
+  border-color: rgba(12, 95, 158, 0.28);
+  background: rgba(240, 238, 244, 0.72);
+}
+
 .tm-android-geode-access-actions {
   display: flex;
   flex-wrap: wrap;
@@ -13168,6 +13173,32 @@ body.tm-pack-library-dragging .tm-pack-applied-available-item {
       rgba(28, 44, 78, 0.94) 0%,
       rgba(14, 24, 48, 0.97) 100%
     );
+}
+
+/*
+ * Light: mobile chrome follows the Path light glass (ink on lavender frost) so the
+ * palette swap keeps Android legible until the mobile redesign lands.
+ */
+[data-theme="light"][data-shell="mobile"] .tm-mobile-dock.tm-glass-card .tm-glass-frost,
+[data-theme="light"][data-shell="mobile"] .tm-mobile-sheet.tm-glass-card .tm-glass-frost,
+[data-theme="light"][data-shell="mobile"] .tm-report.tm-glass-card .tm-glass-frost {
+  background: linear-gradient(180deg, rgba(242, 240, 247, 0.94) 0%, rgba(232, 228, 236, 0.97) 100%);
+}
+
+[data-theme="light"][data-shell="mobile"] .tm-mobile-dock-btn {
+  color: var(--tm-text-muted);
+}
+
+[data-theme="light"][data-shell="mobile"] .tm-pe-inspector-toggle,
+[data-theme="light"][data-shell="mobile"] .tm-mobile-edge-tab,
+[data-theme="light"][data-shell="mobile"] .tm-icon-editor-mobile-chrome,
+[data-theme="light"][data-shell="mobile"] .tm-icon-editor-overflow-menu {
+  background: rgba(240, 238, 244, 0.9);
+  color: var(--tm-text);
+}
+
+[data-theme="light"][data-shell="mobile"] .tm-theme-mini-preview[data-preview-theme="light"] .tm-theme-mini-preview-dock {
+  background: rgba(236, 232, 244, 0.8);
 }
 
 /*
