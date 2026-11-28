@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import "./App.css";
+import "./styles/path-shell.css";
 import {
   OperationProgress,
   OperationReport,
@@ -63,10 +64,12 @@ import { PackInstallerMetadataSidebar } from "./components/tools/PackInstallerMe
 import { useShellPanelTransition } from "./hooks/useShellPanelTransition";
 import { useSwipeDismiss } from "./hooks/useSwipeDismiss";
 import { HomeScreen } from "./components/HomeScreen";
-import { AppSidebar } from "./components/AppSidebar";
 import { MobileBottomDock } from "./components/mobile/MobileBottomDock";
 import { MobileSideDrawer } from "./components/mobile/MobileSideDrawer";
 import { ShellBackdrop } from "./components/ShellBackdrop";
+import { PathHome } from "./components/path/PathHome";
+import { PathDock, type PathDockTarget } from "./components/path/PathDock";
+import { TranslationQualityNotice } from "./components/TranslationQualityNotice";
 import { CopyrightDialog } from "./components/CopyrightDialog";
 import { AboutToolPanel } from "./components/tools/AboutToolPanel";
 import { ToolActionBar, ToolGlassActionButton } from "./components/tools/layout";
@@ -80,7 +83,12 @@ import {
   DEFAULT_APP_BACKGROUND_OPACITY,
 } from "./config/appBackground";
 import { APP_VERSION } from "./config/appMeta";
-import { isUpcomingTool, isDesktopOnlyTool } from "./config/toolNavigation";
+import {
+  isUpcomingTool,
+  isDesktopOnlyTool,
+  type AppToolId,
+} from "./config/toolNavigation";
+import { DEFAULT_HOME_PREVIEW_TOOL } from "./config/pathHome";
 import {
   buildIssuesCsvFromReport,
   copyTextToClipboard,
@@ -227,8 +235,9 @@ const estimateRemainingMs = (
 };
 const CONVERT_VERSION_OPTIONS = Object.keys(convertVersionMap);
 const DEFAULT_SHEET_CONCURRENCY = 5;
-const NAV_COLLAPSED_STORAGE_KEY = "texture-manager-2.nav-collapsed";
 const REPORT_COLLAPSED_STORAGE_KEY = "texture-manager-2.report-collapsed";
+/** Longest Path home entrance animation (mock playEnter hold) before the class is removed. */
+const PATH_HOME_ENTRANCE_MS = 1400;
 
 function readStoredCollapsed(key: string): boolean {
   try {
@@ -236,6 +245,11 @@ function readStoredCollapsed(key: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** The open tool's id, or null on Home / Settings / About. */
+function toolIdOf(tool: PrimaryTool): AppToolId | null {
+  return tool === "home" || tool === "settings" || tool === "about" ? null : tool;
 }
 
 function App() {
@@ -256,14 +270,15 @@ function App() {
   const lastRemainingMsRef = useRef<number | null>(null);
   const [etaNow, setEtaNow] = useState(0);
   const [report, setReport] = useState<OperationReport | null>(null);
-  const [isNavCollapsed, setIsNavCollapsed] = useState(() =>
-    readStoredCollapsed(NAV_COLLAPSED_STORAGE_KEY),
-  );
   const [isReportCollapsed, setIsReportCollapsed] = useState(() =>
     readStoredCollapsed(REPORT_COLLAPSED_STORAGE_KEY),
   );
   const [menuRecolorRailTab, setMenuRecolorRailTab] = useState<"channels" | "output">("channels");
   const [isCopyrightOpen, setIsCopyrightOpen] = useState(false);
+  /** PC Path home: tool previewed in its card (hover / focus); reset on every return Home. */
+  const [homePreviewTool, setHomePreviewTool] = useState<AppToolId>(DEFAULT_HOME_PREVIEW_TOOL);
+  /** First Path home paint plays the entrance stagger once per session. */
+  const [pathEntering, setPathEntering] = useState(true);
   const mobileShell = isMobileShell();
   const [mobileGridOpen, setMobileGridOpen] = useState(false);
   const [mobileSideOpen, setMobileSideOpen] = useState(false);
@@ -313,7 +328,6 @@ function App() {
   const backgroundOpacitySaveTimerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const navPanelTransition = useShellPanelTransition(setIsNavCollapsed);
   const reportPanelTransition = useShellPanelTransition(setIsReportCollapsed);
   const menuRecolorWasActive = useRef(false);
 
@@ -335,14 +349,6 @@ function App() {
     reportPanelTransition.expand,
     selectedTool,
   ]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, String(isNavCollapsed));
-    } catch {
-      // Ignore storage failures in restricted environments.
-    }
-  }, [isNavCollapsed]);
 
   useEffect(() => {
     try {
@@ -677,6 +683,15 @@ function App() {
   const needsOnboarding =
     settingsHydrated &&
     appSettings.onboardingVersion < requiredOnboardingVersion(mobileShell);
+
+  useEffect(() => {
+    // Let the first PC Path home paint finish its entrance, then never replay it.
+    if (!pathEntering || !settingsHydrated || needsOnboarding || mobileShell) {
+      return;
+    }
+    const timer = window.setTimeout(() => setPathEntering(false), PATH_HOME_ENTRANCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [mobileShell, needsOnboarding, pathEntering, settingsHydrated]);
 
   const runUpdateCheck = useCallback(
     async (options?: { silent?: boolean }): Promise<void> => {
@@ -1149,6 +1164,10 @@ function App() {
       }
     }
     const closingGrid = mobileGridOpenRef.current;
+    if (tool === "home") {
+      // SPEC §7.1: Home always lands on the Design card / Icon Editor lead.
+      setHomePreviewTool(DEFAULT_HOME_PREVIEW_TOOL);
+    }
     setSelectedTool(tool);
     setMobileGridOpen(false);
     if (mobileShell) {
@@ -1695,8 +1714,22 @@ function App() {
     );
   }
 
+  const updateBanner =
+    availableUpdate && !updateBannerDismissed ? (
+      <AppUpdateBanner
+        update={availableUpdate}
+        operationRunning={isRunning}
+        onDismiss={() => setUpdateBannerDismissed(true)}
+      />
+    ) : null;
+  const pathHomeActive = !mobileShell && isHome;
+
   return (
-    <main className={`tm-shell${mobileShell ? " tm-shell--mobile" : ""}`}>
+    <main
+      className={`tm-shell${mobileShell ? " tm-shell--mobile" : " tm-shell--path"}${
+        pathHomeActive ? " tm-shell--path-home" : ""
+      }`}
+    >
       <ShellBackdrop game={shellBackdropGame} />
       {isRunning ? (
         <div
@@ -1802,15 +1835,28 @@ function App() {
         </div>
       ) : null}
 
+      {pathHomeActive ? (
+        <PathHome
+          previewTool={homePreviewTool}
+          onPreview={setHomePreviewTool}
+          onOpenTool={navigateTool}
+          onCopyrightClick={() => setIsCopyrightOpen(true)}
+          entering={pathEntering}
+          notices={
+            <>
+              {updateBanner}
+              <TranslationQualityNotice variant="banner" />
+            </>
+          }
+        />
+      ) : (
       <section
         className={`tm-layout ${
           isIconEditor || isParticleEditor || isHome || isGeodeButtons || isSettings || isAbout ? "tm-layout-icon-editor" : ""
-        }${isNavCollapsed ? " tm-layout-nav-collapsed" : ""}${
+        }${
           showRightRail && isReportCollapsed ? " tm-layout-report-collapsed" : ""
         }${
-          navPanelTransition.animating || reportPanelTransition.animating
-            ? " tm-layout--animating"
-            : ""
+          reportPanelTransition.animating ? " tm-layout--animating" : ""
         }${mobileShell ? " tm-layout--mobile" : ""}${
           mobileShell && mobileSideOpen ? " tm-layout--mobile-report-open" : ""
         }`}
@@ -1851,22 +1897,7 @@ function App() {
               />
             ) : null}
           </>
-        ) : (
-          <AppSidebar
-            selectedTool={selectedTool}
-            collapsed={isNavCollapsed}
-            animating={navPanelTransition.animating}
-            onExpand={navPanelTransition.expand}
-            onCollapse={navPanelTransition.collapse}
-            onNavigate={(tool) => {
-              if (tool !== "home" && tool !== "settings" && tool !== "about" && isUpcomingTool(tool)) {
-                return;
-              }
-              setSelectedTool(tool);
-            }}
-            onCopyrightClick={() => setIsCopyrightOpen(true)}
-          />
-        )}
+        ) : null}
 
         <div className="tm-main-column">
           {mobileShell ? (
@@ -1876,13 +1907,7 @@ function App() {
               className="tm-android-geode-access--global"
             />
           ) : null}
-          {availableUpdate && !updateBannerDismissed ? (
-            <AppUpdateBanner
-              update={availableUpdate}
-              operationRunning={isRunning}
-              onDismiss={() => setUpdateBannerDismissed(true)}
-            />
-          ) : null}
+          {updateBanner}
           <section
             className={`tm-panel tm-glass-card${
               isIconEditor ? " tm-panel-icon-editor" : ""
@@ -2287,6 +2312,17 @@ function App() {
           </section>
         ) : null}
       </section>
+      )}
+
+      {mobileShell ? null : (
+        <PathDock
+          current={selectedTool}
+          activeTool={pathHomeActive ? homePreviewTool : toolIdOf(selectedTool)}
+          onNavigate={(target: PathDockTarget) => navigateTool(target)}
+          onPreview={pathHomeActive ? setHomePreviewTool : undefined}
+          entering={pathHomeActive && pathEntering}
+        />
+      )}
 
       <CopyrightDialog
         open={isCopyrightOpen}
