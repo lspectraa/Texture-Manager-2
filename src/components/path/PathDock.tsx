@@ -117,7 +117,12 @@ export function PathDock({ current, activeTool, onNavigate, onPreview, entering 
       return;
     }
     const chip = scroller.querySelector<HTMLElement>(".tm-dock-item");
-    const step = (chip ? chip.getBoundingClientRect().width : 104) + 4;
+    if (!chip) {
+      return;
+    }
+    // Chip width + flex gap, read from layout so CSS stays the single source.
+    const gap = Number.parseFloat(getComputedStyle(scroller).columnGap) || 0;
+    const step = chip.getBoundingClientRect().width + gap;
     scroller.scrollBy({
       left: direction * step * ARROW_PAGE_ITEMS,
       behavior: prefersReducedMotion() ? "auto" : "smooth",
