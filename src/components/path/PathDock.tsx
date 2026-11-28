@@ -75,21 +75,25 @@ export function PathDock({ current, activeTool, onNavigate, onPreview, entering 
     return () => observer.disconnect();
   }, [updateEdges]);
 
-  // Keep the active chip in view (centered) when the page or preview changes.
+  // Center the active chip when the page changes (mock scrollDockTo on select). Hover
+  // previews must not scroll, or the strip would slide under the pointer.
+  const activeToolRef = useRef(activeTool);
+  activeToolRef.current = activeTool;
   useEffect(() => {
     const scroller = scrollerRef.current;
-    if (!scroller || !activeTool) {
+    const target = activeToolRef.current;
+    if (!scroller || !target) {
       return;
     }
-    const chip = scroller.querySelector<HTMLElement>(`[data-tool-id="${activeTool}"]`);
+    const chip = scroller.querySelector<HTMLElement>(`[data-tool-id="${target}"]`);
     if (!chip) {
       return;
     }
-    const target = chip.offsetLeft - (scroller.clientWidth - chip.offsetWidth) / 2;
+    const left = chip.offsetLeft - (scroller.clientWidth - chip.offsetWidth) / 2;
     const instant = firstScrollRef.current || prefersReducedMotion();
     firstScrollRef.current = false;
-    scroller.scrollTo({ left: Math.max(0, target), behavior: instant ? "auto" : "smooth" });
-  }, [activeTool, current]);
+    scroller.scrollTo({ left: Math.max(0, left), behavior: instant ? "auto" : "smooth" });
+  }, [current]);
 
   // Vertical wheel scrolls the strip sideways (non-passive so the page does not scroll).
   useEffect(() => {
